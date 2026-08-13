@@ -1,0 +1,17 @@
+# Render Blueprint for the FastAPI backend.
+# Create the service via Render > New > Blueprint, pointing at this repo.
+services:
+  - type: web
+    name: expense-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true # Render generates a strong random value
+      - key: DATABASE_URL
+        sync: false # set manually to your Supabase connection string
+      - key: CORS_ORIGINS
+        sync: false # set to your frontend URL, e.g. https://your-app.vercel.app

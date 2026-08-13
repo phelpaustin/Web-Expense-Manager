@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic>=2.0
+pydantic[email]
+pydantic-settings
+python-dotenv
+pandas
+statsmodels
+sqlalchemy
+psycopg2-binary
+bcrypt
+PyJWT
+python-multipart
