@@ -15,7 +15,28 @@ and is used as a reference. Logic modules from it are ported into
 React (frontend)  --HTTP-->  FastAPI (backend)  --imports-->  logic modules
                                     |
                                     v
-                                 database (later)
+                                 database (SQLAlchemy)
+```
+
+## Project structure
+
+```
+Expense_webpage/
+├── render.yaml            # backend deploy config (Render Blueprint)
+├── backend/               # FastAPI + SQLAlchemy
+│   ├── main.py            # app entry, CORS, startup seeding
+│   ├── app/
+│   │   ├── api/           # HTTP routes (auth, expenses, budgets, analytics)
+│   │   ├── core/          # config + security (JWT, password hashing)
+│   │   ├── db/            # engine, models, seed
+│   │   └── logic/         # ported Streamlit-free logic modules
+│   └── requirements.txt
+└── frontend/              # React + Vite
+    └── src/
+        ├── App.jsx        # dashboard (gated behind auth)
+        ├── AuthScreen.jsx # login / register
+        ├── api/client.js  # backend calls + token handling
+        └── styles/
 ```
 
 ## Run it locally (two terminals)
@@ -43,12 +64,14 @@ npm run dev
 Open http://localhost:5173 — the webpage. It calls the backend at `/api/*`
 (Vite proxies those requests to port 8000).
 
-## Next steps
+## Status
 
-1. Confirm both halves run and the sample expenses show up.
-2. Add a database (Supabase/Postgres) and replace the sample data.
-3. Port real logic modules into `backend/app/logic/`.
-4. Add authentication.
+Done: SQLAlchemy database, JWT authentication with per-user data isolation,
+expense CRUD, budget CRUD, trends/forecast and category analytics.
+
+Ported logic modules so far: `analytics.py`, `budget_manager.py` (partial).
+Remaining Streamlit modules (income, recurring, bills, AI insights, OCR, etc.)
+follow the same pattern: strip Streamlit → `app/logic/` → `app/api/` → React.
 
 ## Database
 
@@ -82,3 +105,27 @@ own expenses and budgets (JWT bearer tokens).
 
 Auth endpoints: `POST /api/auth/register`, `POST /api/auth/login`,
 `GET /api/auth/me`.
+
+## Deployment
+
+Managed, free-tier stack (no server to maintain):
+
+| Piece | Host |
+|-------|------|
+| Database | Supabase (Postgres) |
+| Backend (FastAPI) | Render — uses `render.yaml` |
+| Frontend (React) | Vercel — set Root Directory to `frontend` |
+| Domain / DNS | Cloudflare (optional) |
+
+Required environment variables in production:
+
+- **Backend (Render):**
+  - `DATABASE_URL` — Supabase connection string.
+  - `SECRET_KEY` — strong random value (`openssl rand -hex 32`).
+  - `CORS_ORIGINS` — the frontend URL, e.g. `https://your-app.vercel.app`.
+- **Frontend (Vercel):**
+  - `VITE_API_URL` — the backend URL, e.g. `https://expense-backend.onrender.com`.
+
+Deploy flow: push to GitHub → Render deploys the backend from `render.yaml` →
+Vercel deploys the frontend → set `CORS_ORIGINS` to the Vercel URL. After the
+first setup, every `git push` auto-redeploys both.
