@@ -68,7 +68,9 @@ export default function AuthScreen({ onAuthed }) {
           </button>
         </p>
 
-        <p className="auth-demo">Demo account: demo@example.com / demo1234</p>
+        {import.meta.env.DEV && (
+          <p className="auth-demo">Demo account: demo@example.com / demo1234</p>
+        )}
       </div>
     </div>
   )

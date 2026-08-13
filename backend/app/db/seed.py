@@ -1,13 +1,10 @@
 from datetime import date
 
+from app.core.config import settings
 from app.db.database import Base, SessionLocal, engine
 from app.db import models
 from app.core.security import hash_password
 from app.logic.budgets import TOTAL_BUDGET_KEY
-
-# A demo account so a fresh install has something to log into and see.
-DEMO_EMAIL = "demo@example.com"
-DEMO_PASSWORD = "demo1234"
 
 # Seed data used only on an empty database (first run / fresh dev DB).
 _SEED_EXPENSES = [
@@ -36,14 +33,35 @@ _SEED_BUDGETS = {
 }
 
 
+def _demo_password() -> str:
+    """Password for the demo account, or "" to disable seeding it.
+
+    - Production (Postgres): only when DEMO_PASSWORD is explicitly set.
+    - Local dev (SQLite): defaults to "demo1234" for convenience.
+    """
+    if settings.demo_password:
+        return settings.demo_password
+    if settings.is_sqlite:
+        return "demo1234"
+    return ""
+
+
 def init_db() -> None:
-    """Create tables and seed a demo user + sample data if not present."""
+    """Create tables and (optionally) seed a demo user + sample data."""
     Base.metadata.create_all(bind=engine)
+
+    password = _demo_password()
+    if not password:
+        return  # no demo user in production unless DEMO_PASSWORD is set
+
     db = SessionLocal()
     try:
-        demo = db.query(models.User).filter(models.User.email == DEMO_EMAIL).first()
+        demo = db.query(models.User).filter(models.User.email == settings.demo_email).first()
         if demo is None:
-            demo = models.User(email=DEMO_EMAIL, hashed_password=hash_password(DEMO_PASSWORD))
+            demo = models.User(
+                email=settings.demo_email,
+                hashed_password=hash_password(password),
+            )
             db.add(demo)
             db.commit()
             db.refresh(demo)
