@@ -39,21 +39,38 @@ Expense_webpage/
         └── styles/
 ```
 
-## Run it locally (two terminals)
+## Prerequisites
 
-### 1. Backend
+- **Python 3.10+** and **Node.js 18+** (`node --version`, `python3 --version`).
+- **virtualenv** — used because some systems ship Python without the `venv`
+  module. Install with `pip install --user virtualenv` if missing.
+- Git.
+
+## Getting started
+
+Clone the repo (or open the existing folder), then set up each half.
+
+```bash
+git clone https://github.com/YOU/expense-webpage.git
+cd expense-webpage
+```
+
+### Backend setup
 
 ```bash
 cd backend
-virtualenv .venv          # (or: python3 -m venv .venv if python3-venv is installed)
-source .venv/bin/activate
+virtualenv .venv                 # or: python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env             # optional; sensible defaults work locally
 uvicorn main:app --reload --port 8000
 ```
 
-Open http://localhost:8000/docs — interactive API docs (auto-generated).
+- On first run it creates a local `expense.db` SQLite file and seeds sample
+  data plus a demo user — no database setup required.
+- API docs: http://localhost:8000/docs
 
-### 2. Frontend
+### Frontend setup
 
 ```bash
 cd frontend
@@ -61,8 +78,16 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 — the webpage. It calls the backend at `/api/*`
-(Vite proxies those requests to port 8000).
+- Open http://localhost:5173.
+- Vite proxies `/api/*` to the backend on port 8000, so no config is needed
+  locally. (For production, set `VITE_API_URL` — see Deployment.)
+
+### First login
+
+Use the seeded demo account, or register your own:
+
+- **Email:** `demo@example.com`
+- **Password:** `demo1234`
 
 ## Status
 
