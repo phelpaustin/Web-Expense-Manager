@@ -26,6 +26,7 @@ import {
   fetchLedger,
   createManualBill,
   deleteManualBill,
+  fetchOptions,
   fetchMe,
   getToken,
   logout,
@@ -41,7 +42,7 @@ const STATUS_COLORS = {
 
 const FREQUENCIES = ['Daily', 'Weekly', 'Bi-weekly', 'Monthly', 'Quarterly', 'Yearly']
 
-const EMPTY_FORM = { date: '', category: '', description: '', amount: '' }
+const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
@@ -71,6 +72,7 @@ export default function App() {
   const [pendingForm, setPendingForm] = useState(EMPTY_BILL)
   const [ledger, setLedger] = useState([])
   const [manualForm, setManualForm] = useState(EMPTY_BILL)
+  const [options, setOptions] = useState({ categories: [], subcategories: {}, units: [] })
 
   function loadAll() {
     return Promise.all([
@@ -84,8 +86,9 @@ export default function App() {
       fetchRecurring(),
       fetchPendingBills(),
       fetchLedger(),
+      fetchOptions(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
@@ -96,6 +99,7 @@ export default function App() {
         setRecurring(rec)
         setPendingBills(pend)
         setLedger(led)
+        setOptions(opts)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -146,6 +150,7 @@ export default function App() {
     setRecurring([])
     setPendingBills([])
     setLedger([])
+    setOptions({ categories: [], subcategories: {}, units: [] })
   }
 
   async function handleAdd(e) {
@@ -155,8 +160,11 @@ export default function App() {
       await createExpense({
         date: form.date,
         category: form.category,
+        subcategory: form.subcategory,
         description: form.description,
         amount: parseFloat(form.amount),
+        quantity: parseFloat(form.quantity) || 1,
+        unit: form.unit || 'Count',
       })
       setForm(EMPTY_FORM)
       await loadAll()
@@ -181,8 +189,11 @@ export default function App() {
     setEditForm({
       date: expense.date,
       category: expense.category,
+      subcategory: expense.subcategory || '',
       description: expense.description,
       amount: String(expense.amount),
+      quantity: String(expense.quantity ?? 1),
+      unit: expense.unit || 'Count',
     })
   }
 
@@ -196,8 +207,11 @@ export default function App() {
       await updateExpense(id, {
         date: editForm.date,
         category: editForm.category,
+        subcategory: editForm.subcategory,
         description: editForm.description,
         amount: parseFloat(editForm.amount),
+        quantity: parseFloat(editForm.quantity) || 1,
+        unit: editForm.unit || 'Count',
       })
       cancelEdit()
       await loadAll()
@@ -751,6 +765,7 @@ export default function App() {
           />
           <input
             type="text"
+            list="cat-options"
             placeholder="Category"
             required
             value={form.category}
@@ -758,9 +773,33 @@ export default function App() {
           />
           <input
             type="text"
+            list="subcat-add-options"
+            placeholder="Subcategory"
+            value={form.subcategory}
+            onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
+          />
+          <input
+            type="text"
             placeholder="Description"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="Qty"
+            className="qty-input"
+            value={form.quantity}
+            onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+          />
+          <input
+            type="text"
+            list="unit-options"
+            placeholder="Unit"
+            className="unit-input"
+            value={form.unit}
+            onChange={(e) => setForm({ ...form, unit: e.target.value })}
           />
           <input
             type="number"
@@ -775,6 +814,28 @@ export default function App() {
             {saving ? 'Saving…' : 'Add'}
           </button>
         </form>
+
+        {/* Shared option lists — type a new value to add it (auto-learned on save). */}
+        <datalist id="cat-options">
+          {options.categories.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
+        <datalist id="subcat-add-options">
+          {(options.subcategories[form.category] || []).map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+        <datalist id="subcat-edit-options">
+          {(options.subcategories[editForm.category] || []).map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+        <datalist id="unit-options">
+          {options.units.map((u) => (
+            <option key={u} value={u} />
+          ))}
+        </datalist>
       </section>
 
       {budgets.length > 0 && (
@@ -877,7 +938,10 @@ export default function App() {
             <tr>
               <th>Date</th>
               <th>Category</th>
+              <th>Subcat</th>
               <th>Description</th>
+              <th className="right">Qty</th>
+              <th>Unit</th>
               <th className="right">Amount</th>
               <th></th>
             </tr>
@@ -896,6 +960,7 @@ export default function App() {
                   <td>
                     <input
                       type="text"
+                      list="cat-options"
                       value={editForm.category}
                       onChange={(ev) => setEditForm({ ...editForm, category: ev.target.value })}
                     />
@@ -903,8 +968,35 @@ export default function App() {
                   <td>
                     <input
                       type="text"
+                      list="subcat-edit-options"
+                      value={editForm.subcategory}
+                      onChange={(ev) => setEditForm({ ...editForm, subcategory: ev.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
                       value={editForm.description}
                       onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
+                    />
+                  </td>
+                  <td className="right">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="amount-input"
+                      value={editForm.quantity}
+                      onChange={(ev) => setEditForm({ ...editForm, quantity: ev.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      list="unit-options"
+                      className="unit-input"
+                      value={editForm.unit}
+                      onChange={(ev) => setEditForm({ ...editForm, unit: ev.target.value })}
                     />
                   </td>
                   <td className="right">
@@ -930,7 +1022,10 @@ export default function App() {
                 <tr key={e.id}>
                   <td>{e.date}</td>
                   <td>{e.category}</td>
+                  <td>{e.subcategory}</td>
                   <td>{e.description}</td>
+                  <td className="right">{e.quantity}</td>
+                  <td>{e.unit}</td>
                   <td className="right">${e.amount.toFixed(2)}</td>
                   <td className="right nowrap">
                     <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">

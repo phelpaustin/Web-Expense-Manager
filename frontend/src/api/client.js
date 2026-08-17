@@ -216,3 +216,7 @@ export function createManualBill(bill) {
 export function deleteManualBill(id) {
   return request(`/api/bills-ledger/manual/${id}`, { method: 'DELETE' })
 }
+
+export function fetchOptions() {
+  return request('/api/options')
+}

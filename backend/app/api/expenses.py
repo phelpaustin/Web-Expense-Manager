@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.options import ensure_options
 from app.db.database import get_db
 from app.db import models
 
@@ -17,22 +18,31 @@ class ExpenseOut(BaseModel):
     id: int
     date: datetime.date
     category: str
+    subcategory: str
     description: str
     amount: float
+    quantity: float
+    unit: str
 
 
 class ExpenseCreate(BaseModel):
     date: datetime.date
     category: str = Field(min_length=1)
+    subcategory: str = ""
     description: str = ""
     amount: float = Field(gt=0)
+    quantity: float = Field(default=1.0, gt=0)
+    unit: str = "Count"
 
 
 class ExpenseUpdate(BaseModel):
     date: datetime.date | None = None
     category: str | None = Field(default=None, min_length=1)
+    subcategory: str | None = None
     description: str | None = None
     amount: float | None = Field(default=None, gt=0)
+    quantity: float | None = Field(default=None, gt=0)
+    unit: str | None = None
 
 
 def fetch_expenses(db: Session, user_id: int) -> list[dict]:
@@ -48,8 +58,11 @@ def fetch_expenses(db: Session, user_id: int) -> list[dict]:
             "id": r.id,
             "date": r.date,
             "category": r.category,
+            "subcategory": r.subcategory,
             "description": r.description,
             "amount": r.amount,
+            "quantity": r.quantity,
+            "unit": r.unit,
         }
         for r in rows
     ]
@@ -85,6 +98,8 @@ def create_expense(
     db.add(expense)
     db.commit()
     db.refresh(expense)
+    # Auto-learn any new category/subcategory/unit into the user's taxonomy.
+    ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit)
     return expense
 
 
@@ -100,6 +115,7 @@ def update_expense(
         setattr(expense, field, value)
     db.commit()
     db.refresh(expense)
+    ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit)
     return expense
 
 

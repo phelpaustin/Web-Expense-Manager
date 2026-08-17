@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, JSON, String, UniqueConstraint
 
 from app.db.database import Base
 
@@ -18,8 +18,22 @@ class Expense(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
     category = Column(String, nullable=False, index=True)
+    subcategory = Column(String, nullable=False, default="")
     description = Column(String, nullable=False, default="")
     amount = Column(Float, nullable=False)
+    quantity = Column(Float, nullable=False, default=1.0)
+    unit = Column(String, nullable=False, default="Count")
+
+
+class UserOptions(Base):
+    __tablename__ = "user_options"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    categories = Column(JSON, nullable=False, default=list)
+    subcategories = Column(JSON, nullable=False, default=dict)  # {category: [subcategory, ...]}
+    units = Column(JSON, nullable=False, default=list)
+
 
 
 class Budget(Base):

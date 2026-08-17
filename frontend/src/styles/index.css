@@ -377,6 +377,18 @@ header h1 {
   font-size: 0.9rem;
 }
 
+.add-form .qty-input {
+  max-width: 70px;
+}
+
+.add-form .unit-input {
+  max-width: 90px;
+}
+
+.table .unit-input {
+  max-width: 80px;
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;

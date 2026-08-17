@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import DEFAULT_SECRET, settings
 from app.core.rate_limit import limiter
-from app.api import expenses, analytics, budgets, auth, income, recurring, bills
+from app.api import expenses, analytics, budgets, auth, income, recurring, bills, options
 from app.db.seed import init_db
 
 
@@ -50,3 +50,4 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(income.router, prefix="/api")
 app.include_router(recurring.router, prefix="/api")
 app.include_router(bills.router, prefix="/api")
+app.include_router(options.router, prefix="/api")
