@@ -19,6 +19,13 @@ import {
   deleteRecurring,
   applyRecurring,
   applyDueRecurring,
+  fetchPendingBills,
+  createPendingBill,
+  deletePendingBill,
+  itemisePendingBill,
+  fetchLedger,
+  createManualBill,
+  deleteManualBill,
   fetchMe,
   getToken,
   logout,
@@ -37,6 +44,7 @@ const FREQUENCIES = ['Daily', 'Weekly', 'Bi-weekly', 'Monthly', 'Quarterly', 'Ye
 const EMPTY_FORM = { date: '', category: '', description: '', amount: '' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
+const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -59,6 +67,10 @@ export default function App() {
   const [recurring, setRecurring] = useState([])
   const [recurringForm, setRecurringForm] = useState(EMPTY_RECURRING)
   const [savingRecurring, setSavingRecurring] = useState(false)
+  const [pendingBills, setPendingBills] = useState([])
+  const [pendingForm, setPendingForm] = useState(EMPTY_BILL)
+  const [ledger, setLedger] = useState([])
+  const [manualForm, setManualForm] = useState(EMPTY_BILL)
 
   function loadAll() {
     return Promise.all([
@@ -70,8 +82,10 @@ export default function App() {
       fetchIncome(),
       fetchIncomeSummary(),
       fetchRecurring(),
+      fetchPendingBills(),
+      fetchLedger(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum, rec]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
@@ -80,6 +94,8 @@ export default function App() {
         setIncome(inc)
         setIncomeSummary(incSum)
         setRecurring(rec)
+        setPendingBills(pend)
+        setLedger(led)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -128,6 +144,8 @@ export default function App() {
     setIncome([])
     setIncomeSummary(null)
     setRecurring([])
+    setPendingBills([])
+    setLedger([])
   }
 
   async function handleAdd(e) {
@@ -277,6 +295,65 @@ export default function App() {
   async function handleDeleteRecurring(id) {
     try {
       await deleteRecurring(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleAddPending(e) {
+    e.preventDefault()
+    try {
+      await createPendingBill({
+        date: pendingForm.date,
+        shop: pendingForm.shop,
+        amount: parseFloat(pendingForm.amount),
+        note: pendingForm.note,
+      })
+      setPendingForm(EMPTY_BILL)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleItemise(id) {
+    try {
+      await itemisePendingBill(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeletePending(id) {
+    try {
+      await deletePendingBill(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleAddManual(e) {
+    e.preventDefault()
+    try {
+      await createManualBill({
+        date: manualForm.date,
+        shop: manualForm.shop,
+        amount: parseFloat(manualForm.amount),
+        note: manualForm.note,
+      })
+      setManualForm(EMPTY_BILL)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteManual(id) {
+    try {
+      await deleteManualBill(id)
       await loadAll()
     } catch (err) {
       setError(err.message)
@@ -513,6 +590,148 @@ export default function App() {
                     >
                       ✕
                     </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>🧾 Pending bills (ported from pending_bills.py)</h2>
+        <form className="add-form" onSubmit={handleAddPending}>
+          <input
+            type="date"
+            required
+            value={pendingForm.date}
+            onChange={(e) => setPendingForm({ ...pendingForm, date: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Shop"
+            required
+            value={pendingForm.shop}
+            onChange={(e) => setPendingForm({ ...pendingForm, shop: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Note (optional)"
+            value={pendingForm.note}
+            onChange={(e) => setPendingForm({ ...pendingForm, note: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="Amount"
+            required
+            value={pendingForm.amount}
+            onChange={(e) => setPendingForm({ ...pendingForm, amount: e.target.value })}
+          />
+          <button type="submit">Add</button>
+        </form>
+
+        {pendingBills.length > 0 && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Shop</th>
+                <th>Note</th>
+                <th className="right">Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingBills.map((b) => (
+                <tr key={b.id}>
+                  <td>{b.date}</td>
+                  <td>{b.shop}</td>
+                  <td>{b.note}</td>
+                  <td className="right">${b.amount.toFixed(2)}</td>
+                  <td className="right nowrap">
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleItemise(b.id)}
+                      title="Itemise into an expense"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      className="delete-btn"
+                      onClick={() => handleDeletePending(b.id)}
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>📒 Bills ledger (ported from bills_ledger.py)</h2>
+        <p className="subtitle">Consolidated, de-duplicated view of expenses, pending, and manual bills.</p>
+        <form className="add-form" onSubmit={handleAddManual}>
+          <input
+            type="date"
+            required
+            value={manualForm.date}
+            onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Shop (manual entry)"
+            required
+            value={manualForm.shop}
+            onChange={(e) => setManualForm({ ...manualForm, shop: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="Amount"
+            required
+            value={manualForm.amount}
+            onChange={(e) => setManualForm({ ...manualForm, amount: e.target.value })}
+          />
+          <button type="submit">Add manual</button>
+        </form>
+
+        {ledger.length > 0 && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Shop</th>
+                <th>Source</th>
+                <th className="right">Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ledger.map((r, idx) => (
+                <tr key={`${r.source}-${r.id ?? idx}`}>
+                  <td>{r.date}</td>
+                  <td>{r.shop}</td>
+                  <td>
+                    <span className={`source-badge source-${r.source.toLowerCase()}`}>{r.source}</span>
+                  </td>
+                  <td className="right">${r.amount.toFixed(2)}</td>
+                  <td className="right nowrap">
+                    {r.source === 'Manual' && (
+                      <button
+                        className="delete-btn"
+                        onClick={() => handleDeleteManual(r.id)}
+                        title="Delete manual entry"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

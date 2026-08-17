@@ -180,3 +180,39 @@ export function applyRecurring(id) {
 export function applyDueRecurring() {
   return request('/api/recurring/apply-due', { method: 'POST' })
 }
+
+export function fetchPendingBills() {
+  return request('/api/pending-bills')
+}
+
+export function createPendingBill(bill) {
+  return request('/api/pending-bills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bill),
+  })
+}
+
+export function deletePendingBill(id) {
+  return request(`/api/pending-bills/${id}`, { method: 'DELETE' })
+}
+
+export function itemisePendingBill(id) {
+  return request(`/api/pending-bills/${id}/itemise`, { method: 'POST' })
+}
+
+export function fetchLedger() {
+  return request('/api/bills-ledger')
+}
+
+export function createManualBill(bill) {
+  return request('/api/bills-ledger/manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bill),
+  })
+}
+
+export function deleteManualBill(id) {
+  return request(`/api/bills-ledger/manual/${id}`, { method: 'DELETE' })
+}
