@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import {
   fetchExpenses,
   fetchSummary,
@@ -32,20 +33,18 @@ import {
   logout,
 } from './api/client.js'
 import AuthScreen from './AuthScreen.jsx'
-
-const STATUS_COLORS = {
-  ok: '#22c55e',
-  caution: '#f59e0b',
-  warning: '#f97316',
-  exceeded: '#ef4444',
-}
-
-const FREQUENCIES = ['Daily', 'Weekly', 'Bi-weekly', 'Monthly', 'Quarterly', 'Yearly']
+import Layout from './Layout.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+import ExpensesPage from './pages/ExpensesPage.jsx'
+import IncomePage from './pages/IncomePage.jsx'
+import RecurringPage from './pages/RecurringPage.jsx'
+import BillsPage from './pages/BillsPage.jsx'
 
 const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
+const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [] }
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -72,7 +71,7 @@ export default function App() {
   const [pendingForm, setPendingForm] = useState(EMPTY_BILL)
   const [ledger, setLedger] = useState([])
   const [manualForm, setManualForm] = useState(EMPTY_BILL)
-  const [options, setOptions] = useState({ categories: [], subcategories: {}, units: [] })
+  const [options, setOptions] = useState(EMPTY_OPTIONS)
 
   function loadAll() {
     return Promise.all([
@@ -150,7 +149,7 @@ export default function App() {
     setRecurring([])
     setPendingBills([])
     setLedger([])
-    setOptions({ categories: [], subcategories: {}, units: [] })
+    setOptions(EMPTY_OPTIONS)
   }
 
   async function handleAdd(e) {
@@ -379,712 +378,107 @@ export default function App() {
     }
   }
 
-  return (
-    <div className="container">
-      {!authChecked ? (
+  if (!authChecked) {
+    return (
+      <div className="container">
         <p>Loading…</p>
-      ) : !user ? (
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="container">
         <AuthScreen onAuthed={handleAuthed} />
-      ) : (
-        <>
-          <header className="app-header">
-            <div>
-              <h1>💳 Expense Dashboard</h1>
-              <p className="subtitle">Signed in as {user.email}</p>
-            </div>
-            <button className="logout-btn" onClick={handleLogout}>
-              Log out
-            </button>
-          </header>
+      </div>
+    )
+  }
 
-          {loading && <p>Loading…</p>}
-
-          {error && (
-            <div className="error">
-              <strong>Something went wrong.</strong>
-              <p>{error}</p>
-            </div>
-          )}
-
-      {summary && (
-        <section className="cards">
-          <div className="card">
-            <span className="card-label">Total spent</span>
-            <span className="card-value">${summary.total.toFixed(2)}</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Transactions</span>
-            <span className="card-value">{summary.count}</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Categories</span>
-            <span className="card-value">{Object.keys(summary.by_category).length}</span>
-          </div>
-        </section>
-      )}
-
-      {incomeSummary && (
-        <section className="cards income-cards">
-          <div className="card">
-            <span className="card-label">Income this month</span>
-            <span className="card-value">${incomeSummary.this_month.toFixed(2)}</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Avg income / month</span>
-            <span className="card-value">${incomeSummary.avg_month.toFixed(2)}</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Total income</span>
-            <span className="card-value">${incomeSummary.total.toFixed(2)}</span>
-          </div>
-          {summary && (
-            <div className="card">
-              <span className="card-label">Net this month</span>
-              <span className="card-value">
-                ${(incomeSummary.this_month - summary.total).toFixed(2)}
-              </span>
-            </div>
-          )}
-        </section>
-      )}
-
-      <section className="panel">
-        <h2>💵 Add income (ported from income_manager.py)</h2>
-        <form className="add-form" onSubmit={handleAddIncome}>
-          <input
-            type="date"
-            required
-            value={incomeForm.date}
-            onChange={(e) => setIncomeForm({ ...incomeForm, date: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Source (e.g. Salary)"
-            required
-            value={incomeForm.source}
-            onChange={(e) => setIncomeForm({ ...incomeForm, source: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Note (optional)"
-            value={incomeForm.note}
-            onChange={(e) => setIncomeForm({ ...incomeForm, note: e.target.value })}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Amount"
-            required
-            value={incomeForm.amount}
-            onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })}
-          />
-          <button type="submit" disabled={savingIncome}>
-            {savingIncome ? 'Saving…' : 'Add'}
-          </button>
-        </form>
-
-        {income.length > 0 && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Source</th>
-                <th>Note</th>
-                <th className="right">Amount</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {income.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.date}</td>
-                  <td>{i.source}</td>
-                  <td>{i.note}</td>
-                  <td className="right">${i.amount.toFixed(2)}</td>
-                  <td className="right">
-                    <button
-                      className="delete-btn"
-                      onClick={() => handleDeleteIncome(i.id)}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>🔁 Recurring (ported from recurring_manager.py)</h2>
-        <form className="add-form" onSubmit={handleAddRecurring}>
-          <input
-            type="text"
-            placeholder="Item (e.g. Netflix)"
-            required
-            value={recurringForm.item}
-            onChange={(e) => setRecurringForm({ ...recurringForm, item: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Category"
-            value={recurringForm.category}
-            onChange={(e) => setRecurringForm({ ...recurringForm, category: e.target.value })}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Amount"
-            required
-            value={recurringForm.amount}
-            onChange={(e) => setRecurringForm({ ...recurringForm, amount: e.target.value })}
-          />
-          <select
-            value={recurringForm.frequency}
-            onChange={(e) => setRecurringForm({ ...recurringForm, frequency: e.target.value })}
-          >
-            {FREQUENCIES.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={recurringForm.auto_post}
-              onChange={(e) => setRecurringForm({ ...recurringForm, auto_post: e.target.checked })}
+  return (
+    <Routes>
+      <Route element={<Layout user={user} onLogout={handleLogout} error={error} loading={loading} />}>
+        <Route
+          index
+          element={
+            <DashboardPage
+              summary={summary}
+              incomeSummary={incomeSummary}
+              budgets={budgets}
+              trends={trends}
+              categories={categories}
+              onSetBudget={handleSetBudget}
+              onDeleteBudget={handleDeleteBudget}
             />
-            Auto-post
-          </label>
-          <button type="submit" disabled={savingRecurring}>
-            {savingRecurring ? 'Saving…' : 'Add'}
-          </button>
-        </form>
-
-        {recurring.some((t) => t.due) && (
-          <button className="apply-due-btn" onClick={handleApplyDue}>
-            ⏰ Apply all due ({recurring.filter((t) => t.due).length})
-          </button>
-        )}
-
-        {recurring.length > 0 && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Category</th>
-                <th>Frequency</th>
-                <th>Last applied</th>
-                <th className="right">Amount</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {recurring.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    {t.item} {t.due && <span className="due-badge">DUE</span>}
-                  </td>
-                  <td>{t.category}</td>
-                  <td>{t.frequency}</td>
-                  <td>{t.last_applied || 'Never'}</td>
-                  <td className="right">${t.amount.toFixed(2)}</td>
-                  <td className="right nowrap">
-                    <button
-                      className="icon-btn"
-                      onClick={() => handleApplyRecurring(t.id)}
-                      title="Apply now"
-                    >
-                      ➕
-                    </button>
-                    <button
-                      className="delete-btn"
-                      onClick={() => handleDeleteRecurring(t.id)}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>🧾 Pending bills (ported from pending_bills.py)</h2>
-        <form className="add-form" onSubmit={handleAddPending}>
-          <input
-            type="date"
-            required
-            value={pendingForm.date}
-            onChange={(e) => setPendingForm({ ...pendingForm, date: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Shop"
-            required
-            value={pendingForm.shop}
-            onChange={(e) => setPendingForm({ ...pendingForm, shop: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Note (optional)"
-            value={pendingForm.note}
-            onChange={(e) => setPendingForm({ ...pendingForm, note: e.target.value })}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Amount"
-            required
-            value={pendingForm.amount}
-            onChange={(e) => setPendingForm({ ...pendingForm, amount: e.target.value })}
-          />
-          <button type="submit">Add</button>
-        </form>
-
-        {pendingBills.length > 0 && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Shop</th>
-                <th>Note</th>
-                <th className="right">Amount</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingBills.map((b) => (
-                <tr key={b.id}>
-                  <td>{b.date}</td>
-                  <td>{b.shop}</td>
-                  <td>{b.note}</td>
-                  <td className="right">${b.amount.toFixed(2)}</td>
-                  <td className="right nowrap">
-                    <button
-                      className="icon-btn"
-                      onClick={() => handleItemise(b.id)}
-                      title="Itemise into an expense"
-                    >
-                      ✓
-                    </button>
-                    <button
-                      className="delete-btn"
-                      onClick={() => handleDeletePending(b.id)}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>📒 Bills ledger (ported from bills_ledger.py)</h2>
-        <p className="subtitle">Consolidated, de-duplicated view of expenses, pending, and manual bills.</p>
-        <form className="add-form" onSubmit={handleAddManual}>
-          <input
-            type="date"
-            required
-            value={manualForm.date}
-            onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Shop (manual entry)"
-            required
-            value={manualForm.shop}
-            onChange={(e) => setManualForm({ ...manualForm, shop: e.target.value })}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Amount"
-            required
-            value={manualForm.amount}
-            onChange={(e) => setManualForm({ ...manualForm, amount: e.target.value })}
-          />
-          <button type="submit">Add manual</button>
-        </form>
-
-        {ledger.length > 0 && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Shop</th>
-                <th>Source</th>
-                <th className="right">Amount</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledger.map((r, idx) => (
-                <tr key={`${r.source}-${r.id ?? idx}`}>
-                  <td>{r.date}</td>
-                  <td>{r.shop}</td>
-                  <td>
-                    <span className={`source-badge source-${r.source.toLowerCase()}`}>{r.source}</span>
-                  </td>
-                  <td className="right">${r.amount.toFixed(2)}</td>
-                  <td className="right nowrap">
-                    {r.source === 'Manual' && (
-                      <button
-                        className="delete-btn"
-                        onClick={() => handleDeleteManual(r.id)}
-                        title="Delete manual entry"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>➕ Add expense</h2>
-        <form className="add-form" onSubmit={handleAdd}>
-          <input
-            type="date"
-            required
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-          />
-          <input
-            type="text"
-            list="cat-options"
-            placeholder="Category"
-            required
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-          />
-          <input
-            type="text"
-            list="subcat-add-options"
-            placeholder="Subcategory"
-            value={form.subcategory}
-            onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
-          />
-          <input
-            type="text"
-            list="shop-options"
-            placeholder="Shop"
-            value={form.shop}
-            onChange={(e) => setForm({ ...form, shop: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Brand"
-            value={form.brand}
-            onChange={(e) => setForm({ ...form, brand: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Description"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Qty"
-            className="qty-input"
-            value={form.quantity}
-            onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-          />
-          <input
-            type="text"
-            list="unit-options"
-            placeholder="Unit"
-            className="unit-input"
-            value={form.unit}
-            onChange={(e) => setForm({ ...form, unit: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Cur"
-            className="unit-input"
-            value={form.currency}
-            onChange={(e) => setForm({ ...form, currency: e.target.value })}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Amount"
-            required
-            value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
-          />
-          <button type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Add'}
-          </button>
-        </form>
-
-        {/* Shared option lists — type a new value to add it (auto-learned on save). */}
-        <datalist id="cat-options">
-          {options.categories.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
-        <datalist id="subcat-add-options">
-          {(options.subcategories[form.category] || []).map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <datalist id="subcat-edit-options">
-          {(options.subcategories[editForm.category] || []).map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <datalist id="unit-options">
-          {options.units.map((u) => (
-            <option key={u} value={u} />
-          ))}
-        </datalist>
-        <datalist id="shop-options">
-          {options.shops.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-      </section>
-
-      {budgets.length > 0 && (
-        <section className="panel">
-          <h2>🎯 Budget status (ported from budget_manager.py)</h2>
-          {budgets.map((b) => {
-            const key = b.category === 'Total' ? '__total_monthly__' : b.category
-            return (
-              <div key={b.category} className={b.category === 'Total' ? 'budget-row total' : 'budget-row'}>
-                <span className="budget-name">{b.category}</span>
-                <div className="cat-bar-track">
-                  <div
-                    className="cat-bar-fill"
-                    style={{
-                      width: `${Math.min(b.pct, 100)}%`,
-                      background: STATUS_COLORS[b.status] || '#64748b',
-                    }}
-                  />
-                </div>
-                <span className="budget-pct" style={{ color: STATUS_COLORS[b.status] }}>
-                  {b.pct}%
-                </span>
-                <span className="budget-amt">${b.spent.toFixed(2)} spent</span>
-                <input
-                  className="budget-input"
-                  type="number"
-                  step="1"
-                  min="1"
-                  defaultValue={b.budget}
-                  title="Budget amount — edit and press Enter"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur()
-                  }}
-                  onBlur={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (v && v !== b.budget) handleSetBudget(key, v)
-                  }}
-                />
-                <button
-                  className="delete-btn"
-                  onClick={() => handleDeleteBudget(key)}
-                  title="Delete budget"
-                >
-                  ✕
-                </button>
-              </div>
-            )
-          })}
-        </section>
-      )}
-
-      {trends && (
-        <section className="panel">
-          <h2>📈 Trends (ported from analytics.py)</h2>
-          <div className="trend-row">
-            {trends.monthly.map((m) => (
-              <div key={m.month} className="trend-cell">
-                <span className="card-label">{m.month}</span>
-                <span className="trend-value">${m.total.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="trend-meta">
-            {trends.change && (
-              <span>
-                vs previous month:{' '}
-                <strong className={trends.change.direction === 'up' ? 'up' : 'down'}>
-                  {trends.change.direction === 'up' ? '▲' : '▼'} {Math.abs(trends.change.pct_change)}%
-                </strong>
-              </span>
-            )}
-            {trends.forecast_next_month != null && (
-              <span>
-                forecast next month: <strong>${trends.forecast_next_month.toFixed(2)}</strong>
-              </span>
-            )}
-          </div>
-        </section>
-      )}
-
-      {categories.length > 0 && (
-        <section className="panel">
-          <h2>🏆 Category breakdown</h2>
-          {categories.map((c) => (
-            <div key={c.category} className="cat-row">
-              <span className="cat-name">{c.category}</span>
-              <div className="cat-bar-track">
-                <div className="cat-bar-fill" style={{ width: `${c.pct_of_total}%` }} />
-              </div>
-              <span className="cat-pct">{c.pct_of_total}%</span>
-              <span className="cat-amt">${c.total.toFixed(2)}</span>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {expenses.length > 0 && (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Category</th>
-              <th>Subcat</th>
-              <th>Shop</th>
-              <th>Description</th>
-              <th className="right">Qty</th>
-              <th>Unit</th>
-              <th className="right">Amount</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses.map((e) =>
-              editingId === e.id ? (
-                <tr key={e.id} className="editing">
-                  <td>
-                    <input
-                      type="date"
-                      value={editForm.date}
-                      onChange={(ev) => setEditForm({ ...editForm, date: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="cat-options"
-                      value={editForm.category}
-                      onChange={(ev) => setEditForm({ ...editForm, category: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="subcat-edit-options"
-                      value={editForm.subcategory}
-                      onChange={(ev) => setEditForm({ ...editForm, subcategory: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="shop-options"
-                      value={editForm.shop}
-                      onChange={(ev) => setEditForm({ ...editForm, shop: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      value={editForm.description}
-                      onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
-                    />
-                  </td>
-                  <td className="right">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className="amount-input"
-                      value={editForm.quantity}
-                      onChange={(ev) => setEditForm({ ...editForm, quantity: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="unit-options"
-                      className="unit-input"
-                      value={editForm.unit}
-                      onChange={(ev) => setEditForm({ ...editForm, unit: ev.target.value })}
-                    />
-                  </td>
-                  <td className="right">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className="amount-input"
-                      value={editForm.amount}
-                      onChange={(ev) => setEditForm({ ...editForm, amount: ev.target.value })}
-                    />
-                  </td>
-                  <td className="right nowrap">
-                    <button className="icon-btn save" onClick={() => saveEdit(e.id)} title="Save">
-                      ✓
-                    </button>
-                    <button className="icon-btn" onClick={cancelEdit} title="Cancel">
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={e.id}>
-                  <td>{e.date}</td>
-                  <td>{e.category}</td>
-                  <td>{e.subcategory}</td>
-                  <td>{e.shop}</td>
-                  <td>{e.description}</td>
-                  <td className="right">{e.quantity}</td>
-                  <td>{e.unit}</td>
-                  <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
-                    ${e.amount.toFixed(2)}
-                  </td>
-                  <td className="right nowrap">
-                    <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
-                      ✎
-                    </button>
-                    <button className="delete-btn" onClick={() => handleDelete(e.id)} title="Delete">
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              )
-            )}
-          </tbody>
-        </table>
-      )}
-        </>
-      )}
-    </div>
+          }
+        />
+        <Route
+          path="expenses"
+          element={
+            <ExpensesPage
+              expenses={expenses}
+              form={form}
+              setForm={setForm}
+              saving={saving}
+              onAdd={handleAdd}
+              editingId={editingId}
+              editForm={editForm}
+              setEditForm={setEditForm}
+              startEdit={startEdit}
+              cancelEdit={cancelEdit}
+              saveEdit={saveEdit}
+              onDelete={handleDelete}
+              options={options}
+            />
+          }
+        />
+        <Route
+          path="income"
+          element={
+            <IncomePage
+              income={income}
+              incomeSummary={incomeSummary}
+              incomeForm={incomeForm}
+              setIncomeForm={setIncomeForm}
+              savingIncome={savingIncome}
+              onAddIncome={handleAddIncome}
+              onDeleteIncome={handleDeleteIncome}
+            />
+          }
+        />
+        <Route
+          path="recurring"
+          element={
+            <RecurringPage
+              recurring={recurring}
+              recurringForm={recurringForm}
+              setRecurringForm={setRecurringForm}
+              savingRecurring={savingRecurring}
+              onAdd={handleAddRecurring}
+              onApply={handleApplyRecurring}
+              onApplyDue={handleApplyDue}
+              onDelete={handleDeleteRecurring}
+            />
+          }
+        />
+        <Route
+          path="bills"
+          element={
+            <BillsPage
+              pendingBills={pendingBills}
+              pendingForm={pendingForm}
+              setPendingForm={setPendingForm}
+              onAddPending={handleAddPending}
+              onItemise={handleItemise}
+              onDeletePending={handleDeletePending}
+              ledger={ledger}
+              manualForm={manualForm}
+              setManualForm={setManualForm}
+              onAddManual={handleAddManual}
+              onDeleteManual={handleDeleteManual}
+            />
+          }
+        />
+      </Route>
+    </Routes>
   )
 }
