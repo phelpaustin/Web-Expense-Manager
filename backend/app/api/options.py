@@ -41,6 +41,10 @@ DEFAULT_SUBCATEGORIES = {
 
 DEFAULT_UNITS = ["Count", "Kg", "Litre", "Meter"]
 
+DEFAULT_SHOPS = [
+    "Coop", "Costco", "ICA", "IKEA", "Lidl", "Systembolaget", "Willys",
+]
+
 
 def get_or_create_options(db: Session, user_id: int) -> models.UserOptions:
     opts = (
@@ -54,6 +58,7 @@ def get_or_create_options(db: Session, user_id: int) -> models.UserOptions:
             categories=list(DEFAULT_CATEGORIES),
             subcategories={k: list(v) for k, v in DEFAULT_SUBCATEGORIES.items()},
             units=list(DEFAULT_UNITS),
+            shops=list(DEFAULT_SHOPS),
         )
         db.add(opts)
         db.commit()
@@ -66,15 +71,24 @@ def _serialize(opts: models.UserOptions) -> dict:
         "categories": opts.categories or [],
         "subcategories": opts.subcategories or {},
         "units": opts.units or [],
+        "shops": opts.shops or [],
     }
 
 
-def ensure_options(db: Session, user_id: int, category: str, subcategory: str, unit: str) -> None:
-    """Auto-learn: add any unseen category/subcategory/unit to the user's taxonomy."""
+def ensure_options(
+    db: Session,
+    user_id: int,
+    category: str,
+    subcategory: str,
+    unit: str,
+    shop: str = "",
+) -> None:
+    """Auto-learn: add any unseen category/subcategory/unit/shop to the taxonomy."""
     opts = get_or_create_options(db, user_id)
     categories = list(opts.categories or [])
     subcats = dict(opts.subcategories or {})
     units = list(opts.units or [])
+    shops = list(opts.shops or [])
     changed = False
 
     if category and category not in categories:
@@ -89,12 +103,16 @@ def ensure_options(db: Session, user_id: int, category: str, subcategory: str, u
     if unit and unit not in units:
         units.append(unit)
         changed = True
+    if shop and shop not in shops:
+        shops.append(shop)
+        changed = True
 
     if changed:
         # Reassign so SQLAlchemy detects the JSON change.
         opts.categories = sorted(categories)
         opts.subcategories = subcats
         opts.units = units
+        opts.shops = sorted(shops)
         db.commit()
 
 
@@ -108,6 +126,10 @@ class SubcategoryIn(BaseModel):
 
 
 class UnitIn(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class ShopIn(BaseModel):
     name: str = Field(min_length=1)
 
 
@@ -163,5 +185,20 @@ def add_unit(
     if payload.name not in units:
         units.append(payload.name)
         opts.units = units
+        db.commit()
+    return _serialize(opts)
+
+
+@router.post("/options/shop")
+def add_shop(
+    payload: ShopIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    shops = list(opts.shops or [])
+    if payload.name not in shops:
+        shops.append(payload.name)
+        opts.shops = sorted(shops)
         db.commit()
     return _serialize(opts)

@@ -23,6 +23,10 @@ class ExpenseOut(BaseModel):
     amount: float
     quantity: float
     unit: str
+    shop: str
+    brand: str
+    currency: str
+    price_per_unit: float
 
 
 class ExpenseCreate(BaseModel):
@@ -33,6 +37,9 @@ class ExpenseCreate(BaseModel):
     amount: float = Field(gt=0)
     quantity: float = Field(default=1.0, gt=0)
     unit: str = "Count"
+    shop: str = ""
+    brand: str = ""
+    currency: str = "SEK"
 
 
 class ExpenseUpdate(BaseModel):
@@ -43,6 +50,9 @@ class ExpenseUpdate(BaseModel):
     amount: float | None = Field(default=None, gt=0)
     quantity: float | None = Field(default=None, gt=0)
     unit: str | None = None
+    shop: str | None = None
+    brand: str | None = None
+    currency: str | None = None
 
 
 def fetch_expenses(db: Session, user_id: int) -> list[dict]:
@@ -63,6 +73,10 @@ def fetch_expenses(db: Session, user_id: int) -> list[dict]:
             "amount": r.amount,
             "quantity": r.quantity,
             "unit": r.unit,
+            "shop": r.shop,
+            "brand": r.brand,
+            "currency": r.currency,
+            "price_per_unit": r.price_per_unit,
         }
         for r in rows
     ]
@@ -95,11 +109,12 @@ def create_expense(
     user: models.User = Depends(get_current_user),
 ):
     expense = models.Expense(user_id=user.id, **payload.model_dump())
+    expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
     db.add(expense)
     db.commit()
     db.refresh(expense)
-    # Auto-learn any new category/subcategory/unit into the user's taxonomy.
-    ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit)
+    # Auto-learn any new category/subcategory/unit/shop into the user's taxonomy.
+    ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
     return expense
 
 
@@ -113,9 +128,10 @@ def update_expense(
     expense = _get_owned_or_404(db, expense_id, user.id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(expense, field, value)
+    expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
     db.commit()
     db.refresh(expense)
-    ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit)
+    ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
     return expense
 
 

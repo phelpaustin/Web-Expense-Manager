@@ -42,7 +42,7 @@ const STATUS_COLORS = {
 
 const FREQUENCIES = ['Daily', 'Weekly', 'Bi-weekly', 'Monthly', 'Quarterly', 'Yearly']
 
-const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count' }
+const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
@@ -165,6 +165,9 @@ export default function App() {
         amount: parseFloat(form.amount),
         quantity: parseFloat(form.quantity) || 1,
         unit: form.unit || 'Count',
+        shop: form.shop,
+        brand: form.brand,
+        currency: form.currency || 'SEK',
       })
       setForm(EMPTY_FORM)
       await loadAll()
@@ -194,6 +197,7 @@ export default function App() {
       amount: String(expense.amount),
       quantity: String(expense.quantity ?? 1),
       unit: expense.unit || 'Count',
+      shop: expense.shop || '',
     })
   }
 
@@ -212,6 +216,7 @@ export default function App() {
         amount: parseFloat(editForm.amount),
         quantity: parseFloat(editForm.quantity) || 1,
         unit: editForm.unit || 'Count',
+        shop: editForm.shop,
       })
       cancelEdit()
       await loadAll()
@@ -780,6 +785,19 @@ export default function App() {
           />
           <input
             type="text"
+            list="shop-options"
+            placeholder="Shop"
+            value={form.shop}
+            onChange={(e) => setForm({ ...form, shop: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Brand"
+            value={form.brand}
+            onChange={(e) => setForm({ ...form, brand: e.target.value })}
+          />
+          <input
+            type="text"
             placeholder="Description"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -800,6 +818,13 @@ export default function App() {
             className="unit-input"
             value={form.unit}
             onChange={(e) => setForm({ ...form, unit: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Cur"
+            className="unit-input"
+            value={form.currency}
+            onChange={(e) => setForm({ ...form, currency: e.target.value })}
           />
           <input
             type="number"
@@ -834,6 +859,11 @@ export default function App() {
         <datalist id="unit-options">
           {options.units.map((u) => (
             <option key={u} value={u} />
+          ))}
+        </datalist>
+        <datalist id="shop-options">
+          {options.shops.map((s) => (
+            <option key={s} value={s} />
           ))}
         </datalist>
       </section>
@@ -939,6 +969,7 @@ export default function App() {
               <th>Date</th>
               <th>Category</th>
               <th>Subcat</th>
+              <th>Shop</th>
               <th>Description</th>
               <th className="right">Qty</th>
               <th>Unit</th>
@@ -971,6 +1002,14 @@ export default function App() {
                       list="subcat-edit-options"
                       value={editForm.subcategory}
                       onChange={(ev) => setEditForm({ ...editForm, subcategory: ev.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      list="shop-options"
+                      value={editForm.shop}
+                      onChange={(ev) => setEditForm({ ...editForm, shop: ev.target.value })}
                     />
                   </td>
                   <td>
@@ -1023,10 +1062,13 @@ export default function App() {
                   <td>{e.date}</td>
                   <td>{e.category}</td>
                   <td>{e.subcategory}</td>
+                  <td>{e.shop}</td>
                   <td>{e.description}</td>
                   <td className="right">{e.quantity}</td>
                   <td>{e.unit}</td>
-                  <td className="right">${e.amount.toFixed(2)}</td>
+                  <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
+                    ${e.amount.toFixed(2)}
+                  </td>
                   <td className="right nowrap">
                     <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
                       ✎

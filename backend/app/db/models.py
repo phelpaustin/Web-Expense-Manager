@@ -23,6 +23,10 @@ class Expense(Base):
     amount = Column(Float, nullable=False)
     quantity = Column(Float, nullable=False, default=1.0)
     unit = Column(String, nullable=False, default="Count")
+    shop = Column(String, nullable=False, default="")
+    brand = Column(String, nullable=False, default="")
+    currency = Column(String, nullable=False, default="SEK")
+    price_per_unit = Column(Float, nullable=False, default=0.0)
 
 
 class UserOptions(Base):
@@ -33,6 +37,7 @@ class UserOptions(Base):
     categories = Column(JSON, nullable=False, default=list)
     subcategories = Column(JSON, nullable=False, default=dict)  # {category: [subcategory, ...]}
     units = Column(JSON, nullable=False, default=list)
+    shops = Column(JSON, nullable=False, default=list)
 
 
 

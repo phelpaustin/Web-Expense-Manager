@@ -30,10 +30,11 @@ def build_ledger(expenses: list[dict], pending: list[dict], manual: list[dict]) 
     """Return the consolidated, de-duplicated ledger, newest first."""
     rows: list[dict] = []
 
-    # Collapse itemised expenses into one bill total per (date, description).
+    # Collapse itemised expenses into one bill total per (date, shop/label).
     groups: dict[tuple[str, str], float] = {}
     for e in expenses:
-        gkey = (str(e["date"]), (e.get("description") or "").strip())
+        label = (e.get("shop") or e.get("description") or "").strip()
+        gkey = (str(e["date"]), label)
         groups[gkey] = groups.get(gkey, 0.0) + float(e.get("amount") or 0.0)
     for (date_str, label), amount in groups.items():
         rows.append(
