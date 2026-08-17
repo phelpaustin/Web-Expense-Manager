@@ -136,3 +136,23 @@ export function setBudget(category, amount) {
 export function deleteBudget(category) {
   return request(`/api/budgets/${encodeURIComponent(category)}`, { method: 'DELETE' })
 }
+
+export function fetchIncome() {
+  return request('/api/income')
+}
+
+export function fetchIncomeSummary() {
+  return request('/api/income/summary')
+}
+
+export function createIncome(entry) {
+  return request('/api/income', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  })
+}
+
+export function deleteIncome(id) {
+  return request(`/api/income/${id}`, { method: 'DELETE' })
+}

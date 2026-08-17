@@ -10,6 +10,10 @@ import {
   deleteExpense,
   setBudget,
   deleteBudget,
+  fetchIncome,
+  fetchIncomeSummary,
+  createIncome,
+  deleteIncome,
   fetchMe,
   getToken,
   logout,
@@ -24,6 +28,7 @@ const STATUS_COLORS = {
 }
 
 const EMPTY_FORM = { date: '', category: '', description: '', amount: '' }
+const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -39,6 +44,10 @@ export default function App() {
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [income, setIncome] = useState([])
+  const [incomeSummary, setIncomeSummary] = useState(null)
+  const [incomeForm, setIncomeForm] = useState(EMPTY_INCOME)
+  const [savingIncome, setSavingIncome] = useState(false)
 
   function loadAll() {
     return Promise.all([
@@ -47,13 +56,17 @@ export default function App() {
       fetchTrends(),
       fetchCategories(),
       fetchBudgetStatus(),
+      fetchIncome(),
+      fetchIncomeSummary(),
     ])
-      .then(([exp, sum, tr, cat, bud]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
         setCategories(cat)
         setBudgets(bud)
+        setIncome(inc)
+        setIncomeSummary(incSum)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -99,6 +112,8 @@ export default function App() {
     setTrends(null)
     setCategories([])
     setBudgets([])
+    setIncome([])
+    setIncomeSummary(null)
   }
 
   async function handleAdd(e) {
@@ -179,6 +194,34 @@ export default function App() {
     }
   }
 
+  async function handleAddIncome(e) {
+    e.preventDefault()
+    setSavingIncome(true)
+    try {
+      await createIncome({
+        date: incomeForm.date,
+        amount: parseFloat(incomeForm.amount),
+        source: incomeForm.source,
+        note: incomeForm.note,
+      })
+      setIncomeForm(EMPTY_INCOME)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingIncome(false)
+    }
+  }
+
+  async function handleDeleteIncome(id) {
+    try {
+      await deleteIncome(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div className="container">
       {!authChecked ? (
@@ -222,6 +265,101 @@ export default function App() {
           </div>
         </section>
       )}
+
+      {incomeSummary && (
+        <section className="cards income-cards">
+          <div className="card">
+            <span className="card-label">Income this month</span>
+            <span className="card-value">${incomeSummary.this_month.toFixed(2)}</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Avg income / month</span>
+            <span className="card-value">${incomeSummary.avg_month.toFixed(2)}</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Total income</span>
+            <span className="card-value">${incomeSummary.total.toFixed(2)}</span>
+          </div>
+          {summary && (
+            <div className="card">
+              <span className="card-label">Net this month</span>
+              <span className="card-value">
+                ${(incomeSummary.this_month - summary.total).toFixed(2)}
+              </span>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section className="panel">
+        <h2>💵 Add income (ported from income_manager.py)</h2>
+        <form className="add-form" onSubmit={handleAddIncome}>
+          <input
+            type="date"
+            required
+            value={incomeForm.date}
+            onChange={(e) => setIncomeForm({ ...incomeForm, date: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Source (e.g. Salary)"
+            required
+            value={incomeForm.source}
+            onChange={(e) => setIncomeForm({ ...incomeForm, source: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Note (optional)"
+            value={incomeForm.note}
+            onChange={(e) => setIncomeForm({ ...incomeForm, note: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="Amount"
+            required
+            value={incomeForm.amount}
+            onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })}
+          />
+          <button type="submit" disabled={savingIncome}>
+            {savingIncome ? 'Saving…' : 'Add'}
+          </button>
+        </form>
+
+        {income.length > 0 && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Source</th>
+                <th>Note</th>
+                <th className="right">Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {income.map((i) => (
+                <tr key={i.id}>
+                  <td>{i.date}</td>
+                  <td>{i.source}</td>
+                  <td>{i.note}</td>
+                  <td className="right">${i.amount.toFixed(2)}</td>
+                  <td className="right">
+                    <button
+                      className="delete-btn"
+                      onClick={() => handleDeleteIncome(i.id)}
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       <section className="panel">
         <h2>➕ Add expense</h2>

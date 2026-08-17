@@ -32,3 +32,15 @@ class Budget(Base):
     amount = Column(Float, nullable=False)
 
     __table_args__ = (UniqueConstraint("user_id", "category", name="uq_user_category"),)
+
+
+class Income(Base):
+    __tablename__ = "income"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    amount = Column(Float, nullable=False)
+    source = Column(String, nullable=False, default="Income")
+    note = Column(String, nullable=False, default="")
+
