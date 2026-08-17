@@ -156,3 +156,27 @@ export function createIncome(entry) {
 export function deleteIncome(id) {
   return request(`/api/income/${id}`, { method: 'DELETE' })
 }
+
+export function fetchRecurring() {
+  return request('/api/recurring')
+}
+
+export function createRecurring(template) {
+  return request('/api/recurring', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(template),
+  })
+}
+
+export function deleteRecurring(id) {
+  return request(`/api/recurring/${id}`, { method: 'DELETE' })
+}
+
+export function applyRecurring(id) {
+  return request(`/api/recurring/${id}/apply`, { method: 'POST' })
+}
+
+export function applyDueRecurring() {
+  return request('/api/recurring/apply-due', { method: 'POST' })
+}

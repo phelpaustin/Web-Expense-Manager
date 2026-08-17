@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, String, UniqueConstraint
 
 from app.db.database import Base
 
@@ -43,4 +43,19 @@ class Income(Base):
     amount = Column(Float, nullable=False)
     source = Column(String, nullable=False, default="Income")
     note = Column(String, nullable=False, default="")
+
+
+class RecurringTemplate(Base):
+    __tablename__ = "recurring_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    item = Column(String, nullable=False)
+    category = Column(String, nullable=False, default="")
+    amount = Column(Float, nullable=False)
+    frequency = Column(String, nullable=False, default="Monthly")
+    note = Column(String, nullable=False, default="")
+    auto_post = Column(Boolean, nullable=False, default=False)
+    last_applied = Column(Date, nullable=True)
+
 

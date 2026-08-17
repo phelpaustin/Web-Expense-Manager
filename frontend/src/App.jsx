@@ -14,6 +14,11 @@ import {
   fetchIncomeSummary,
   createIncome,
   deleteIncome,
+  fetchRecurring,
+  createRecurring,
+  deleteRecurring,
+  applyRecurring,
+  applyDueRecurring,
   fetchMe,
   getToken,
   logout,
@@ -27,8 +32,11 @@ const STATUS_COLORS = {
   exceeded: '#ef4444',
 }
 
+const FREQUENCIES = ['Daily', 'Weekly', 'Bi-weekly', 'Monthly', 'Quarterly', 'Yearly']
+
 const EMPTY_FORM = { date: '', category: '', description: '', amount: '' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
+const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -48,6 +56,9 @@ export default function App() {
   const [incomeSummary, setIncomeSummary] = useState(null)
   const [incomeForm, setIncomeForm] = useState(EMPTY_INCOME)
   const [savingIncome, setSavingIncome] = useState(false)
+  const [recurring, setRecurring] = useState([])
+  const [recurringForm, setRecurringForm] = useState(EMPTY_RECURRING)
+  const [savingRecurring, setSavingRecurring] = useState(false)
 
   function loadAll() {
     return Promise.all([
@@ -58,8 +69,9 @@ export default function App() {
       fetchBudgetStatus(),
       fetchIncome(),
       fetchIncomeSummary(),
+      fetchRecurring(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum, rec]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
@@ -67,6 +79,7 @@ export default function App() {
         setBudgets(bud)
         setIncome(inc)
         setIncomeSummary(incSum)
+        setRecurring(rec)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -114,6 +127,7 @@ export default function App() {
     setBudgets([])
     setIncome([])
     setIncomeSummary(null)
+    setRecurring([])
   }
 
   async function handleAdd(e) {
@@ -216,6 +230,53 @@ export default function App() {
   async function handleDeleteIncome(id) {
     try {
       await deleteIncome(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleAddRecurring(e) {
+    e.preventDefault()
+    setSavingRecurring(true)
+    try {
+      await createRecurring({
+        item: recurringForm.item,
+        category: recurringForm.category,
+        amount: parseFloat(recurringForm.amount),
+        frequency: recurringForm.frequency,
+        auto_post: recurringForm.auto_post,
+      })
+      setRecurringForm(EMPTY_RECURRING)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingRecurring(false)
+    }
+  }
+
+  async function handleApplyRecurring(id) {
+    try {
+      await applyRecurring(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleApplyDue() {
+    try {
+      await applyDueRecurring()
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteRecurring(id) {
+    try {
+      await deleteRecurring(id)
       await loadAll()
     } catch (err) {
       setError(err.message)
@@ -349,6 +410,105 @@ export default function App() {
                     <button
                       className="delete-btn"
                       onClick={() => handleDeleteIncome(i.id)}
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>🔁 Recurring (ported from recurring_manager.py)</h2>
+        <form className="add-form" onSubmit={handleAddRecurring}>
+          <input
+            type="text"
+            placeholder="Item (e.g. Netflix)"
+            required
+            value={recurringForm.item}
+            onChange={(e) => setRecurringForm({ ...recurringForm, item: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Category"
+            value={recurringForm.category}
+            onChange={(e) => setRecurringForm({ ...recurringForm, category: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            placeholder="Amount"
+            required
+            value={recurringForm.amount}
+            onChange={(e) => setRecurringForm({ ...recurringForm, amount: e.target.value })}
+          />
+          <select
+            value={recurringForm.frequency}
+            onChange={(e) => setRecurringForm({ ...recurringForm, frequency: e.target.value })}
+          >
+            {FREQUENCIES.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={recurringForm.auto_post}
+              onChange={(e) => setRecurringForm({ ...recurringForm, auto_post: e.target.checked })}
+            />
+            Auto-post
+          </label>
+          <button type="submit" disabled={savingRecurring}>
+            {savingRecurring ? 'Saving…' : 'Add'}
+          </button>
+        </form>
+
+        {recurring.some((t) => t.due) && (
+          <button className="apply-due-btn" onClick={handleApplyDue}>
+            ⏰ Apply all due ({recurring.filter((t) => t.due).length})
+          </button>
+        )}
+
+        {recurring.length > 0 && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Category</th>
+                <th>Frequency</th>
+                <th>Last applied</th>
+                <th className="right">Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {recurring.map((t) => (
+                <tr key={t.id}>
+                  <td>
+                    {t.item} {t.due && <span className="due-badge">DUE</span>}
+                  </td>
+                  <td>{t.category}</td>
+                  <td>{t.frequency}</td>
+                  <td>{t.last_applied || 'Never'}</td>
+                  <td className="right">${t.amount.toFixed(2)}</td>
+                  <td className="right nowrap">
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleApplyRecurring(t.id)}
+                      title="Apply now"
+                    >
+                      ➕
+                    </button>
+                    <button
+                      className="delete-btn"
+                      onClick={() => handleDeleteRecurring(t.id)}
                       title="Delete"
                     >
                       ✕
