@@ -6,6 +6,7 @@ const LINKS = [
   { to: '/income', label: 'Income', icon: '💵' },
   { to: '/recurring', label: 'Recurring', icon: '🔁' },
   { to: '/bills', label: 'Bills', icon: '📒' },
+  { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
 export default function Layout({ user, onLogout, error, loading }) {

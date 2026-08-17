@@ -220,3 +220,62 @@ export function deleteManualBill(id) {
 export function fetchOptions() {
   return request('/api/options')
 }
+
+export function changePassword(current_password, new_password) {
+  return request('/api/auth/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password, new_password }),
+  })
+}
+
+export function addCategory(name) {
+  return request('/api/options/category', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function deleteCategory(name) {
+  return request(`/api/options/category/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+export function addSubcategory(category, name) {
+  return request('/api/options/subcategory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, name }),
+  })
+}
+
+export function deleteSubcategory(category, name) {
+  return request(
+    `/api/options/subcategory/${encodeURIComponent(category)}/${encodeURIComponent(name)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export function addUnit(name) {
+  return request('/api/options/unit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function deleteUnit(name) {
+  return request(`/api/options/unit/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+export function addShop(name) {
+  return request('/api/options/shop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function deleteShop(name) {
+  return request(`/api/options/shop/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}

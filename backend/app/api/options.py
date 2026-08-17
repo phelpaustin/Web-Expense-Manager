@@ -202,3 +202,58 @@ def add_shop(
         opts.shops = sorted(shops)
         db.commit()
     return _serialize(opts)
+
+
+@router.delete("/options/category/{name}")
+def delete_category(
+    name: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    opts.categories = [c for c in (opts.categories or []) if c != name]
+    subs = dict(opts.subcategories or {})
+    subs.pop(name, None)
+    opts.subcategories = subs
+    db.commit()
+    return _serialize(opts)
+
+
+@router.delete("/options/subcategory/{category}/{name}")
+def delete_subcategory(
+    category: str,
+    name: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    subs = dict(opts.subcategories or {})
+    if category in subs:
+        subs[category] = [s for s in subs[category] if s != name]
+        opts.subcategories = subs
+        db.commit()
+    return _serialize(opts)
+
+
+@router.delete("/options/unit/{name}")
+def delete_unit(
+    name: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    opts.units = [u for u in (opts.units or []) if u != name]
+    db.commit()
+    return _serialize(opts)
+
+
+@router.delete("/options/shop/{name}")
+def delete_shop(
+    name: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    opts.shops = [s for s in (opts.shops or []) if s != name]
+    db.commit()
+    return _serialize(opts)

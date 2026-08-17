@@ -39,6 +39,7 @@ import ExpensesPage from './pages/ExpensesPage.jsx'
 import IncomePage from './pages/IncomePage.jsx'
 import RecurringPage from './pages/RecurringPage.jsx'
 import BillsPage from './pages/BillsPage.jsx'
+import SettingsPage from './pages/SettingsPage.jsx'
 
 const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
@@ -475,6 +476,17 @@ export default function App() {
               setManualForm={setManualForm}
               onAddManual={handleAddManual}
               onDeleteManual={handleDeleteManual}
+            />
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <SettingsPage
+              user={user}
+              options={options}
+              onOptionsUpdated={setOptions}
+              onError={setError}
             />
           }
         />

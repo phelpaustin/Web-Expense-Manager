@@ -29,6 +29,11 @@ class UserOut(BaseModel):
     email: str
 
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
+
+
 @router.post("/auth/register", response_model=TokenOut, status_code=201)
 @limiter.limit("10/hour")
 def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
@@ -54,3 +59,16 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
 @router.get("/auth/me", response_model=UserOut)
 def me(user: models.User = Depends(get_current_user)):
     return user
+
+
+@router.post("/auth/change-password")
+def change_password(
+    payload: PasswordChange,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return {"changed": True}
