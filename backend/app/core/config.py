@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     demo_email: str = "demo@example.com"
     demo_password: str = ""
 
+    # Public URL of the frontend, used to build password-reset links.
+    frontend_url: str = "http://localhost:5173"
+
+    # SMTP for password-reset emails. If smtp_host is empty, the reset link is
+    # logged to the server console instead of emailed (fine for local dev).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

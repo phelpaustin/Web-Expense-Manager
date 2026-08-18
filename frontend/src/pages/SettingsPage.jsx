@@ -47,7 +47,7 @@ function AddInline({ placeholder, onAdd }) {
   )
 }
 
-export default function SettingsPage({ user, options, onOptionsUpdated, onError }) {
+export default function SettingsPage({ user, options, onOptionsUpdated, onError, onDeleteAccount }) {
   const [tab, setTab] = useState('account')
 
   // Account tab
@@ -56,6 +56,11 @@ export default function SettingsPage({ user, options, onOptionsUpdated, onError 
   const [pwConfirm, setPwConfirm] = useState('')
   const [pwMsg, setPwMsg] = useState(null)
   const [pwBusy, setPwBusy] = useState(false)
+
+  // Delete account
+  const [delPassword, setDelPassword] = useState('')
+  const [delBusy, setDelBusy] = useState(false)
+  const [delError, setDelError] = useState(null)
 
   // App-data tab
   const [selectedCat, setSelectedCat] = useState('')
@@ -91,6 +96,19 @@ export default function SettingsPage({ user, options, onOptionsUpdated, onError 
   }
 
   const subcats = (options.subcategories && options.subcategories[selectedCat]) || []
+
+  async function handleDelete(e) {
+    e.preventDefault()
+    setDelError(null)
+    if (!window.confirm('This permanently deletes your account and all data. Continue?')) return
+    setDelBusy(true)
+    try {
+      await onDeleteAccount(delPassword)
+    } catch (err) {
+      setDelError(err.message)
+      setDelBusy(false)
+    }
+  }
 
   return (
     <>
@@ -139,6 +157,29 @@ export default function SettingsPage({ user, options, onOptionsUpdated, onError 
               {pwBusy ? 'Saving…' : 'Change password'}
             </button>
           </form>
+        </section>
+      )}
+
+      {tab === 'account' && (
+        <section className="panel danger-zone">
+          <h2>Danger zone</h2>
+          <p className="muted-note">
+            Permanently delete your account and all expenses, income, budgets, and settings. This
+            cannot be undone.
+          </p>
+          <form className="add-form" onSubmit={handleDelete}>
+            <input
+              type="password"
+              placeholder="Confirm your password"
+              required
+              value={delPassword}
+              onChange={(e) => setDelPassword(e.target.value)}
+            />
+            <button type="submit" className="danger-btn" disabled={delBusy}>
+              {delBusy ? 'Deleting…' : 'Delete my account'}
+            </button>
+          </form>
+          {delError && <div className="auth-error" style={{ marginTop: '0.6rem' }}>{delError}</div>}
         </section>
       )}
 

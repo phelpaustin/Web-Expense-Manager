@@ -30,6 +30,7 @@ import {
   fetchOptions,
   importExpenses,
   exportExpenses,
+  deleteAccount,
   fetchMe,
   getToken,
   logout,
@@ -42,6 +43,7 @@ import IncomePage from './pages/IncomePage.jsx'
 import RecurringPage from './pages/RecurringPage.jsx'
 import BillsPage from './pages/BillsPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 
 const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
@@ -197,6 +199,11 @@ export default function App() {
 
   function handleExport(format) {
     return exportExpenses(format).catch((err) => setError(err.message))
+  }
+
+  async function handleDeleteAccount(password) {
+    await deleteAccount(password)
+    handleLogout()
   }
 
   function startEdit(expense) {
@@ -401,14 +408,23 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="container">
-        <AuthScreen onAuthed={handleAuthed} />
-      </div>
+      <Routes>
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route
+          path="*"
+          element={
+            <div className="container">
+              <AuthScreen onAuthed={handleAuthed} />
+            </div>
+          }
+        />
+      </Routes>
     )
   }
 
   return (
     <Routes>
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<Layout user={user} onLogout={handleLogout} error={error} loading={loading} />}>
         <Route
           index
@@ -501,6 +517,7 @@ export default function App() {
               options={options}
               onOptionsUpdated={setOptions}
               onError={setError}
+              onDeleteAccount={handleDeleteAccount}
             />
           }
         />

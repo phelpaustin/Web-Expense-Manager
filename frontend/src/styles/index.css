@@ -392,6 +392,34 @@ button {
   background: rgba(109, 123, 255, 0.06);
 }
 
+.danger-zone {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.danger-zone h2 {
+  color: var(--danger);
+}
+
+.danger-btn {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 10px 20px -12px rgba(239, 68, 68, 0.7);
+  transition: filter 0.15s;
+}
+
+.danger-btn:hover {
+  filter: brightness(1.05);
+}
+
+.danger-btn:disabled {
+  opacity: 0.6;
+}
+
 .add-form input[type='file'] {
   font-size: 0.85rem;
   color: var(--muted);
