@@ -1,32 +1,32 @@
 /* ============================================================
-   Design tokens
+   Design tokens — light theme
    ============================================================ */
 :root {
-  --bg: #070810;
-  --bg-2: #0e111a;
-  --surface: #141826;
-  --surface-2: #1a1f30;
-  --border: #242a3d;
-  --border-soft: #1e2436;
-  --text: #e8eaf2;
-  --muted: #9aa3b8;
-  --faint: #6b7488;
+  --bg: #f5f6fb;
+  --bg-2: #eef1f8;
+  --surface: #ffffff;
+  --surface-2: #f4f6fb;
+  --border: #e6e8f2;
+  --border-soft: #eef0f7;
+  --text: #1c2130;
+  --muted: #5c6577;
+  --faint: #99a1b3;
 
-  --accent: #7c8cff;
+  --accent: #6d7bff;
   --accent-2: #a674ff;
   --grad: linear-gradient(135deg, #6d7bff 0%, #a674ff 100%);
-  --grad-soft: linear-gradient(135deg, rgba(109, 123, 255, 0.16), rgba(166, 116, 255, 0.16));
+  --grad-soft: linear-gradient(135deg, rgba(109, 123, 255, 0.12), rgba(166, 116, 255, 0.12));
 
-  --ok: #34d399;
-  --caution: #fbbf24;
-  --warning: #fb923c;
-  --danger: #f87171;
+  --ok: #10b981;
+  --caution: #f59e0b;
+  --warning: #f97316;
+  --danger: #ef4444;
 
   --radius: 16px;
   --radius-sm: 10px;
-  --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.55);
-  --shadow-sm: 0 4px 14px -8px rgba(0, 0, 0, 0.5);
-  --ring: 0 0 0 3px rgba(124, 140, 255, 0.25);
+  --shadow: 0 18px 40px -20px rgba(24, 33, 66, 0.28);
+  --shadow-sm: 0 1px 2px rgba(24, 33, 66, 0.05), 0 8px 20px -14px rgba(24, 33, 66, 0.18);
+  --ring: 0 0 0 3px rgba(109, 123, 255, 0.18);
 }
 
 * {
@@ -34,7 +34,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -42,17 +42,17 @@ body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background:
-    radial-gradient(820px 520px at 8% -6%, rgba(124, 140, 255, 0.20), transparent 60%),
-    radial-gradient(760px 520px at 100% 4%, rgba(166, 116, 255, 0.18), transparent 55%),
-    radial-gradient(700px 500px at 88% 100%, rgba(56, 189, 248, 0.10), transparent 60%),
-    radial-gradient(680px 480px at 10% 108%, rgba(52, 211, 153, 0.08), transparent 60%),
+    radial-gradient(820px 520px at 6% -8%, rgba(109, 123, 255, 0.16), transparent 60%),
+    radial-gradient(760px 520px at 100% 2%, rgba(166, 116, 255, 0.14), transparent 55%),
+    radial-gradient(720px 520px at 92% 100%, rgba(56, 189, 248, 0.12), transparent 60%),
+    radial-gradient(680px 480px at 4% 106%, rgba(16, 185, 129, 0.08), transparent 60%),
     var(--bg);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Faint grid overlay for depth, fading out toward the bottom. */
+/* Faint grid overlay for subtle texture, fading toward the bottom. */
 body::before {
   content: '';
   position: fixed;
@@ -60,11 +60,11 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(rgba(28, 33, 48, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 33, 48, 0.035) 1px, transparent 1px);
   background-size: 46px 46px;
-  -webkit-mask-image: radial-gradient(circle at 50% -10%, #000 0%, transparent 72%);
-  mask-image: radial-gradient(circle at 50% -10%, #000 0%, transparent 72%);
+  -webkit-mask-image: radial-gradient(circle at 50% -10%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle at 50% -10%, #000 0%, transparent 70%);
 }
 
 h1,
@@ -74,26 +74,24 @@ h3 {
 }
 
 ::selection {
-  background: rgba(124, 140, 255, 0.3);
+  background: rgba(109, 123, 255, 0.22);
 }
 
-/* Scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: #d3d7e4 transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: #d3d7e4;
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
 
-/* Simple container (auth + loading states) */
 .container {
   max-width: 1000px;
   margin: 0 auto;
@@ -113,10 +111,10 @@ h3 {
 .sidebar {
   width: 244px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, rgba(18, 22, 36, 0.72), rgba(9, 11, 18, 0.72));
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-right: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border);
   padding: 1.5rem 1rem;
   display: flex;
   flex-direction: column;
@@ -148,7 +146,7 @@ h3 {
   text-decoration: none;
   font-size: 0.92rem;
   font-weight: 500;
-  transition: background 0.15s, color 0.15s, transform 0.05s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .nav-link:hover {
@@ -159,7 +157,7 @@ h3 {
 .nav-link.active {
   background: var(--grad);
   color: #fff;
-  box-shadow: 0 8px 20px -10px rgba(124, 140, 255, 0.8);
+  box-shadow: 0 10px 22px -10px rgba(109, 123, 255, 0.6);
 }
 
 .nav-icon {
@@ -170,7 +168,7 @@ h3 {
 
 .sidebar-footer {
   margin-top: auto;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid var(--border);
   padding-top: 1rem;
   display: flex;
   flex-direction: column;
@@ -211,9 +209,7 @@ h3 {
 
 .card {
   position: relative;
-  background: linear-gradient(180deg, rgba(22, 27, 42, 0.75), rgba(12, 15, 24, 0.7));
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.15rem 1.3rem;
@@ -222,7 +218,7 @@ h3 {
   gap: 0.5rem;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  transition: transform 0.15s, border-color 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .card::before {
@@ -231,18 +227,17 @@ h3 {
   inset: 0 0 auto 0;
   height: 3px;
   background: var(--grad);
-  opacity: 0.9;
 }
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: #303751;
+  box-shadow: 0 20px 40px -22px rgba(24, 33, 66, 0.3);
 }
 
 .card-label {
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -257,9 +252,7 @@ h3 {
    Panels
    ============================================================ */
 .panel {
-  background: linear-gradient(180deg, rgba(20, 25, 39, 0.72), rgba(14, 17, 27, 0.66));
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.4rem 1.5rem;
@@ -301,7 +294,7 @@ input[type='date'],
 input[type='email'],
 input[type='password'],
 select {
-  background: var(--bg-2);
+  background: #fff;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
@@ -355,14 +348,14 @@ button {
   padding: 0.55rem 1.25rem;
   font-size: 0.9rem;
   font-weight: 600;
-  box-shadow: 0 8px 18px -10px rgba(124, 140, 255, 0.9);
+  box-shadow: 0 10px 20px -12px rgba(109, 123, 255, 0.7);
   transition: transform 0.08s, filter 0.15s, opacity 0.15s;
 }
 
 .add-form button:hover,
 .inline-add button:hover,
 .stack-form button:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.05);
 }
 
 .add-form button:active {
@@ -386,13 +379,13 @@ button {
 .apply-due-btn {
   margin-top: 1.1rem;
   background: linear-gradient(135deg, #f59e0b, #f97316);
-  color: #1a1408;
+  color: #fff;
   border: none;
   border-radius: var(--radius-sm);
   padding: 0.55rem 1.1rem;
   font-size: 0.85rem;
   font-weight: 700;
-  box-shadow: 0 8px 18px -10px rgba(245, 158, 11, 0.8);
+  box-shadow: 0 10px 20px -12px rgba(245, 158, 11, 0.7);
 }
 
 /* ============================================================
@@ -408,6 +401,7 @@ button {
   border-radius: var(--radius);
   overflow: hidden;
   font-size: 0.9rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .table th,
@@ -423,7 +417,7 @@ button {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: var(--bg-2);
+  background: #f7f8fc;
   position: sticky;
   top: 0;
 }
@@ -433,7 +427,7 @@ button {
 }
 
 .table tbody tr:hover {
-  background: rgba(124, 140, 255, 0.05);
+  background: rgba(109, 123, 255, 0.045);
 }
 
 .table tbody tr:last-child td {
@@ -456,7 +450,7 @@ button {
 }
 
 .table tr.editing td {
-  background: rgba(124, 140, 255, 0.07);
+  background: rgba(109, 123, 255, 0.06);
 }
 
 .right {
@@ -472,7 +466,7 @@ button {
    ============================================================ */
 .icon-btn,
 .delete-btn {
-  background: transparent;
+  background: #fff;
   border: 1px solid var(--border);
   color: var(--muted);
   border-radius: 8px;
@@ -490,19 +484,19 @@ button {
 .icon-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(124, 140, 255, 0.08);
+  background: rgba(109, 123, 255, 0.07);
 }
 
 .icon-btn.save:hover {
   border-color: var(--ok);
   color: var(--ok);
-  background: rgba(52, 211, 153, 0.08);
+  background: rgba(16, 185, 129, 0.08);
 }
 
 .delete-btn:hover {
   border-color: var(--danger);
   color: var(--danger);
-  background: rgba(248, 113, 113, 0.08);
+  background: rgba(239, 68, 68, 0.07);
 }
 
 /* ============================================================
@@ -547,11 +541,10 @@ button {
 }
 
 .cat-bar-track {
-  background: var(--bg-2);
+  background: #eceef6;
   border-radius: 999px;
   height: 9px;
   overflow: hidden;
-  border: 1px solid var(--border-soft);
 }
 
 .cat-bar-fill {
@@ -629,7 +622,7 @@ button {
    ============================================================ */
 .due-badge {
   background: linear-gradient(135deg, #f59e0b, #f97316);
-  color: #1a1408;
+  color: #fff;
   font-size: 0.62rem;
   font-weight: 800;
   padding: 0.12rem 0.45rem;
@@ -647,18 +640,18 @@ button {
 }
 
 .source-expense {
-  background: rgba(52, 211, 153, 0.16);
-  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
 }
 
 .source-pending {
-  background: rgba(245, 158, 11, 0.16);
-  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
 }
 
 .source-manual {
-  background: rgba(124, 140, 255, 0.16);
-  color: #a5b4fc;
+  background: rgba(109, 123, 255, 0.14);
+  color: #4f46e5;
 }
 
 /* ============================================================
@@ -673,6 +666,7 @@ button {
   border-radius: 12px;
   padding: 0.3rem;
   width: fit-content;
+  box-shadow: var(--shadow-sm);
 }
 
 .tab {
@@ -703,7 +697,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  background: var(--bg-2);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.32rem 0.4rem 0.32rem 0.8rem;
@@ -752,9 +746,9 @@ button {
 }
 
 .ok-note {
-  background: rgba(52, 211, 153, 0.1);
-  border: 1px solid rgba(52, 211, 153, 0.35);
-  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #047857;
   border-radius: var(--radius-sm);
   padding: 0.55rem 0.8rem;
   font-size: 0.85rem;
@@ -764,11 +758,11 @@ button {
    Error banner
    ============================================================ */
 .error {
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: rgba(239, 68, 68, 0.07);
+  border: 1px solid rgba(239, 68, 68, 0.28);
   border-radius: var(--radius);
   padding: 1rem 1.25rem;
-  color: #fca5a5;
+  color: #b91c1c;
   margin-bottom: 1.25rem;
 }
 
@@ -783,7 +777,7 @@ button {
 }
 
 .auth-card {
-  background: linear-gradient(180deg, var(--surface), var(--bg-2));
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 2.25rem;
@@ -829,12 +823,12 @@ button {
   padding: 0.72rem;
   font-size: 0.95rem;
   font-weight: 700;
-  box-shadow: 0 10px 22px -10px rgba(124, 140, 255, 0.9);
+  box-shadow: 0 12px 24px -12px rgba(109, 123, 255, 0.7);
   transition: filter 0.15s;
 }
 
 .auth-form button:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.05);
 }
 
 .auth-form button:disabled {
@@ -842,9 +836,9 @@ button {
 }
 
 .auth-error {
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #b91c1c;
   border-radius: var(--radius-sm);
   padding: 0.55rem 0.75rem;
   font-size: 0.85rem;
@@ -877,7 +871,7 @@ button {
 }
 
 .logout-btn {
-  background: transparent;
+  background: #fff;
   border: 1px solid var(--border);
   color: var(--muted);
   border-radius: var(--radius-sm);
