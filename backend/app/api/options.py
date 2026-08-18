@@ -59,6 +59,7 @@ def get_or_create_options(db: Session, user_id: int) -> models.UserOptions:
             subcategories={k: list(v) for k, v in DEFAULT_SUBCATEGORIES.items()},
             units=list(DEFAULT_UNITS),
             shops=list(DEFAULT_SHOPS),
+            base_currency="SEK",
         )
         db.add(opts)
         db.commit()
@@ -72,6 +73,7 @@ def _serialize(opts: models.UserOptions) -> dict:
         "subcategories": opts.subcategories or {},
         "units": opts.units or [],
         "shops": opts.shops or [],
+        "base_currency": opts.base_currency or "SEK",
     }
 
 
@@ -131,6 +133,10 @@ class UnitIn(BaseModel):
 
 class ShopIn(BaseModel):
     name: str = Field(min_length=1)
+
+
+class CurrencyIn(BaseModel):
+    currency: str = Field(min_length=1, max_length=8)
 
 
 @router.get("/options")
@@ -255,5 +261,17 @@ def delete_shop(
 ):
     opts = get_or_create_options(db, user.id)
     opts.shops = [s for s in (opts.shops or []) if s != name]
+    db.commit()
+    return _serialize(opts)
+
+
+@router.post("/options/base-currency")
+def set_base_currency(
+    payload: CurrencyIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    opts.base_currency = payload.currency.strip().upper()
     db.commit()
     return _serialize(opts)

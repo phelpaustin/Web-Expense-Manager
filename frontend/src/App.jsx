@@ -37,6 +37,7 @@ import {
 } from './api/client.js'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
+import { setDisplayCurrency } from './format.js'
 import DashboardPage from './pages/DashboardPage.jsx'
 import ExpensesPage from './pages/ExpensesPage.jsx'
 import IncomePage from './pages/IncomePage.jsx'
@@ -49,7 +50,7 @@ const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', a
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
-const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [] }
+const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [], base_currency: 'SEK' }
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -77,6 +78,7 @@ export default function App() {
   const [ledger, setLedger] = useState([])
   const [manualForm, setManualForm] = useState(EMPTY_BILL)
   const [options, setOptions] = useState(EMPTY_OPTIONS)
+  const [importCurrency, setImportCurrency] = useState('')
 
   function loadAll() {
     return Promise.all([
@@ -104,6 +106,7 @@ export default function App() {
         setPendingBills(pend)
         setLedger(led)
         setOptions(opts)
+        setDisplayCurrency(opts.base_currency)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -192,7 +195,7 @@ export default function App() {
   }
 
   async function handleImport(file) {
-    const result = await importExpenses(file)
+    const result = await importExpenses(file, importCurrency)
     await loadAll()
     return result
   }
@@ -459,6 +462,8 @@ export default function App() {
               options={options}
               onImport={handleImport}
               onExport={handleExport}
+              importCurrency={importCurrency}
+              setImportCurrency={setImportCurrency}
             />
           }
         />

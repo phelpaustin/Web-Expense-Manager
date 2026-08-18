@@ -1,4 +1,5 @@
 import { FREQUENCIES } from '../constants.js'
+import { money } from '../format.js'
 
 export default function RecurringPage({
   recurring,
@@ -89,7 +90,7 @@ export default function RecurringPage({
                   <td>{t.category}</td>
                   <td>{t.frequency}</td>
                   <td>{t.last_applied || 'Never'}</td>
-                  <td className="right">${t.amount.toFixed(2)}</td>
+                  <td className="right">{money(t.amount)}</td>
                   <td className="right nowrap">
                     <button className="icon-btn" onClick={() => onApply(t.id)} title="Apply now">
                       ➕

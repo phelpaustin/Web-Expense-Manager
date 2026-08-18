@@ -1,4 +1,5 @@
 import { STATUS_COLORS } from '../constants.js'
+import { money } from '../format.js'
 
 export default function DashboardPage({
   summary,
@@ -17,7 +18,7 @@ export default function DashboardPage({
         <section className="cards">
           <div className="card">
             <span className="card-label">Total spent</span>
-            <span className="card-value">${summary.total.toFixed(2)}</span>
+            <span className="card-value">{money(summary.total)}</span>
           </div>
           <div className="card">
             <span className="card-label">Transactions</span>
@@ -31,7 +32,7 @@ export default function DashboardPage({
             <div className="card">
               <span className="card-label">Net this month</span>
               <span className="card-value">
-                ${(incomeSummary.this_month - summary.total).toFixed(2)}
+                {money(incomeSummary.this_month - summary.total)}
               </span>
             </div>
           )}
@@ -58,7 +59,7 @@ export default function DashboardPage({
                 <span className="budget-pct" style={{ color: STATUS_COLORS[b.status] }}>
                   {b.pct}%
                 </span>
-                <span className="budget-amt">${b.spent.toFixed(2)} spent</span>
+                <span className="budget-amt">{money(b.spent)} spent</span>
                 <input
                   className="budget-input"
                   type="number"
@@ -90,7 +91,7 @@ export default function DashboardPage({
             {trends.monthly.map((m) => (
               <div key={m.month} className="trend-cell">
                 <span className="card-label">{m.month}</span>
-                <span className="trend-value">${m.total.toFixed(2)}</span>
+                <span className="trend-value">{money(m.total)}</span>
               </div>
             ))}
           </div>
@@ -105,7 +106,7 @@ export default function DashboardPage({
             )}
             {trends.forecast_next_month != null && (
               <span>
-                forecast next month: <strong>${trends.forecast_next_month.toFixed(2)}</strong>
+                forecast next month: <strong>{money(trends.forecast_next_month)}</strong>
               </span>
             )}
           </div>
@@ -122,7 +123,7 @@ export default function DashboardPage({
                 <div className="cat-bar-fill" style={{ width: `${c.pct_of_total}%` }} />
               </div>
               <span className="cat-pct">{c.pct_of_total}%</span>
-              <span className="cat-amt">${c.total.toFixed(2)}</span>
+              <span className="cat-amt">{money(c.total)}</span>
             </div>
           ))}
         </section>

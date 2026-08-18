@@ -1,3 +1,5 @@
+import { money } from '../format.js'
+
 export default function IncomePage({
   income,
   incomeSummary,
@@ -15,15 +17,15 @@ export default function IncomePage({
         <section className="cards">
           <div className="card">
             <span className="card-label">Income this month</span>
-            <span className="card-value">${incomeSummary.this_month.toFixed(2)}</span>
+            <span className="card-value">{money(incomeSummary.this_month)}</span>
           </div>
           <div className="card">
             <span className="card-label">Avg income / month</span>
-            <span className="card-value">${incomeSummary.avg_month.toFixed(2)}</span>
+            <span className="card-value">{money(incomeSummary.avg_month)}</span>
           </div>
           <div className="card">
             <span className="card-label">Total income</span>
-            <span className="card-value">${incomeSummary.total.toFixed(2)}</span>
+            <span className="card-value">{money(incomeSummary.total)}</span>
           </div>
         </section>
       )}
@@ -81,7 +83,7 @@ export default function IncomePage({
                   <td>{i.date}</td>
                   <td>{i.source}</td>
                   <td>{i.note}</td>
-                  <td className="right">${i.amount.toFixed(2)}</td>
+                  <td className="right">{money(i.amount)}</td>
                   <td className="right">
                     <button className="delete-btn" onClick={() => onDeleteIncome(i.id)} title="Delete">
                       ✕

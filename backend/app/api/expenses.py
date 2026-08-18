@@ -2,7 +2,7 @@ import datetime
 import io
 
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -187,10 +187,15 @@ def _cell(row, col):
 @router.post("/expenses/import")
 async def import_expenses(
     file: UploadFile = File(...),
+    currency_override: str = Form(""),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Import expenses from a CSV or Excel file (old-dashboard format supported)."""
+    """Import expenses from a CSV or Excel file (old-dashboard format supported).
+
+    If currency_override is given, it is applied to every row (ignoring any
+    Currency column in the file).
+    """
     raw = await file.read()
     name = (file.filename or "").lower()
     try:
@@ -258,6 +263,8 @@ async def import_expenses(
             shop = str(_cell(row, shop_c) or "").strip()
             brand = str(_cell(row, brand_c) or "").strip()
             currency = str(_cell(row, cur_c) or "SEK").strip() or "SEK"
+            if currency_override.strip():
+                currency = currency_override.strip().upper()
 
             key = (str(when), category.lower(), description.lower(), round(amount, 2))
             if key in existing:

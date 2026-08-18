@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { money } from '../format.js'
 
 export default function ExpensesPage({
   expenses,
@@ -16,6 +17,8 @@ export default function ExpensesPage({
   options,
   onImport,
   onExport,
+  importCurrency,
+  setImportCurrency,
 }) {
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
@@ -53,6 +56,18 @@ export default function ExpensesPage({
             accept=".csv,.xlsx,.xls"
             onChange={(e) => setFile(e.target.files[0] || null)}
           />
+          <select
+            value={importCurrency}
+            onChange={(e) => setImportCurrency(e.target.value)}
+            title="Currency for imported rows"
+          >
+            <option value="">Currency: from file</option>
+            <option value="SEK">SEK</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="INR">INR</option>
+          </select>
           <button type="submit" disabled={!file || importing}>
             {importing ? 'Importing…' : 'Import'}
           </button>
@@ -289,7 +304,7 @@ export default function ExpensesPage({
                   <td className="right">{e.quantity}</td>
                   <td>{e.unit}</td>
                   <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
-                    ${e.amount.toFixed(2)}
+                    {money(e.amount)}
                   </td>
                   <td className="right nowrap">
                     <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">

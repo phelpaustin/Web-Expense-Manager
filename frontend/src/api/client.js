@@ -304,11 +304,20 @@ export function deleteShop(name) {
   return request(`/api/options/shop/${encodeURIComponent(name)}`, { method: 'DELETE' })
 }
 
-export function importExpenses(file) {
+export function importExpenses(file, currencyOverride) {
   const body = new FormData()
   body.append('file', file)
+  if (currencyOverride) body.append('currency_override', currencyOverride)
   // Note: no Content-Type header — the browser sets the multipart boundary.
   return request('/api/expenses/import', { method: 'POST', body })
+}
+
+export function setBaseCurrency(currency) {
+  return request('/api/options/base-currency', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currency }),
+  })
 }
 
 export async function exportExpenses(format) {

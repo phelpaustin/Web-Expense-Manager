@@ -1,3 +1,5 @@
+import { money } from '../format.js'
+
 export default function BillsPage({
   pendingBills,
   pendingForm,
@@ -66,7 +68,7 @@ export default function BillsPage({
                   <td>{b.date}</td>
                   <td>{b.shop}</td>
                   <td>{b.note}</td>
-                  <td className="right">${b.amount.toFixed(2)}</td>
+                  <td className="right">{money(b.amount)}</td>
                   <td className="right nowrap">
                     <button className="icon-btn" onClick={() => onItemise(b.id)} title="Itemise into an expense">
                       ✓
@@ -130,7 +132,7 @@ export default function BillsPage({
                   <td>
                     <span className={`source-badge source-${r.source.toLowerCase()}`}>{r.source}</span>
                   </td>
-                  <td className="right">${r.amount.toFixed(2)}</td>
+                  <td className="right">{money(r.amount)}</td>
                   <td className="right nowrap">
                     {r.source === 'Manual' && (
                       <button className="delete-btn" onClick={() => onDeleteManual(r.id)} title="Delete manual entry">

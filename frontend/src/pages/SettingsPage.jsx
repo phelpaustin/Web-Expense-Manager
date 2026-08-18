@@ -9,7 +9,9 @@ import {
   deleteUnit,
   addShop,
   deleteShop,
+  setBaseCurrency,
 } from '../api/client.js'
+import { setDisplayCurrency } from '../format.js'
 
 function ChipList({ items, onDelete }) {
   if (!items || items.length === 0) return <p className="muted-note">None yet.</p>
@@ -185,6 +187,31 @@ export default function SettingsPage({ user, options, onOptionsUpdated, onError,
 
       {tab === 'data' && (
         <>
+          <section className="panel">
+            <h2>Display currency</h2>
+            <p className="muted-note">How amounts are shown across the app.</p>
+            <select
+              className="cat-select"
+              value={options.base_currency || 'SEK'}
+              onChange={async (e) => {
+                const updated = await setBaseCurrency(e.target.value).catch((err) => {
+                  onError(err.message)
+                  return null
+                })
+                if (updated) {
+                  setDisplayCurrency(updated.base_currency)
+                  onOptionsUpdated(updated)
+                }
+              }}
+            >
+              {['SEK', 'USD', 'EUR', 'GBP', 'INR', 'DKK', 'NOK'].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </section>
+
           <section className="panel">
             <h2>Categories</h2>
             <ChipList items={options.categories} onDelete={(name) => apply(deleteCategory(name))} />

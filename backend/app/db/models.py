@@ -38,6 +38,7 @@ class UserOptions(Base):
     subcategories = Column(JSON, nullable=False, default=dict)  # {category: [subcategory, ...]}
     units = Column(JSON, nullable=False, default=list)
     shops = Column(JSON, nullable=False, default=list)
+    base_currency = Column(String, nullable=False, default="SEK")
 
 
 
