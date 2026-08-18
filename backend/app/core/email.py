@@ -24,9 +24,13 @@ def send_email(to: str, subject: str, body: str) -> bool:
     msg["Subject"] = subject
     msg.set_content(body)
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-        server.starttls(context=ssl.create_default_context())
-        if settings.smtp_user:
-            server.login(settings.smtp_user, settings.smtp_password)
-        server.send_message(msg)
-    return True
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+            server.starttls(context=ssl.create_default_context())
+            if settings.smtp_user:
+                server.login(settings.smtp_user, settings.smtp_password)
+            server.send_message(msg)
+        return True
+    except Exception:  # noqa: BLE001 — never let email failure break the caller
+        log.exception("Failed to send email to %s", to)
+        return False
