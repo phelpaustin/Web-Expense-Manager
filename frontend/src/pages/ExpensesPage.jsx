@@ -19,10 +19,12 @@ export default function ExpensesPage({
   onExport,
   importCurrency,
   setImportCurrency,
+  onAddRow,
 }) {
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
+  const [skipped, setSkipped] = useState([])
 
   async function handleImportSubmit(e) {
     e.preventDefault()
@@ -32,12 +34,38 @@ export default function ExpensesPage({
     try {
       const result = await onImport(file)
       setImportResult(result)
+      setSkipped(result.skipped_rows || [])
       setFile(null)
       e.target.reset()
     } catch (err) {
       setImportResult({ error: err.message })
     } finally {
       setImporting(false)
+    }
+  }
+
+  function updateSkipped(i, field, value) {
+    setSkipped((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)))
+  }
+
+  async function addSkipped(i) {
+    const r = skipped[i]
+    try {
+      await onAddRow({
+        date: r.date,
+        category: r.category,
+        subcategory: r.subcategory,
+        description: r.description,
+        amount: parseFloat(r.amount),
+        quantity: parseFloat(r.quantity) || 1,
+        unit: r.unit || 'Count',
+        shop: r.shop,
+        brand: r.brand,
+        currency: r.currency || 'SEK',
+      })
+      setSkipped((prev) => prev.filter((_, idx) => idx !== i))
+    } catch (err) {
+      updateSkipped(i, 'reason', err.message)
     }
   }
 
@@ -89,6 +117,76 @@ export default function ExpensesPage({
           </div>
         )}
       </section>
+
+      {skipped.length > 0 && (
+        <section className="panel">
+          <h2>⚠️ Skipped rows ({skipped.length})</h2>
+          <p className="subtitle">Fix any values and add them back individually.</p>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Reason</th>
+                <th>Date</th>
+                <th>Category</th>
+                <th>Subcat</th>
+                <th>Shop</th>
+                <th>Description</th>
+                <th className="right">Qty</th>
+                <th>Unit</th>
+                <th>Cur</th>
+                <th className="right">Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {skipped.map((r, i) => (
+                <tr key={i}>
+                  <td className="skip-reason">{r.reason}</td>
+                  <td>
+                    <input type="date" value={r.date} onChange={(e) => updateSkipped(i, 'date', e.target.value)} />
+                  </td>
+                  <td>
+                    <input type="text" list="cat-options" value={r.category} onChange={(e) => updateSkipped(i, 'category', e.target.value)} />
+                  </td>
+                  <td>
+                    <input type="text" value={r.subcategory} onChange={(e) => updateSkipped(i, 'subcategory', e.target.value)} />
+                  </td>
+                  <td>
+                    <input type="text" list="shop-options" value={r.shop} onChange={(e) => updateSkipped(i, 'shop', e.target.value)} />
+                  </td>
+                  <td>
+                    <input type="text" value={r.description} onChange={(e) => updateSkipped(i, 'description', e.target.value)} />
+                  </td>
+                  <td className="right">
+                    <input type="number" className="amount-input" value={r.quantity} onChange={(e) => updateSkipped(i, 'quantity', e.target.value)} />
+                  </td>
+                  <td>
+                    <input type="text" list="unit-options" className="unit-input" value={r.unit} onChange={(e) => updateSkipped(i, 'unit', e.target.value)} />
+                  </td>
+                  <td>
+                    <input type="text" className="unit-input" value={r.currency} onChange={(e) => updateSkipped(i, 'currency', e.target.value)} />
+                  </td>
+                  <td className="right">
+                    <input type="number" className="amount-input" value={r.amount} onChange={(e) => updateSkipped(i, 'amount', e.target.value)} />
+                  </td>
+                  <td className="right nowrap">
+                    <button className="icon-btn save" onClick={() => addSkipped(i)} title="Add this row">
+                      ✓
+                    </button>
+                    <button
+                      className="delete-btn"
+                      onClick={() => setSkipped((prev) => prev.filter((_, idx) => idx !== i))}
+                      title="Dismiss"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <section className="panel">
         <h2>➕ Add expense</h2>

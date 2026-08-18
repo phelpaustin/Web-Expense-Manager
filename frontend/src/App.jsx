@@ -200,6 +200,11 @@ export default function App() {
     return result
   }
 
+  async function handleAddRow(payload) {
+    await createExpense(payload)
+    await loadAll()
+  }
+
   function handleExport(format) {
     return exportExpenses(format).catch((err) => setError(err.message))
   }
@@ -464,6 +469,7 @@ export default function App() {
               onExport={handleExport}
               importCurrency={importCurrency}
               setImportCurrency={setImportCurrency}
+              onAddRow={handleAddRow}
             />
           }
         />

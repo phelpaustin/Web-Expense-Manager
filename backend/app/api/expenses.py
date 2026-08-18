@@ -236,27 +236,65 @@ async def import_expenses(
 
     added = skipped = 0
     errors: list[str] = []
+    skipped_rows: list[dict] = []
     learned: set[tuple] = set()
 
+    def raw_row(row, reason: str, line: int) -> dict:
+        def s(col):
+            v = _cell(row, col)
+            return "" if v is None else str(v)
+
+        return {
+            "line": line,
+            "reason": reason,
+            "date": s(date_c),
+            "category": s(cat_c),
+            "subcategory": s(sub_c),
+            "description": s(desc_c),
+            "amount": s(amt_c),
+            "quantity": s(qty_c),
+            "unit": s(unit_c),
+            "shop": s(shop_c),
+            "brand": s(brand_c),
+            "currency": s(cur_c),
+        }
+
+    def record_skip(row, reason: str, line: int):
+        nonlocal skipped
+        skipped += 1
+        if len(skipped_rows) < 200:
+            skipped_rows.append(raw_row(row, reason, line))
+
     for idx, row in df.iterrows():
+        line = int(idx) + 2
         try:
             parsed = pd.to_datetime(_cell(row, date_c), errors="coerce")
             category = _cell(row, cat_c)
             amount_raw = _cell(row, amt_c)
-            if pd.isna(parsed) or category is None or amount_raw is None:
-                skipped += 1
+            if pd.isna(parsed):
+                record_skip(row, "Invalid or missing date", line)
+                continue
+            if category is None or not str(category).strip():
+                record_skip(row, "Missing category", line)
                 continue
             when = parsed.date()
             category = str(category).strip()
-            amount = float(amount_raw)
-            if not category or amount <= 0:
-                skipped += 1
+            try:
+                amount = float(amount_raw)
+            except (TypeError, ValueError):
+                record_skip(row, "Amount is not a number", line)
+                continue
+            if amount <= 0:
+                record_skip(row, "Amount must be greater than 0", line)
                 continue
 
             description = str(_cell(row, desc_c) or "").strip()
             subcategory = str(_cell(row, sub_c) or "").strip()
             qty_val = _cell(row, qty_c)
-            quantity = float(qty_val) if qty_val is not None else 1.0
+            try:
+                quantity = float(qty_val) if qty_val is not None else 1.0
+            except (TypeError, ValueError):
+                quantity = 1.0
             if quantity <= 0:
                 quantity = 1.0
             unit = str(_cell(row, unit_c) or "Count").strip() or "Count"
@@ -268,7 +306,7 @@ async def import_expenses(
 
             key = (str(when), category.lower(), description.lower(), round(amount, 2))
             if key in existing:
-                skipped += 1
+                record_skip(row, "Duplicate of an existing expense", line)
                 continue
             existing.add(key)
 
@@ -290,14 +328,15 @@ async def import_expenses(
             learned.add((category, subcategory, unit, shop))
             added += 1
         except Exception as exc:  # noqa: BLE001 — report row-level issues, keep going
+            record_skip(row, str(exc), line)
             if len(errors) < 20:
-                errors.append(f"Row {int(idx) + 2}: {exc}")
+                errors.append(f"Row {line}: {exc}")
 
     db.commit()
     for category, subcategory, unit, shop in learned:
         ensure_options(db, user.id, category, subcategory, unit, shop)
 
-    return {"added": added, "skipped": skipped, "errors": errors}
+    return {"added": added, "skipped": skipped, "errors": errors, "skipped_rows": skipped_rows}
 
 
 @router.get("/expenses/export")

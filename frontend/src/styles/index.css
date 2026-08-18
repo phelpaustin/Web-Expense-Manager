@@ -420,6 +420,13 @@ button {
   opacity: 0.6;
 }
 
+.skip-reason {
+  color: var(--warning);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .add-form input[type='file'] {
   font-size: 0.85rem;
   color: var(--muted);
