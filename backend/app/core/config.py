@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     # Public URL of the frontend, used to build password-reset links.
     frontend_url: str = "http://localhost:5173"
 
-    # SMTP for password-reset emails. If smtp_host is empty, the reset link is
-    # logged to the server console instead of emailed (fine for local dev).
+    # Email. Prefer the Resend HTTP API (works where outbound SMTP is blocked).
+    # Set RESEND_API_KEY to use it; EMAIL_FROM is the sender address.
+    resend_api_key: str = ""
+    email_from: str = "onboarding@resend.dev"
+
+    # SMTP fallback (used only if RESEND_API_KEY is not set).
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
