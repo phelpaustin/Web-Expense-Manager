@@ -6,6 +6,7 @@ pydantic-settings
 python-dotenv
 pandas
 statsmodels
+openpyxl
 sqlalchemy
 psycopg2-binary
 bcrypt

@@ -376,6 +376,39 @@ button {
   color: var(--muted);
 }
 
+.ghost-btn {
+  background: #fff;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ghost-btn:hover {
+  border-color: var(--accent);
+  background: rgba(109, 123, 255, 0.06);
+}
+
+.add-form input[type='file'] {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 260px;
+}
+
+.add-form input[type='file']::file-selector-button {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.4rem 0.8rem;
+  margin-right: 0.6rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
 .apply-due-btn {
   margin-top: 1.1rem;
   background: linear-gradient(135deg, #f59e0b, #f97316);

@@ -279,3 +279,27 @@ export function addShop(name) {
 export function deleteShop(name) {
   return request(`/api/options/shop/${encodeURIComponent(name)}`, { method: 'DELETE' })
 }
+
+export function importExpenses(file) {
+  const body = new FormData()
+  body.append('file', file)
+  // Note: no Content-Type header — the browser sets the multipart boundary.
+  return request('/api/expenses/import', { method: 'POST', body })
+}
+
+export async function exportExpenses(format) {
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/api/expenses/export?format=${format}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new Error('Export failed')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = format === 'xlsx' ? 'expenses.xlsx' : 'expenses.csv'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}

@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 export default function ExpensesPage({
   expenses,
   form,
@@ -12,10 +14,66 @@ export default function ExpensesPage({
   saveEdit,
   onDelete,
   options,
+  onImport,
+  onExport,
 }) {
+  const [file, setFile] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+
+  async function handleImportSubmit(e) {
+    e.preventDefault()
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const result = await onImport(file)
+      setImportResult(result)
+      setFile(null)
+      e.target.reset()
+    } catch (err) {
+      setImportResult({ error: err.message })
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <>
       <h1 className="page-title">🧾 Expenses</h1>
+
+      <section className="panel">
+        <h2>📤 Import / Export</h2>
+        <p className="subtitle">
+          Import a CSV or Excel file (old dashboard format supported). Duplicates are skipped.
+        </p>
+        <form className="add-form" onSubmit={handleImportSubmit}>
+          <input
+            type="file"
+            accept=".csv,.xlsx,.xls"
+            onChange={(e) => setFile(e.target.files[0] || null)}
+          />
+          <button type="submit" disabled={!file || importing}>
+            {importing ? 'Importing…' : 'Import'}
+          </button>
+          <button type="button" className="ghost-btn" onClick={() => onExport('csv')}>
+            Export CSV
+          </button>
+          <button type="button" className="ghost-btn" onClick={() => onExport('xlsx')}>
+            Export Excel
+          </button>
+        </form>
+        {importResult && (
+          <div className={importResult.error ? 'auth-error' : 'ok-note'} style={{ marginTop: '0.75rem' }}>
+            {importResult.error
+              ? importResult.error
+              : `Imported ${importResult.added} · skipped ${importResult.skipped}` +
+                (importResult.errors && importResult.errors.length
+                  ? ` · ${importResult.errors.length} row error(s)`
+                  : '')}
+          </div>
+        )}
+      </section>
 
       <section className="panel">
         <h2>➕ Add expense</h2>

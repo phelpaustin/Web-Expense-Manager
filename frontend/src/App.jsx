@@ -28,6 +28,8 @@ import {
   createManualBill,
   deleteManualBill,
   fetchOptions,
+  importExpenses,
+  exportExpenses,
   fetchMe,
   getToken,
   logout,
@@ -185,6 +187,16 @@ export default function App() {
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  async function handleImport(file) {
+    const result = await importExpenses(file)
+    await loadAll()
+    return result
+  }
+
+  function handleExport(format) {
+    return exportExpenses(format).catch((err) => setError(err.message))
   }
 
   function startEdit(expense) {
@@ -429,6 +441,8 @@ export default function App() {
               saveEdit={saveEdit}
               onDelete={handleDelete}
               options={options}
+              onImport={handleImport}
+              onExport={handleExport}
             />
           }
         />
