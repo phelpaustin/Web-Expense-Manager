@@ -9,6 +9,7 @@ statsmodels
 openpyxl
 sqlalchemy
 psycopg2-binary
+alembic
 bcrypt
 PyJWT
 python-multipart

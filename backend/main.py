@@ -8,6 +8,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import DEFAULT_SECRET, settings
 from app.core.rate_limit import limiter
 from app.api import expenses, analytics, budgets, auth, income, recurring, bills, options, metrics
+from app.db.migrate import run_migrations
 from app.db.seed import init_db
 
 
@@ -19,7 +20,8 @@ async def lifespan(app: FastAPI):
             "Refusing to start: SECRET_KEY is the insecure default. "
             "Set a strong SECRET_KEY (e.g. `openssl rand -hex 32`)."
         )
-    # Create tables and seed sample data on startup if the DB is empty.
+    # Apply schema migrations, then seed sample data on an empty DB.
+    run_migrations()
     init_db()
     yield
 

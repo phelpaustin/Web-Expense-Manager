@@ -1,7 +1,7 @@
 from datetime import date
 
 from app.core.config import settings
-from app.db.database import Base, SessionLocal, engine
+from app.db.database import SessionLocal
 from app.db import models
 from app.core.security import hash_password
 from app.logic.budgets import TOTAL_BUDGET_KEY
@@ -47,9 +47,7 @@ def _demo_password() -> str:
 
 
 def init_db() -> None:
-    """Create tables and (optionally) seed a demo user + sample data."""
-    Base.metadata.create_all(bind=engine)
-
+    """Seed a demo user + sample data if not present (schema is handled by Alembic)."""
     password = _demo_password()
     if not password:
         return  # no demo user in production unless DEMO_PASSWORD is set
