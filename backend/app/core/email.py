@@ -35,6 +35,9 @@ def _send_via_resend(to: str, subject: str, body: str) -> bool:
         headers={
             "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
+            # Cloudflare (in front of Resend) 403s the default Python-urllib UA.
+            "User-Agent": "expense-webpage/1.0",
+            "Accept": "application/json",
         },
         method="POST",
     )
