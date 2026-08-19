@@ -262,8 +262,17 @@ export function deletePendingBill(id) {
   return request(`/api/pending-bills/${id}`, { method: 'DELETE' })
 }
 
-export function itemisePendingBill(id) {
-  return request(`/api/pending-bills/${id}/itemise`, { method: 'POST' })
+export function itemisePendingBill(id, amount) {
+  const qs = amount != null ? `?amount=${encodeURIComponent(amount)}` : ''
+  return request(`/api/pending-bills/${id}/itemise${qs}`, { method: 'POST' })
+}
+
+export function uploadBill(file, { shop = '', amount = '' } = {}) {
+  const body = new FormData()
+  body.append('file', file)
+  if (shop) body.append('shop', shop)
+  if (amount !== '' && amount != null) body.append('amount', amount)
+  return request('/api/pending-bills/upload', { method: 'POST', body })
 }
 
 export function uploadReceipt(billId, file) {

@@ -1,6 +1,6 @@
 import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -72,6 +72,46 @@ def create_pending(
     return _serialize_pending(b, False)
 
 
+@router.post("/pending-bills/upload", status_code=201)
+async def upload_pending(
+    file: UploadFile = File(...),
+    shop: str = Form(""),
+    amount: float = Form(0.0),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Create a pending bill straight from an uploaded PDF/photo, to itemise later."""
+    content_type = file.content_type or "application/octet-stream"
+    if not (content_type == "application/pdf" or content_type.startswith("image/")):
+        raise HTTPException(status_code=400, detail="Only PDF or image files are allowed")
+    data = await file.read()
+    if len(data) > _MAX_RECEIPT_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+
+    b = models.PendingBill(
+        user_id=user.id,
+        date=datetime.date.today(),
+        shop=(shop.strip() or (file.filename or "Uploaded bill")),
+        amount=amount or 0.0,
+        note="",
+        status="pending",
+    )
+    db.add(b)
+    db.flush()
+    db.add(
+        models.Receipt(
+            user_id=user.id,
+            pending_bill_id=b.id,
+            filename=file.filename or "receipt",
+            content_type=content_type,
+            data=data,
+        )
+    )
+    db.commit()
+    db.refresh(b)
+    return _serialize_pending(b, True)
+
+
 @router.delete("/pending-bills/{bill_id}", status_code=204)
 def delete_pending(
     bill_id: int,
@@ -88,18 +128,20 @@ def delete_pending(
 def itemise_pending(
     bill_id: int,
     category: str = "Bills",
+    amount: float | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     """Convert a pending bill into a real expense and archive it as itemised."""
     b = _pending_or_404(db, bill_id, user.id)
+    final_amount = amount if amount is not None else b.amount
     db.add(
         models.Expense(
             user_id=user.id,
             date=b.date,
             category=category or "Bills",
             description=b.shop,
-            amount=b.amount,
+            amount=final_amount,
         )
     )
     db.query(models.Receipt).filter(models.Receipt.pending_bill_id == b.id).delete()

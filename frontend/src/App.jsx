@@ -29,6 +29,7 @@ import {
   deletePendingBill,
   itemisePendingBill,
   uploadReceipt,
+  uploadBill,
   viewReceipt,
   deleteReceipt,
   fetchLedger,
@@ -392,7 +393,19 @@ export default function App() {
 
   async function handleItemise(id) {
     try {
-      await itemisePendingBill(id)
+      const bill = pendingBills.find((b) => b.id === id)
+      let amount
+      if (!bill || !bill.amount) {
+        const entered = window.prompt('Amount for this bill?', '')
+        if (entered === null) return
+        const parsed = parseFloat(entered)
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          setError('Please enter a valid amount to itemise this bill.')
+          return
+        }
+        amount = parsed
+      }
+      await itemisePendingBill(id, amount)
       await loadAll()
     } catch (err) {
       setError(err.message)
@@ -411,6 +424,15 @@ export default function App() {
   async function handleUploadReceipt(id, file) {
     try {
       await uploadReceipt(id, file)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleUploadBill(file) {
+    try {
+      await uploadBill(file)
       await loadAll()
     } catch (err) {
       setError(err.message)
@@ -566,6 +588,7 @@ export default function App() {
               onItemise={handleItemise}
               onDeletePending={handleDeletePending}
               onUploadReceipt={handleUploadReceipt}
+              onUploadBill={handleUploadBill}
               onViewReceipt={handleViewReceipt}
               onDeleteReceipt={handleDeleteReceipt}
               ledger={ledger}

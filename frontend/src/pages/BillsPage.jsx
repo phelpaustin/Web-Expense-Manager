@@ -8,6 +8,7 @@ export default function BillsPage({
   onItemise,
   onDeletePending,
   onUploadReceipt,
+  onUploadBill,
   onViewReceipt,
   onDeleteReceipt,
   ledger,
@@ -22,6 +23,21 @@ export default function BillsPage({
 
       <section className="panel">
         <h2>🧾 Pending bills</h2>
+        <div className="upload-bill">
+          <label className="btn-upload">
+            📤 Upload bill (PDF or photo)
+            <input
+              type="file"
+              accept="application/pdf,image/*"
+              onChange={(e) => {
+                const f = e.target.files[0]
+                if (f) onUploadBill(f)
+                e.target.value = ''
+              }}
+            />
+          </label>
+          <span className="subtitle">Attach a receipt now and itemise it later.</span>
+        </div>
         <form className="add-form" onSubmit={onAddPending}>
           <input
             type="date"
