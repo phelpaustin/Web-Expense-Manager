@@ -9,6 +9,10 @@ export default function DashboardPage({
   categories,
   onSetBudget,
   onDeleteBudget,
+  metrics,
+  periodStatus,
+  budgetConfig,
+  onSetBudgetConfig,
 }) {
   return (
     <>
@@ -36,6 +40,77 @@ export default function DashboardPage({
               </span>
             </div>
           )}
+        </section>
+      )}
+
+      {metrics && (
+        <section className="cards">
+          <div className="card">
+            <span className="card-label">Savings rate</span>
+            <span className="card-value">{metrics.savings_rate}%</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Monthly savings</span>
+            <span className="card-value">{money(metrics.monthly_savings)}</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Projected spend</span>
+            <span className="card-value">{money(metrics.monthly_projection)}</span>
+          </div>
+          <div className="card">
+            <span className="card-label">Spend volatility</span>
+            <span className="card-value">{metrics.volatility_cv}%</span>
+          </div>
+        </section>
+      )}
+
+      {periodStatus && (
+        <section className="panel">
+          <div className="period-header">
+            <h2>🎯 {periodStatus.label} budget</h2>
+            <div className="period-controls">
+              <select
+                value={budgetConfig.period}
+                onChange={(e) => onSetBudgetConfig(e.target.value, budgetConfig.rollover)}
+              >
+                {['Weekly', 'Monthly', 'Annual'].map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={budgetConfig.rollover}
+                  onChange={(e) => onSetBudgetConfig(budgetConfig.period, e.target.checked)}
+                />
+                Rollover
+              </label>
+            </div>
+          </div>
+          <div className="period-value">
+            {money(periodStatus.spent)}{' '}
+            <span className="period-of">/ {money(periodStatus.effective)}</span>
+          </div>
+          <div className="cat-bar-track" style={{ margin: '0.75rem 0 0.5rem' }}>
+            <div
+              className="cat-bar-fill"
+              style={{
+                width: `${Math.min(periodStatus.pct, 100)}%`,
+                background: STATUS_COLORS[periodStatus.status] || '#64748b',
+              }}
+            />
+          </div>
+          <div className="trend-meta">
+            <span>
+              <strong style={{ color: STATUS_COLORS[periodStatus.status] }}>{periodStatus.pct}%</strong> used
+            </span>
+            <span>{money(periodStatus.remaining)} remaining</span>
+            {periodStatus.rollover !== 0 && <span>rollover: {money(periodStatus.rollover)}</span>}
+            <span>projected: {money(periodStatus.projected)}</span>
+            <span>{periodStatus.days_remaining} days left</span>
+          </div>
         </section>
       )}
 

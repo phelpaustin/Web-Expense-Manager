@@ -11,6 +11,10 @@ import {
   deleteExpense,
   setBudget,
   deleteBudget,
+  fetchMetrics,
+  fetchBudgetConfig,
+  fetchPeriodStatus,
+  setBudgetConfig,
   fetchIncome,
   fetchIncomeSummary,
   createIncome,
@@ -79,6 +83,9 @@ export default function App() {
   const [manualForm, setManualForm] = useState(EMPTY_BILL)
   const [options, setOptions] = useState(EMPTY_OPTIONS)
   const [importCurrency, setImportCurrency] = useState('')
+  const [metrics, setMetrics] = useState(null)
+  const [periodStatus, setPeriodStatus] = useState(null)
+  const [budgetConfig, setBudgetConfigState] = useState({ period: 'Monthly', rollover: false })
 
   function loadAll() {
     return Promise.all([
@@ -93,8 +100,11 @@ export default function App() {
       fetchPendingBills(),
       fetchLedger(),
       fetchOptions(),
+      fetchMetrics(),
+      fetchBudgetConfig(),
+      fetchPeriodStatus(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
@@ -107,6 +117,9 @@ export default function App() {
         setLedger(led)
         setOptions(opts)
         setDisplayCurrency(opts.base_currency)
+        setMetrics(met)
+        setBudgetConfigState(bcfg)
+        setPeriodStatus(pstat)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -158,6 +171,8 @@ export default function App() {
     setPendingBills([])
     setLedger([])
     setOptions(EMPTY_OPTIONS)
+    setMetrics(null)
+    setPeriodStatus(null)
   }
 
   async function handleAdd(e) {
@@ -266,6 +281,15 @@ export default function App() {
   async function handleDeleteBudget(category) {
     try {
       await deleteBudget(category)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleSetBudgetConfig(period, rollover) {
+    try {
+      await setBudgetConfig(period, rollover)
       await loadAll()
     } catch (err) {
       setError(err.message)
@@ -445,6 +469,10 @@ export default function App() {
               categories={categories}
               onSetBudget={handleSetBudget}
               onDeleteBudget={handleDeleteBudget}
+              metrics={metrics}
+              periodStatus={periodStatus}
+              budgetConfig={budgetConfig}
+              onSetBudgetConfig={handleSetBudgetConfig}
             />
           }
         />

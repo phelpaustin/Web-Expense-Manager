@@ -427,6 +427,36 @@ button {
   white-space: nowrap;
 }
 
+.period-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.period-header h2 {
+  margin: 0;
+}
+
+.period-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.period-value {
+  font-size: 1.9rem;
+  font-weight: 800;
+  margin-top: 0.6rem;
+}
+
+.period-of {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .add-form input[type='file'] {
   font-size: 0.85rem;
   color: var(--muted);

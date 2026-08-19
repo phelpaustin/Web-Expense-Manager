@@ -150,6 +150,26 @@ export function fetchBudgetStatus() {
   return request('/api/budgets/status')
 }
 
+export function fetchMetrics() {
+  return request('/api/metrics')
+}
+
+export function fetchBudgetConfig() {
+  return request('/api/budgets/config')
+}
+
+export function fetchPeriodStatus() {
+  return request('/api/budgets/period-status')
+}
+
+export function setBudgetConfig(period, rollover) {
+  return request('/api/budgets/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ period, rollover }),
+  })
+}
+
 export function createExpense(expense) {
   return request('/api/expenses', {
     method: 'POST',

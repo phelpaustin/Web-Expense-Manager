@@ -3,10 +3,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.options import get_or_create_options
 from app.db.database import get_db
 from app.db import models
 from app.api.expenses import fetch_expenses
 from app.logic import budgets as budgets_logic
+from app.logic.budgets import TOTAL_BUDGET_KEY
 
 router = APIRouter()
 
@@ -14,6 +16,11 @@ router = APIRouter()
 class BudgetSet(BaseModel):
     category: str = Field(min_length=1)
     amount: float = Field(gt=0)
+
+
+class BudgetConfig(BaseModel):
+    period: str = "Monthly"
+    rollover: bool = False
 
 
 def fetch_budgets(db: Session, user_id: int) -> dict:
@@ -76,4 +83,38 @@ def budgets_status(
 ):
     return budgets_logic.calculate_budget_status(
         fetch_expenses(db, user.id), fetch_budgets(db, user.id), month
+    )
+
+
+@router.get("/budgets/config")
+def get_budget_config(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    return {"period": opts.budget_period, "rollover": opts.budget_rollover}
+
+
+@router.put("/budgets/config")
+def set_budget_config(
+    payload: BudgetConfig,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    opts.budget_period = payload.period if payload.period in budgets_logic.BUDGET_PERIODS else "Monthly"
+    opts.budget_rollover = bool(payload.rollover)
+    db.commit()
+    return {"period": opts.budget_period, "rollover": opts.budget_rollover}
+
+
+@router.get("/budgets/period-status")
+def budgets_period_status(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    opts = get_or_create_options(db, user.id)
+    total_budget = fetch_budgets(db, user.id).get(TOTAL_BUDGET_KEY)
+    return budgets_logic.period_budget_status(
+        fetch_expenses(db, user.id), total_budget, opts.budget_period, opts.budget_rollover
     )
