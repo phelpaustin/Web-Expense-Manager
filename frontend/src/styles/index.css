@@ -457,6 +457,26 @@ button {
   color: var(--muted);
 }
 
+.chart-tip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.85rem;
+}
+
+.chart-tip-label {
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.recharts-legend-item-text {
+  color: var(--muted) !important;
+  font-size: 0.85rem;
+}
+
 .add-form input[type='file'] {
   font-size: 0.85rem;
   color: var(--muted);

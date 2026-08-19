@@ -1,5 +1,6 @@
 import { STATUS_COLORS } from '../constants.js'
 import { money } from '../format.js'
+import { SpendingTrendChart, CashFlowChart, CategoryDonut } from '../components/Charts.jsx'
 
 export default function DashboardPage({
   summary,
@@ -161,15 +162,8 @@ export default function DashboardPage({
 
       {trends && (
         <section className="panel">
-          <h2>📈 Trends</h2>
-          <div className="trend-row">
-            {trends.monthly.map((m) => (
-              <div key={m.month} className="trend-cell">
-                <span className="card-label">{m.month}</span>
-                <span className="trend-value">{money(m.total)}</span>
-              </div>
-            ))}
-          </div>
+          <h2>📈 Spending trend</h2>
+          <SpendingTrendChart data={trends.monthly} />
           <div className="trend-meta">
             {trends.change && (
               <span>
@@ -188,19 +182,17 @@ export default function DashboardPage({
         </section>
       )}
 
+      {metrics && metrics.cash_flow && metrics.cash_flow.length > 0 && (
+        <section className="panel">
+          <h2>💸 Cash flow</h2>
+          <CashFlowChart data={metrics.cash_flow} />
+        </section>
+      )}
+
       {categories.length > 0 && (
         <section className="panel">
           <h2>🏆 Category breakdown</h2>
-          {categories.map((c) => (
-            <div key={c.category} className="cat-row">
-              <span className="cat-name">{c.category}</span>
-              <div className="cat-bar-track">
-                <div className="cat-bar-fill" style={{ width: `${c.pct_of_total}%` }} />
-              </div>
-              <span className="cat-pct">{c.pct_of_total}%</span>
-              <span className="cat-amt">{money(c.total)}</span>
-            </div>
-          ))}
+          <CategoryDonut data={categories} />
         </section>
       )}
     </>
