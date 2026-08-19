@@ -1,13 +1,58 @@
-import { useState } from 'react'
-import { login, register, forgotPassword } from './api/client.js'
+import { useState, useEffect, useRef } from 'react'
+import { login, register, forgotPassword, googleLogin } from './api/client.js'
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 export default function AuthScreen({ onAuthed }) {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'forgot'
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
+  const googleBtnRef = useRef(null)
+
+  // Render the Google Sign-In button (only if a client ID is configured).
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || mode === 'forgot') return
+
+    function init() {
+      if (!window.google || !googleBtnRef.current) return
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (resp) => {
+          try {
+            await googleLogin(resp.credential)
+            onAuthed()
+          } catch (err) {
+            setError(err.message)
+          }
+        },
+      })
+      googleBtnRef.current.innerHTML = ''
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: 300,
+      })
+    }
+
+    const id = 'google-gsi'
+    if (window.google) {
+      init()
+    } else if (!document.getElementById(id)) {
+      const s = document.createElement('script')
+      s.src = 'https://accounts.google.com/gsi/client'
+      s.async = true
+      s.defer = true
+      s.id = id
+      s.onload = init
+      document.body.appendChild(s)
+    } else {
+      document.getElementById(id).addEventListener('load', init)
+    }
+  }, [mode, onAuthed])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -19,7 +64,7 @@ export default function AuthScreen({ onAuthed }) {
         await login(email, password)
         onAuthed()
       } else if (mode === 'register') {
-        await register(email, password)
+        await register(email, password, name)
         onAuthed()
       } else {
         const res = await forgotPassword(email)
@@ -42,6 +87,14 @@ export default function AuthScreen({ onAuthed }) {
         <p className="subtitle">{title}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
+          {mode === 'register' && (
+            <input
+              type="text"
+              placeholder="Full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          )}
           <input
             type="email"
             placeholder="Email"
@@ -71,6 +124,15 @@ export default function AuthScreen({ onAuthed }) {
                   : 'Send reset link'}
           </button>
         </form>
+
+        {GOOGLE_CLIENT_ID && mode !== 'forgot' && (
+          <>
+            <div className="auth-divider">
+              <span>or</span>
+            </div>
+            <div className="google-btn" ref={googleBtnRef}></div>
+          </>
+        )}
 
         {mode === 'login' && (
           <p className="auth-toggle">

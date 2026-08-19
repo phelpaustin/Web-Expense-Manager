@@ -13,3 +13,5 @@ bcrypt
 PyJWT
 python-multipart
 slowapi
+google-auth
+requests

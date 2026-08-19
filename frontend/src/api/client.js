@@ -59,14 +59,35 @@ export async function login(email, password) {
   return data
 }
 
-export async function register(email, password) {
+export async function register(email, password, name) {
   const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, name }),
   })
   if (!res.ok) {
     let message = 'Registration failed'
+    try {
+      const data = await res.json()
+      if (typeof data.detail === 'string') message = data.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(message)
+  }
+  const data = await res.json()
+  setToken(data.access_token)
+  return data
+}
+
+export async function googleLogin(credential) {
+  const res = await fetch(`${API_BASE}/api/auth/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential }),
+  })
+  if (!res.ok) {
+    let message = 'Google sign-in failed'
     try {
       const data = await res.json()
       if (typeof data.detail === 'string') message = data.detail

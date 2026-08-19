@@ -29,7 +29,7 @@ export default function Layout({ user, onLogout, error, loading }) {
         </nav>
         <div className="sidebar-footer">
           <div className="user-email" title={user.email}>
-            {user.email}
+            {user.name || user.email}
           </div>
           <button className="logout-btn" onClick={onLogout}>
             Log out

@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     secret_key: str = DEFAULT_SECRET
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
+    # Google Sign-In (OAuth). Set to your Google OAuth client ID to enable it.
+    google_client_id: str = ""
+
     # Demo account. Locally it defaults on (see seed.py). In production it is
     # only created when DEMO_PASSWORD is set — keep that value private.
     demo_email: str = "demo@example.com"
