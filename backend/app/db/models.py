@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, JSON, LargeBinary, String, UniqueConstraint
 
 from app.db.database import Base
 
@@ -104,6 +104,17 @@ class ManualBill(Base):
     shop = Column(String, nullable=False, default="")
     amount = Column(Float, nullable=False)
     note = Column(String, nullable=False, default="")
+
+
+class Receipt(Base):
+    __tablename__ = "receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    pending_bill_id = Column(Integer, ForeignKey("pending_bills.id"), nullable=False, index=True)
+    filename = Column(String, nullable=False, default="receipt")
+    content_type = Column(String, nullable=False, default="application/octet-stream")
+    data = Column(LargeBinary, nullable=False)
 
 
 

@@ -7,6 +7,9 @@ export default function BillsPage({
   onAddPending,
   onItemise,
   onDeletePending,
+  onUploadReceipt,
+  onViewReceipt,
+  onDeleteReceipt,
   ledger,
   manualForm,
   setManualForm,
@@ -59,6 +62,7 @@ export default function BillsPage({
                 <th>Shop</th>
                 <th>Note</th>
                 <th className="right">Amount</th>
+                <th>Receipt</th>
                 <th></th>
               </tr>
             </thead>
@@ -69,6 +73,30 @@ export default function BillsPage({
                   <td>{b.shop}</td>
                   <td>{b.note}</td>
                   <td className="right">{money(b.amount)}</td>
+                  <td className="nowrap">
+                    {b.has_receipt && (
+                      <>
+                        <button className="icon-btn" onClick={() => onViewReceipt(b.id)} title="View receipt">
+                          👁
+                        </button>
+                        <button className="delete-btn" onClick={() => onDeleteReceipt(b.id)} title="Remove receipt">
+                          ✕
+                        </button>
+                      </>
+                    )}
+                    <label className="icon-btn file-attach" title="Attach PDF or image">
+                      📎
+                      <input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        onChange={(e) => {
+                          const f = e.target.files[0]
+                          if (f) onUploadReceipt(b.id, f)
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                  </td>
                   <td className="right nowrap">
                     <button className="icon-btn" onClick={() => onItemise(b.id)} title="Itemise into an expense">
                       ✓

@@ -191,6 +191,7 @@ def delete_account(
         models.RecurringTemplate,
         models.PendingBill,
         models.ManualBill,
+        models.Receipt,
         models.UserOptions,
     ):
         db.query(model).filter(model.user_id == user.id).delete()

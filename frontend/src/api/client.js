@@ -266,6 +266,26 @@ export function itemisePendingBill(id) {
   return request(`/api/pending-bills/${id}/itemise`, { method: 'POST' })
 }
 
+export function uploadReceipt(billId, file) {
+  const body = new FormData()
+  body.append('file', file)
+  return request(`/api/pending-bills/${billId}/receipt`, { method: 'POST', body })
+}
+
+export async function viewReceipt(billId) {
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/api/pending-bills/${billId}/receipt`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) throw new Error('Could not load receipt')
+  const blob = await res.blob()
+  window.open(URL.createObjectURL(blob), '_blank')
+}
+
+export function deleteReceipt(billId) {
+  return request(`/api/pending-bills/${billId}/receipt`, { method: 'DELETE' })
+}
+
 export function fetchLedger() {
   return request('/api/bills-ledger')
 }

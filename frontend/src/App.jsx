@@ -28,6 +28,9 @@ import {
   createPendingBill,
   deletePendingBill,
   itemisePendingBill,
+  uploadReceipt,
+  viewReceipt,
+  deleteReceipt,
   fetchLedger,
   createManualBill,
   deleteManualBill,
@@ -405,6 +408,28 @@ export default function App() {
     }
   }
 
+  async function handleUploadReceipt(id, file) {
+    try {
+      await uploadReceipt(id, file)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function handleViewReceipt(id) {
+    viewReceipt(id).catch((err) => setError(err.message))
+  }
+
+  async function handleDeleteReceipt(id) {
+    try {
+      await deleteReceipt(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function handleAddManual(e) {
     e.preventDefault()
     try {
@@ -540,6 +565,9 @@ export default function App() {
               onAddPending={handleAddPending}
               onItemise={handleItemise}
               onDeletePending={handleDeletePending}
+              onUploadReceipt={handleUploadReceipt}
+              onViewReceipt={handleViewReceipt}
+              onDeleteReceipt={handleDeleteReceipt}
               ledger={ledger}
               manualForm={manualForm}
               setManualForm={setManualForm}

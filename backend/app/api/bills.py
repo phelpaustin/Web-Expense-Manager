@@ -1,6 +1,7 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -12,17 +13,7 @@ from app.logic import bills as bills_logic
 
 router = APIRouter()
 
-
-# ── Pending bills ─────────────────────────────────────────────
-class PendingOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    date: datetime.date
-    shop: str
-    amount: float
-    note: str
-    status: str
+_MAX_RECEIPT_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 class PendingCreate(BaseModel):
@@ -39,7 +30,19 @@ def _pending_or_404(db: Session, bill_id: int, user_id: int) -> models.PendingBi
     return b
 
 
-@router.get("/pending-bills", response_model=list[PendingOut])
+def _serialize_pending(b: models.PendingBill, has_receipt: bool) -> dict:
+    return {
+        "id": b.id,
+        "date": b.date.isoformat(),
+        "shop": b.shop,
+        "amount": b.amount,
+        "note": b.note,
+        "status": b.status,
+        "has_receipt": has_receipt,
+    }
+
+
+@router.get("/pending-bills")
 def list_pending(
     include_itemised: bool = False,
     db: Session = Depends(get_db),
@@ -48,10 +51,15 @@ def list_pending(
     q = db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id)
     if not include_itemised:
         q = q.filter(models.PendingBill.status == "pending")
-    return q.order_by(models.PendingBill.date.desc()).all()
+    bills = q.order_by(models.PendingBill.date.desc()).all()
+    receipt_ids = {
+        r.pending_bill_id
+        for r in db.query(models.Receipt.pending_bill_id).filter(models.Receipt.user_id == user.id)
+    }
+    return [_serialize_pending(b, b.id in receipt_ids) for b in bills]
 
 
-@router.post("/pending-bills", response_model=PendingOut, status_code=201)
+@router.post("/pending-bills", status_code=201)
 def create_pending(
     payload: PendingCreate,
     db: Session = Depends(get_db),
@@ -61,7 +69,7 @@ def create_pending(
     db.add(b)
     db.commit()
     db.refresh(b)
-    return b
+    return _serialize_pending(b, False)
 
 
 @router.delete("/pending-bills/{bill_id}", status_code=204)
@@ -70,7 +78,9 @@ def delete_pending(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    db.delete(_pending_or_404(db, bill_id, user.id))
+    bill = _pending_or_404(db, bill_id, user.id)
+    db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).delete()
+    db.delete(bill)
     db.commit()
 
 
@@ -92,9 +102,73 @@ def itemise_pending(
             amount=b.amount,
         )
     )
+    db.query(models.Receipt).filter(models.Receipt.pending_bill_id == b.id).delete()
     b.status = "itemised"
     db.commit()
     return {"itemised": bill_id, "expense_created": True}
+
+
+# ── Receipts (attached to pending bills) ──────────────────────
+@router.post("/pending-bills/{bill_id}/receipt")
+async def upload_receipt(
+    bill_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    bill = _pending_or_404(db, bill_id, user.id)
+    content_type = file.content_type or "application/octet-stream"
+    if not (content_type == "application/pdf" or content_type.startswith("image/")):
+        raise HTTPException(status_code=400, detail="Only PDF or image files are allowed")
+    data = await file.read()
+    if len(data) > _MAX_RECEIPT_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+
+    existing = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first()
+    if existing:
+        existing.filename = file.filename or "receipt"
+        existing.content_type = content_type
+        existing.data = data
+    else:
+        db.add(
+            models.Receipt(
+                user_id=user.id,
+                pending_bill_id=bill.id,
+                filename=file.filename or "receipt",
+                content_type=content_type,
+                data=data,
+            )
+        )
+    db.commit()
+    return {"uploaded": True}
+
+
+@router.get("/pending-bills/{bill_id}/receipt")
+def get_receipt(
+    bill_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    bill = _pending_or_404(db, bill_id, user.id)
+    r = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="No receipt")
+    return Response(
+        content=r.data,
+        media_type=r.content_type,
+        headers={"Content-Disposition": f'inline; filename="{r.filename}"'},
+    )
+
+
+@router.delete("/pending-bills/{bill_id}/receipt", status_code=204)
+def delete_receipt(
+    bill_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    bill = _pending_or_404(db, bill_id, user.id)
+    db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).delete()
+    db.commit()
 
 
 # ── Manual bills ──────────────────────────────────────────────
