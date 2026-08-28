@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { money } from '../format.js'
+import { suggestCategory, autoCategorize } from '../api/client.js'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
@@ -22,11 +23,15 @@ export default function ExpensesPage({
   importCurrency,
   setImportCurrency,
   onAddRow,
+  trips,
 }) {
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const [skipped, setSkipped] = useState([])
+  const [categorySuggestion, setCategorySuggestion] = useState(null)
+  const [autoCatBusy, setAutoCatBusy] = useState(false)
+  const [autoCatResult, setAutoCatResult] = useState(null)
 
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
@@ -75,6 +80,44 @@ export default function ExpensesPage({
     setDateFrom('')
     setDateTo('')
     setPage(1)
+  }
+
+  // Suggest a category from the user's own shop history (or keyword rules) while
+  // they're filling in the add-expense form, but only if they haven't chosen one yet.
+  useEffect(() => {
+    if (form.category.trim() || (!form.shop.trim() && !form.description.trim())) {
+      setCategorySuggestion(null)
+      return
+    }
+    const handle = setTimeout(() => {
+      suggestCategory(form.description, form.shop)
+        .then((res) => setCategorySuggestion(res.category ? res : null))
+        .catch(() => setCategorySuggestion(null))
+    }, 400)
+    return () => clearTimeout(handle)
+  }, [form.shop, form.description, form.category])
+
+  function applySuggestion() {
+    if (!categorySuggestion) return
+    setForm((f) => ({
+      ...f,
+      category: categorySuggestion.category,
+      subcategory: categorySuggestion.subcategory || f.subcategory,
+    }))
+    setCategorySuggestion(null)
+  }
+
+  async function handleAutoCategorize() {
+    setAutoCatBusy(true)
+    setAutoCatResult(null)
+    try {
+      const res = await autoCategorize()
+      setAutoCatResult(`Categorized ${res.updated} expense(s).`)
+    } catch (err) {
+      setAutoCatResult(err.message)
+    } finally {
+      setAutoCatBusy(false)
+    }
   }
 
   async function handleImportSubmit(e) {
@@ -256,6 +299,11 @@ export default function ExpensesPage({
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
           />
+          {categorySuggestion && (
+            <button type="button" className="suggestion-chip" onClick={applySuggestion}>
+              💡 {categorySuggestion.category}?
+            </button>
+          )}
           <input
             type="text"
             list="subcat-add-options"
@@ -315,10 +363,31 @@ export default function ExpensesPage({
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
           />
+          {trips && trips.length > 0 && (
+            <select
+              value={form.trip_id || ''}
+              onChange={(e) => setForm({ ...form, trip_id: e.target.value })}
+              title="Tag this expense to a trip (optional)"
+            >
+              <option value="">No trip</option>
+              {trips.map((t) => (
+                <option key={t.id} value={t.id}>
+                  🧳 {t.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Add'}
           </button>
         </form>
+
+        <div className="auto-cat-row">
+          <button type="button" className="ghost-btn" onClick={handleAutoCategorize} disabled={autoCatBusy}>
+            {autoCatBusy ? 'Categorizing…' : '🤖 Auto-categorize uncategorized expenses'}
+          </button>
+          {autoCatResult && <span className="subtitle">{autoCatResult}</span>}
+        </div>
 
         {/* Shared option lists — type a new value to add it (auto-learned on save). */}
         <datalist id="cat-options">

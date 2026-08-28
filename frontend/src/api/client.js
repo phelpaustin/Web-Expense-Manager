@@ -410,3 +410,59 @@ export async function exportExpenses(format) {
   a.remove()
   URL.revokeObjectURL(url)
 }
+
+// ── Categorizer ───────────────────────────────────────
+export function suggestCategory(description, shop) {
+  const qs = new URLSearchParams({ description: description || '', shop: shop || '' })
+  return request(`/api/expenses/categorize/suggest?${qs}`)
+}
+
+export function autoCategorize() {
+  return request('/api/expenses/categorize/auto', { method: 'POST' })
+}
+
+// ── Price tracker ─────────────────────────────────────
+export function fetchPriceTrends() {
+  return request('/api/analytics/price-trends')
+}
+
+export function fetchPriceShopComparison(item) {
+  return request(`/api/analytics/price-trends/shops?item=${encodeURIComponent(item)}`)
+}
+
+export function fetchPriceHistory(item) {
+  return request(`/api/analytics/price-trends/history?item=${encodeURIComponent(item)}`)
+}
+
+// ── Trips ─────────────────────────────────────────────
+export function fetchTrips() {
+  return request('/api/trips')
+}
+
+export function createTrip(trip) {
+  return request('/api/trips', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(trip),
+  })
+}
+
+export function updateTrip(id, trip) {
+  return request(`/api/trips/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(trip),
+  })
+}
+
+export function deleteTrip(id) {
+  return request(`/api/trips/${id}`, { method: 'DELETE' })
+}
+
+export function fetchTripSummary(id) {
+  return request(`/api/trips/${id}/summary`)
+}
+
+export function fetchTripExpenses(id) {
+  return request(`/api/trips/${id}/expenses`)
+}

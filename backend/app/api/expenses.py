@@ -11,6 +11,7 @@ from app.api.deps import get_current_user
 from app.api.options import ensure_options
 from app.db.database import get_db
 from app.db import models
+from app.logic import categorizer
 
 router = APIRouter()
 
@@ -45,6 +46,7 @@ class ExpenseOut(BaseModel):
     brand: str
     currency: str
     price_per_unit: float
+    trip_id: int | None = None
 
 
 class ExpenseCreate(BaseModel):
@@ -58,6 +60,7 @@ class ExpenseCreate(BaseModel):
     shop: str = ""
     brand: str = ""
     currency: str = "SEK"
+    trip_id: int | None = None
 
 
 class ExpenseUpdate(BaseModel):
@@ -71,6 +74,7 @@ class ExpenseUpdate(BaseModel):
     shop: str | None = None
     brand: str | None = None
     currency: str | None = None
+    trip_id: int | None = None
 
 
 def fetch_expenses(db: Session, user_id: int) -> list[dict]:
@@ -95,6 +99,7 @@ def fetch_expenses(db: Session, user_id: int) -> list[dict]:
             "brand": r.brand,
             "currency": r.currency,
             "price_per_unit": r.price_per_unit,
+            "trip_id": r.trip_id,
         }
         for r in rows
     ]
@@ -175,6 +180,36 @@ def expenses_summary(
     for e in expenses:
         by_category[e["category"]] = round(by_category.get(e["category"], 0.0) + e["amount"], 2)
     return {"total": round(total, 2), "count": len(expenses), "by_category": by_category}
+
+
+@router.get("/expenses/categorize/suggest")
+def suggest_category(
+    description: str = "",
+    shop: str = "",
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    return categorizer.suggest_category(fetch_expenses(db, user.id), description, shop)
+
+
+@router.post("/expenses/categorize/auto")
+def auto_categorize(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Fill in category (+ subcategory) for expenses currently missing one."""
+    expenses = fetch_expenses(db, user.id)
+    suggestions = categorizer.auto_categorize_missing(expenses)
+    for expense_id, category, subcategory in suggestions:
+        expense = db.get(models.Expense, expense_id)
+        if expense and expense.user_id == user.id:
+            expense.category = category
+            if subcategory and not expense.subcategory:
+                expense.subcategory = subcategory
+            ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
+    db.commit()
+    return {"updated": len(suggestions)}
+
 
 
 def _cell(row, col):

@@ -28,6 +28,7 @@ class Expense(Base):
     brand = Column(String, nullable=False, default="")
     currency = Column(String, nullable=False, default="SEK")
     price_per_unit = Column(Float, nullable=False, default=0.0)
+    trip_id = Column(Integer, ForeignKey("trips.id"), nullable=True, index=True)
 
 
 class UserOptions(Base):
@@ -115,6 +116,20 @@ class Receipt(Base):
     filename = Column(String, nullable=False, default="receipt")
     content_type = Column(String, nullable=False, default="application/octet-stream")
     data = Column(LargeBinary, nullable=False)
+
+
+class Trip(Base):
+    __tablename__ = "trips"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    destination = Column(String, nullable=False, default="")
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    budget = Column(Float, nullable=True)
+    currency = Column(String, nullable=False, default="SEK")
+    status = Column(String, nullable=False, default="Planned")
 
 
 

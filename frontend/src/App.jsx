@@ -43,6 +43,10 @@ import {
   fetchMe,
   getToken,
   logout,
+  fetchTrips,
+  createTrip,
+  updateTrip,
+  deleteTrip,
 } from './api/client.js'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
@@ -53,9 +57,11 @@ import IncomePage from './pages/IncomePage.jsx'
 import RecurringPage from './pages/RecurringPage.jsx'
 import BillsPage from './pages/BillsPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import TripsPage from './pages/TripsPage.jsx'
+import PriceTrackerPage from './pages/PriceTrackerPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 
-const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK' }
+const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK', trip_id: '' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
@@ -92,6 +98,7 @@ export default function App() {
   const [periodStatus, setPeriodStatus] = useState(null)
   const [budgetConfig, setBudgetConfigState] = useState({ period: 'Monthly', rollover: false })
   const [alerts, setAlerts] = useState([])
+  const [trips, setTrips] = useState([])
 
   function loadAll() {
     return Promise.all([
@@ -110,8 +117,9 @@ export default function App() {
       fetchBudgetConfig(),
       fetchPeriodStatus(),
       fetchAlerts(),
+      fetchTrips(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt, trps]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
@@ -128,6 +136,7 @@ export default function App() {
         setBudgetConfigState(bcfg)
         setPeriodStatus(pstat)
         setAlerts(alrt)
+        setTrips(trps)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -198,6 +207,7 @@ export default function App() {
         shop: form.shop,
         brand: form.brand,
         currency: form.currency || 'SEK',
+        trip_id: form.trip_id ? parseInt(form.trip_id, 10) : null,
       })
       setForm(EMPTY_FORM)
       await loadAll()
@@ -226,6 +236,33 @@ export default function App() {
   async function handleAddRow(payload) {
     await createExpense(payload)
     await loadAll()
+  }
+
+  async function handleAddTrip(trip) {
+    try {
+      await createTrip(trip)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleUpdateTrip(id, trip) {
+    try {
+      await updateTrip(id, trip)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteTrip(id) {
+    try {
+      await deleteTrip(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   function handleExport(format) {
@@ -549,6 +586,7 @@ export default function App() {
               importCurrency={importCurrency}
               setImportCurrency={setImportCurrency}
               onAddRow={handleAddRow}
+              trips={trips}
             />
           }
         />
@@ -615,6 +653,19 @@ export default function App() {
             />
           }
         />
+        <Route
+          path="trips"
+          element={
+            <TripsPage
+              trips={trips}
+              onAddTrip={handleAddTrip}
+              onUpdateTrip={handleUpdateTrip}
+              onDeleteTrip={handleDeleteTrip}
+              onError={setError}
+            />
+          }
+        />
+        <Route path="prices" element={<PriceTrackerPage onError={setError} />} />
       </Route>
     </Routes>
   )

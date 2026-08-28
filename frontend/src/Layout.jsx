@@ -7,6 +7,8 @@ const LINKS = [
   { to: '/income', label: 'Income', icon: '💵' },
   { to: '/recurring', label: 'Recurring', icon: '🔁' },
   { to: '/bills', label: 'Bills', icon: '📒' },
+  { to: '/trips', label: 'Trips', icon: '🧳' },
+  { to: '/prices', label: 'Prices', icon: '📈' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
