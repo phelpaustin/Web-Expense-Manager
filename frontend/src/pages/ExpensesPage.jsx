@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { money } from '../format.js'
+
+const PAGE_SIZES = [10, 25, 50, 100]
 
 export default function ExpensesPage({
   expenses,
@@ -25,6 +27,55 @@ export default function ExpensesPage({
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const [skipped, setSkipped] = useState([])
+
+  const [search, setSearch] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
+  const [filterShop, setFilterShop] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+
+  const filteredExpenses = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return expenses
+      .filter((e) => {
+        if (filterCategory && e.category !== filterCategory) return false
+        if (filterShop && e.shop !== filterShop) return false
+        if (dateFrom && e.date < dateFrom) return false
+        if (dateTo && e.date > dateTo) return false
+        if (q) {
+          const haystack = `${e.description} ${e.shop} ${e.brand} ${e.category} ${e.subcategory}`.toLowerCase()
+          if (!haystack.includes(q)) return false
+        }
+        return true
+      })
+      .slice()
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id))
+  }, [expenses, search, filterCategory, filterShop, dateFrom, dateTo])
+
+  const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pageStart = (currentPage - 1) * pageSize
+  const pagedExpenses = filteredExpenses.slice(pageStart, pageStart + pageSize)
+
+  function resetToFirstPage(setter) {
+    return (value) => {
+      setter(value)
+      setPage(1)
+    }
+  }
+
+  const hasActiveFilters = search || filterCategory || filterShop || dateFrom || dateTo
+
+  function clearFilters() {
+    setSearch('')
+    setFilterCategory('')
+    setFilterShop('')
+    setDateFrom('')
+    setDateTo('')
+    setPage(1)
+  }
 
   async function handleImportSubmit(e) {
     e.preventDefault()
@@ -298,6 +349,53 @@ export default function ExpensesPage({
       </section>
 
       {expenses.length > 0 && (
+        <section className="panel">
+          <h2>🔍 Search &amp; filter</h2>
+          <div className="add-form">
+            <input
+              type="text"
+              placeholder="Search description, shop, brand…"
+              value={search}
+              onChange={(e) => resetToFirstPage(setSearch)(e.target.value)}
+            />
+            <select value={filterCategory} onChange={(e) => resetToFirstPage(setFilterCategory)(e.target.value)}>
+              <option value="">All categories</option>
+              {options.categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <select value={filterShop} onChange={(e) => resetToFirstPage(setFilterShop)(e.target.value)}>
+              <option value="">All shops</option>
+              {(options.shops || []).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              title="From date"
+              value={dateFrom}
+              onChange={(e) => resetToFirstPage(setDateFrom)(e.target.value)}
+            />
+            <input
+              type="date"
+              title="To date"
+              value={dateTo}
+              onChange={(e) => resetToFirstPage(setDateTo)(e.target.value)}
+            />
+            {hasActiveFilters && (
+              <button type="button" className="ghost-btn" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {expenses.length > 0 && (
         <table className="table">
           <thead>
             <tr>
@@ -313,7 +411,7 @@ export default function ExpensesPage({
             </tr>
           </thead>
           <tbody>
-            {expenses.map((e) =>
+            {pagedExpenses.map((e) =>
               editingId === e.id ? (
                 <tr key={e.id} className="editing">
                   <td>
@@ -417,6 +515,49 @@ export default function ExpensesPage({
             )}
           </tbody>
         </table>
+      )}
+
+      {filteredExpenses.length > 0 && (
+        <div className="pagination-bar">
+          <span className="subtitle">
+            Showing {pageStart + 1}–{Math.min(pageStart + pageSize, filteredExpenses.length)} of{' '}
+            {filteredExpenses.length}
+            {hasActiveFilters ? ` (filtered from ${expenses.length})` : ''}
+          </span>
+          <div className="pagination-controls">
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
+            <button type="button" className="ghost-btn" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
+              ← Prev
+            </button>
+            <span className="subtitle">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="ghost-btn"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {expenses.length > 0 && filteredExpenses.length === 0 && (
+        <p className="subtitle">No expenses match your filters.</p>
       )}
     </>
   )
