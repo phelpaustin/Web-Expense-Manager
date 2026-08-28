@@ -14,6 +14,7 @@ import {
   fetchMetrics,
   fetchBudgetConfig,
   fetchPeriodStatus,
+  fetchAlerts,
   setBudgetConfig,
   fetchIncome,
   fetchIncomeSummary,
@@ -90,6 +91,7 @@ export default function App() {
   const [metrics, setMetrics] = useState(null)
   const [periodStatus, setPeriodStatus] = useState(null)
   const [budgetConfig, setBudgetConfigState] = useState({ period: 'Monthly', rollover: false })
+  const [alerts, setAlerts] = useState([])
 
   function loadAll() {
     return Promise.all([
@@ -107,8 +109,9 @@ export default function App() {
       fetchMetrics(),
       fetchBudgetConfig(),
       fetchPeriodStatus(),
+      fetchAlerts(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
@@ -124,6 +127,7 @@ export default function App() {
         setMetrics(met)
         setBudgetConfigState(bcfg)
         setPeriodStatus(pstat)
+        setAlerts(alrt)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -504,7 +508,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route element={<Layout user={user} onLogout={handleLogout} error={error} loading={loading} />}>
+      <Route element={<Layout user={user} onLogout={handleLogout} error={error} loading={loading} alerts={alerts} />}>
         <Route
           index
           element={

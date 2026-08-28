@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 const LINKS = [
@@ -9,7 +10,47 @@ const LINKS = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
-export default function Layout({ user, onLogout, error, loading }) {
+const SEVERITY_ICON = { critical: '🔴', warning: '🟠', caution: '🟡', info: '💡' }
+
+function NotificationBell({ alerts }) {
+  const [open, setOpen] = useState(false)
+  const count = alerts.length
+  const topSeverity = alerts.reduce((worst, a) => {
+    const order = { critical: 3, warning: 2, caution: 1, info: 0 }
+    return order[a.severity] > (order[worst] ?? -1) ? a.severity : worst
+  }, null)
+
+  return (
+    <div className="notif-bell-wrap">
+      <button className="notif-bell" onClick={() => setOpen((v) => !v)} title="Budget alerts">
+        🔔
+        {count > 0 && <span className={`notif-badge notif-${topSeverity}`}>{count}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="notif-backdrop" onClick={() => setOpen(false)} />
+          <div className="notif-dropdown">
+            <h3>Budget alerts</h3>
+            {count === 0 ? (
+              <p className="subtitle">No alerts — you're within budget.</p>
+            ) : (
+              <ul className="notif-list">
+                {alerts.map((a) => (
+                  <li key={a.id} className={`notif-item notif-${a.severity}`}>
+                    <span className="notif-icon">{SEVERITY_ICON[a.severity]}</span>
+                    <span>{a.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export default function Layout({ user, onLogout, error, loading, alerts = [] }) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -38,6 +79,9 @@ export default function Layout({ user, onLogout, error, loading }) {
       </aside>
 
       <main className="main-content">
+        <div className="topbar">
+          <NotificationBell alerts={alerts} />
+        </div>
         {loading && <p>Loading…</p>}
         {error && (
           <div className="error">
@@ -50,3 +94,4 @@ export default function Layout({ user, onLogout, error, loading }) {
     </div>
   )
 }
+

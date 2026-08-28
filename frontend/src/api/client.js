@@ -162,6 +162,10 @@ export function fetchPeriodStatus() {
   return request('/api/budgets/period-status')
 }
 
+export function fetchAlerts() {
+  return request('/api/alerts')
+}
+
 export function setBudgetConfig(period, rollover) {
   return request('/api/budgets/config', {
     method: 'PUT',
