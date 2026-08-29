@@ -170,7 +170,7 @@ class GroupMember(Base):
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    role = Column(String, nullable=False, default="member")  # "owner" | "member"
+    role = Column(String, nullable=False, default="editor")  # "owner" | "admin" | "editor" | "viewer"
     # Per-member preference: how *this* member organises a shared space on their
     # own side (e.g. filing a shared trip under their own "Business" space, or
     # calling it something different locally). Purely organisational — it never
@@ -189,6 +189,7 @@ class GroupInvite(Base):
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
     email = Column(String, nullable=False, index=True)
     invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role = Column(String, nullable=False, default="editor")
 
 
 

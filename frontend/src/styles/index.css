@@ -407,6 +407,21 @@ h3 {
   color: var(--caution);
 }
 
+.role-admin {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--ok);
+}
+
+.role-editor {
+  background: rgba(109, 123, 255, 0.14);
+  color: var(--accent-2);
+}
+
+.role-viewer {
+  background: rgba(92, 101, 119, 0.12);
+  color: var(--muted);
+}
+
 .member-list {
   list-style: none;
   margin: 0 0 1rem;

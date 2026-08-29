@@ -7,8 +7,15 @@ import {
   inviteToGroup,
   removeGroupMember,
   cancelGroupInvite,
+  changeMemberRole,
   setMyMapping,
 } from '../api/client.js'
+
+const INVITE_ROLES = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'editor', label: 'Editor' },
+  { value: 'viewer', label: 'Viewer' },
+]
 
 const STATUSES = ['Planned', 'Active', 'Completed']
 const EMPTY_TRIP = {
@@ -29,6 +36,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [members, setMembers] = useState([])
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('editor')
   const [localName, setLocalName] = useState('')
   const [localParent, setLocalParent] = useState('')
 
@@ -85,8 +93,17 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
     e.preventDefault()
     if (!inviteEmail.trim()) return
     try {
-      await inviteToGroup(tripId, inviteEmail.trim())
+      await inviteToGroup(tripId, inviteEmail.trim(), inviteRole)
       setInviteEmail('')
+      setMembers(await fetchGroupMembers(tripId))
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
+  async function handleRoleChange(tripId, userId, role) {
+    try {
+      await changeMemberRole(tripId, userId, role)
       setMembers(await fetchGroupMembers(tripId))
     } catch (err) {
       onError(err.message)
@@ -219,21 +236,21 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                   </p>
                 </div>
                 <div className="trip-card-actions" onClick={(e) => e.stopPropagation()}>
-                  {t.role === 'owner' ? (
-                    <>
-                      <select value={t.status} onChange={(e) => handleStatusChange(t, e.target.value)}>
-                        {STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                      <button className="delete-btn" onClick={() => onDeleteTrip(t.id)} title="Delete trip">
-                        ✕
-                      </button>
-                    </>
+                  {t.role === 'owner' || t.role === 'admin' ? (
+                    <select value={t.status} onChange={(e) => handleStatusChange(t, e.target.value)}>
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <span className="subtitle">{t.status}</span>
+                  )}
+                  {t.role === 'owner' && (
+                    <button className="delete-btn" onClick={() => onDeleteTrip(t.id)} title="Delete trip">
+                      ✕
+                    </button>
                   )}
                 </div>
               </div>
@@ -296,8 +313,18 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                               {m.role === 'invited' ? '✉️' : '👤'} {m.name || m.email}
                               {m.role !== 'invited' && m.name ? ` (${m.email})` : ''}
                             </span>
-                            <span className={`role-badge role-${m.role}`}>{m.role}</span>
-                            {t.role === 'owner' && m.role === 'member' && (
+                            {t.role === 'owner' && m.role !== 'owner' && m.role !== 'invited' ? (
+                              <select value={m.role} onChange={(e) => handleRoleChange(t.id, m.user_id, e.target.value)}>
+                                {INVITE_ROLES.map((r) => (
+                                  <option key={r.value} value={r.value}>
+                                    {r.value}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className={`role-badge role-${m.role}`}>{m.role}</span>
+                            )}
+                            {t.role === 'owner' && m.role !== 'owner' && m.role !== 'invited' && (
                               <button className="delete-btn" onClick={() => handleRemoveMember(t.id, m.user_id)} title="Remove">
                                 ✕
                               </button>
@@ -322,6 +349,13 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                             value={inviteEmail}
                             onChange={(e) => setInviteEmail(e.target.value)}
                           />
+                          <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+                            {INVITE_ROLES.map((r) => (
+                              <option key={r.value} value={r.value}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </select>
                           <button type="submit">Invite</button>
                         </form>
                       )}

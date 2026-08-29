@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, is_group_member
+from app.api.deps import get_current_user, is_group_member, require_role_at_least
 from app.api.groups import cascade_delete_group
 from app.db.database import get_db
 from app.db import models
@@ -60,6 +60,10 @@ def _require_trip_owner(db: Session, trip_id: int, user_id: int) -> models.Group
     if member.role != "owner":
         raise HTTPException(status_code=403, detail="Only the trip owner can do this")
     return member
+
+
+def _require_trip_manage(db: Session, trip_id: int, user_id: int) -> models.GroupMember:
+    return require_role_at_least(db, trip_id, user_id, "admin", "Only the trip owner or an admin can do this")
 
 
 def _validate_parent(db: Session, user_id: int, parent_group_id: int | None) -> None:
@@ -141,7 +145,7 @@ def update_trip(
     user: models.User = Depends(get_current_user),
 ):
     trip = _trip_or_404(db, trip_id)
-    member = _require_trip_owner(db, trip_id, user.id)
+    member = _require_trip_manage(db, trip_id, user.id)
     data = payload.model_dump(exclude_unset=True)
     if "parent_group_id" in data:
         _validate_parent(db, user.id, data["parent_group_id"])

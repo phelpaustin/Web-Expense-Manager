@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_user_group_ids, is_group_member
+from app.api.deps import get_current_user, get_user_group_ids, is_group_member, require_role_at_least
 from app.api.options import ensure_options
 from app.db.database import get_db
 from app.db import models
@@ -167,9 +167,9 @@ def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Ex
     return expense
 
 
-def _require_group_membership(db: Session, group_id: int | None, user_id: int) -> None:
-    if group_id is not None and not is_group_member(db, group_id, user_id):
-        raise HTTPException(status_code=403, detail="Not a member of that group")
+def _require_group_write_access(db: Session, group_id: int | None, user_id: int) -> None:
+    if group_id is not None:
+        require_role_at_least(db, group_id, user_id, "editor", "Viewers can't add or edit expenses in this space")
 
 
 @router.get("/expenses")
@@ -196,7 +196,7 @@ def create_expense(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    _require_group_membership(db, payload.group_id, user.id)
+    _require_group_write_access(db, payload.group_id, user.id)
     expense = models.Expense(user_id=user.id, **payload.model_dump())
     expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
     db.add(expense)
@@ -215,9 +215,10 @@ def update_expense(
     user: models.User = Depends(get_current_user),
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
+    _require_group_write_access(db, expense.group_id, user.id)
     data = payload.model_dump(exclude_unset=True)
     if "group_id" in data:
-        _require_group_membership(db, data["group_id"], user.id)
+        _require_group_write_access(db, data["group_id"], user.id)
     for field, value in data.items():
         setattr(expense, field, value)
     expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
@@ -234,6 +235,7 @@ def delete_expense(
     user: models.User = Depends(get_current_user),
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
+    _require_group_write_access(db, expense.group_id, user.id)
     db.delete(expense)
     db.commit()
 

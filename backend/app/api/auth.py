@@ -73,7 +73,7 @@ def _claim_group_invites(db: Session, user: models.User) -> None:
             .first()
         )
         if not already_member:
-            db.add(models.GroupMember(group_id=invite.group_id, user_id=user.id, role="member"))
+            db.add(models.GroupMember(group_id=invite.group_id, user_id=user.id, role=invite.role or "editor"))
         db.delete(invite)
     if invites:
         db.commit()

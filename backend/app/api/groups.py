@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_user_group_ids, is_group_member
+from app.api.deps import (
+    get_current_user,
+    is_group_member,
+    require_role_at_least,
+)
 from app.db.database import get_db
 from app.db import models
 
@@ -30,6 +34,11 @@ class GroupUpdate(BaseModel):
 
 class InviteIn(BaseModel):
     email: EmailStr
+    role: str = "editor"  # admin | editor | viewer (owner is not invitable)
+
+
+class RoleChangeIn(BaseModel):
+    role: str
 
 
 class MyMappingIn(BaseModel):
@@ -193,15 +202,17 @@ def invite_member(
     user: models.User = Depends(get_current_user),
 ):
     _group_or_404(db, group_id)
-    _require_owner(db, group_id, user.id)
+    require_role_at_least(db, group_id, user.id, "admin", "Only owners and admins can invite members")
+
+    role = payload.role if payload.role in ("admin", "editor", "viewer") else "editor"
 
     invitee = db.query(models.User).filter(models.User.email == payload.email).first()
     if invitee:
         if is_group_member(db, group_id, invitee.id):
             raise HTTPException(status_code=409, detail="That user is already a member")
-        db.add(models.GroupMember(group_id=group_id, user_id=invitee.id, role="member"))
+        db.add(models.GroupMember(group_id=group_id, user_id=invitee.id, role=role))
         db.commit()
-        return {"status": "added", "email": payload.email}
+        return {"status": "added", "email": payload.email, "role": role}
 
     existing_invite = (
         db.query(models.GroupInvite)
@@ -210,9 +221,35 @@ def invite_member(
     )
     if existing_invite:
         raise HTTPException(status_code=409, detail="Already invited — waiting for them to sign up")
-    db.add(models.GroupInvite(group_id=group_id, email=payload.email, invited_by=user.id))
+    db.add(models.GroupInvite(group_id=group_id, email=payload.email, invited_by=user.id, role=role))
     db.commit()
-    return {"status": "pending", "email": payload.email}
+    return {"status": "pending", "email": payload.email, "role": role}
+
+
+@router.put("/groups/{group_id}/members/{user_id}/role")
+def change_member_role(
+    group_id: int,
+    user_id: int,
+    payload: RoleChangeIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    _group_or_404(db, group_id)
+    _require_owner(db, group_id, user.id)
+    if payload.role not in ("admin", "editor", "viewer"):
+        raise HTTPException(status_code=400, detail="Role must be admin, editor, or viewer")
+    target = (
+        db.query(models.GroupMember)
+        .filter(models.GroupMember.group_id == group_id, models.GroupMember.user_id == user_id)
+        .first()
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if target.role == "owner":
+        raise HTTPException(status_code=400, detail="Cannot change the owner's role")
+    target.role = payload.role
+    db.commit()
+    return {"user_id": user_id, "role": target.role}
 
 
 @router.delete("/groups/{group_id}/members/{user_id}", status_code=204)

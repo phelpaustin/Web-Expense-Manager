@@ -1,5 +1,18 @@
 import { useState } from 'react'
-import { fetchGroupMembers, inviteToGroup, removeGroupMember, cancelGroupInvite, renameGroup } from '../api/client.js'
+import {
+  fetchGroupMembers,
+  inviteToGroup,
+  removeGroupMember,
+  cancelGroupInvite,
+  renameGroup,
+  changeMemberRole,
+} from '../api/client.js'
+
+const INVITE_ROLES = [
+  { value: 'admin', label: 'Admin — can invite + manage expenses' },
+  { value: 'editor', label: 'Editor — can add/edit expenses' },
+  { value: 'viewer', label: 'Viewer — read only' },
+]
 
 const SPACE_TYPES = [
   { value: 'household', label: 'Household', icon: '🏠' },
@@ -19,6 +32,7 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
   const [expandedId, setExpandedId] = useState(null)
   const [members, setMembers] = useState([])
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('editor')
   const [loadingMembers, setLoadingMembers] = useState(false)
 
   async function handleCreate(e) {
@@ -55,8 +69,17 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
     e.preventDefault()
     if (!inviteEmail.trim()) return
     try {
-      await inviteToGroup(groupId, inviteEmail.trim())
+      await inviteToGroup(groupId, inviteEmail.trim(), inviteRole)
       setInviteEmail('')
+      await loadMembers(groupId)
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
+  async function handleRoleChange(groupId, userId, role) {
+    try {
+      await changeMemberRole(groupId, userId, role)
       await loadMembers(groupId)
     } catch (err) {
       onError(err.message)
@@ -95,7 +118,7 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
 
   return (
     <>
-      <h1 className="page-title">�️ Expense Spaces</h1>
+      <h1 className="page-title">🗂️ Expense Spaces</h1>
       <p className="subtitle">
         An Expense Space is where expenses belong — a household, a business, a rental, a trip, or anything custom.
         Invite others to a space so every member can add expenses to it, all in one shared view.
@@ -168,8 +191,18 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
                               {m.role === 'invited' ? '✉️' : '👤'} {m.name || m.email}
                               {m.role !== 'invited' && m.name ? ` (${m.email})` : ''}
                             </span>
-                            <span className={`role-badge role-${m.role}`}>{m.role}</span>
-                            {g.role === 'owner' && m.role === 'member' && (
+                            {g.role === 'owner' && m.role !== 'owner' && m.role !== 'invited' ? (
+                              <select value={m.role} onChange={(e) => handleRoleChange(g.id, m.user_id, e.target.value)}>
+                                {INVITE_ROLES.map((r) => (
+                                  <option key={r.value} value={r.value}>
+                                    {r.value}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className={`role-badge role-${m.role}`}>{m.role}</span>
+                            )}
+                            {g.role === 'owner' && m.role !== 'owner' && m.role !== 'invited' && (
                               <button className="delete-btn" onClick={() => handleRemove(g.id, m.user_id)} title="Remove">
                                 ✕
                               </button>
@@ -194,6 +227,13 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
                             value={inviteEmail}
                             onChange={(e) => setInviteEmail(e.target.value)}
                           />
+                          <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+                            {INVITE_ROLES.map((r) => (
+                              <option key={r.value} value={r.value}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </select>
                           <button type="submit">Invite</button>
                         </form>
                       )}

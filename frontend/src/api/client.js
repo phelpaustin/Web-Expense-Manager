@@ -505,11 +505,19 @@ export function fetchGroupMembers(id) {
   return request(`/api/groups/${id}/members`)
 }
 
-export function inviteToGroup(id, email) {
+export function inviteToGroup(id, email, role = 'editor') {
   return request(`/api/groups/${id}/invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, role }),
+  })
+}
+
+export function changeMemberRole(id, userId, role) {
+  return request(`/api/groups/${id}/members/${userId}/role`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
   })
 }
 

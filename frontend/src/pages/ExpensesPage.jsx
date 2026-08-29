@@ -48,6 +48,7 @@ export default function ExpensesPage({
   const groupName = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.name
   const groupSpaceType = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.space_type || 'trip'
   const allSpaces = (groups || []).concat(trips || [])
+  const canEditExpense = (e) => !e.group_id || allSpaces.find((g) => g.id === e.group_id)?.role !== 'viewer'
 
   const filteredExpenses = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -381,11 +382,13 @@ export default function ExpensesPage({
               title="Add this expense to an Expense Space or trip (optional)"
             >
               <option value="">Personal expenses</option>
-              {allSpaces.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
-                </option>
-              ))}
+              {allSpaces
+                .filter((g) => g.role !== 'viewer')
+                .map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
+                  </option>
+                ))}
             </select>
           )}
           <button type="submit" disabled={saving}>
@@ -605,12 +608,16 @@ export default function ExpensesPage({
                     {money(e.amount)}
                   </td>
                   <td className="right nowrap">
-                    <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
-                      ✎
-                    </button>
-                    <button className="delete-btn" onClick={() => onDelete(e.id)} title="Delete">
-                      ✕
-                    </button>
+                    {canEditExpense(e) && (
+                      <>
+                        <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
+                          ✎
+                        </button>
+                        <button className="delete-btn" onClick={() => onDelete(e.id)} title="Delete">
+                          ✕
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               )
