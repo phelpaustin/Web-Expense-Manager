@@ -5,7 +5,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_group_ids, is_group_member
@@ -81,18 +81,44 @@ class ExpenseUpdate(BaseModel):
     group_id: int | None = None
 
 
-def fetch_expenses(db: Session, user_id: int, scope: str | None = None) -> list[dict]:
+def fetch_expenses(
+    db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
+) -> list[dict]:
     """Shared accessor: expenses this user can see, as plain dicts for the logic modules.
 
-    scope controls which expenses are included:
-      - None / "all" (default): the user's own expenses + every group they belong to.
-      - "personal": only the user's own, ungrouped expenses.
-      - "<group id>": only that one group's expenses (caller must have already
-        verified the user is a member — non-members simply get an empty list).
+    space_ids (comma-separated: "personal", group ids, or both) selects a combined
+    view across several Expense Spaces and takes priority over scope when given.
+    Otherwise scope controls which expenses are included:
+      - None / "all" (default): the user's own expenses + every space they belong to.
+      - "personal": only the user's own, unassigned-to-a-space expenses.
+      - "<space id>": only that one Expense Space's expenses (caller must have
+        already verified the user is a member — non-members get an empty list).
     """
     group_ids = get_user_group_ids(db, user_id)
 
-    if scope == "personal":
+    if space_ids:
+        requested = [s.strip() for s in space_ids.split(",") if s.strip()]
+        include_personal = "personal" in requested
+        requested_group_ids = []
+        for s in requested:
+            if s == "personal":
+                continue
+            try:
+                gid = int(s)
+            except ValueError:
+                continue
+            if gid in group_ids:
+                requested_group_ids.append(gid)
+
+        conditions = []
+        if include_personal:
+            conditions.append(and_(models.Expense.user_id == user_id, models.Expense.group_id.is_(None)))
+        if requested_group_ids:
+            conditions.append(models.Expense.group_id.in_(requested_group_ids))
+        if not conditions:
+            return []
+        q = db.query(models.Expense).filter(or_(*conditions))
+    elif scope == "personal":
         q = db.query(models.Expense).filter(
             models.Expense.user_id == user_id, models.Expense.group_id.is_(None)
         )
@@ -219,10 +245,11 @@ def delete_expense(
 @router.get("/expenses/summary")
 def expenses_summary(
     scope: str | None = None,
+    space_ids: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses(db, user.id, scope)
+    expenses = fetch_expenses(db, user.id, scope, space_ids)
     total = sum(e["amount"] for e in expenses)
     by_category: dict[str, float] = {}
     for e in expenses:

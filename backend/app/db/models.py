@@ -134,12 +134,14 @@ class Trip(Base):
 
 
 class Group(Base):
-    """A shared expense-tracking space (household, rented flat, business, ...)."""
+    """An Expense Space: a shared expense-tracking space (household, business, trip, ...)."""
     __tablename__ = "groups"
 
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
+    # personal | household | business | rental | trip | custom
+    space_type = Column(String, nullable=False, default="custom")
 
 
 class GroupMember(Base):

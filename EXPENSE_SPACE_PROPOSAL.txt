@@ -1,0 +1,365 @@
+Expense Space Proposal for Web Expense Manager
+
+Goal
+Replace the current scope/group wording with a cleaner end-user model called Expense Space.
+An Expense Space is the place where expenses belong. Users can switch spaces to see only the expenses in that space, and they can also create combined views across multiple selected spaces.
+
+
+Core Product Language
+
+Use these terms in the app:
+
+- Expense Space
+- Space Type
+- Members
+- Permission
+- All expenses
+- Personal expenses
+- Trip space
+
+Avoid these terms in user-facing UI unless they are still needed internally:
+
+- Scope
+- Role, when referring to expense containers
+- Group, when referring to expense containers
+- Admin space
+
+Permissions can still use words like Owner, Admin, Editor, and Viewer. The important distinction is that a role/permission is what a user can do inside a space, not the space itself.
+
+
+Main Concept
+
+Each user has access to one or more Expense Spaces.
+
+Examples:
+
+- Personal expenses
+- Household
+- Business
+- Rental Flat
+- Goa Trip
+- Japan Vacation
+- Custom Project
+
+Each Expense Space has a type.
+
+Recommended space types:
+
+- personal
+- household
+- business
+- rental
+- trip
+- custom
+
+Trip should not be a completely separate system. A trip should be an Expense Space where type = trip. This keeps the app simple while still allowing trips to receive special trip-specific behavior.
+
+
+Default Spaces
+
+Every user should have a default Personal expenses space.
+
+All expenses should be treated as a dashboard/reporting view, not as a real editable space.
+
+Users should not add an expense directly to All expenses. When adding an expense, the user should choose a real space such as:
+
+- Personal expenses
+- Household
+- Business
+- Goa Trip
+
+
+Space Switching Behavior
+
+When a user switches to a specific Expense Space, the app should show only expenses from that selected space.
+
+Example:
+
+- Selected space: Household
+- User sees only Household expenses
+
+Another example:
+
+- Selected space: Business
+- User sees only Business expenses
+
+This should apply consistently to dashboard cards, expense lists, charts, budgets, metrics, and any space-aware reports.
+
+
+Combined Space Views
+
+Users also need a way to view complete expenses across multiple spaces.
+
+Instead of only having a fixed All expenses option, the app should support selecting two, three, or more spaces together.
+
+Recommended UI behavior:
+
+- Single-select mode for quickly switching to one space
+- Multi-select mode or filter panel for combined reporting
+
+Examples:
+
+- View Personal expenses + Household
+- View Household + Business
+- View Personal expenses + Household + Goa Trip
+- View all accessible spaces
+
+Recommended labels:
+
+- All expenses
+- Selected spaces
+- Choose spaces
+- View combined expenses
+
+Suggested selector behavior:
+
+1. The top dashboard selector can show the active view.
+2. Selecting one space shows only that space.
+3. Selecting All expenses shows every accessible space.
+4. Selecting Choose spaces opens a checklist where the user can choose multiple spaces.
+5. The dashboard and expense list then load data for only the selected spaces.
+
+Example UI:
+
+Expense Space: Household
+
+Dropdown options:
+
+- All expenses
+- Personal expenses
+- Household
+- Business
+- Goa Trip - Trip
+- Choose spaces...
+
+If the user chooses Choose spaces, show checkboxes:
+
+- Personal expenses
+- Household
+- Business
+- Goa Trip
+
+Then display:
+
+Selected spaces: Personal expenses, Household, Goa Trip
+
+
+Backend/Data Model Recommendation
+
+Expense Space:
+
+- id
+- name
+- type: personal | household | business | rental | trip | custom
+- owner_user_id
+- created_at
+- archived_at, optional
+
+Space Member:
+
+- id
+- space_id
+- user_id
+- permission: owner | admin | editor | viewer
+- display_name_override, optional
+- accepted_at
+- invited_at
+
+Expense:
+
+- id
+- space_id
+- created_by_user_id
+- amount
+- category
+- description
+- date
+- metadata
+
+Trip Details, only when space type = trip:
+
+- space_id
+- destination, optional
+- start_date, optional
+- end_date, optional
+- settlement_status, optional
+
+For multi-space views, API requests should support passing multiple space ids.
+
+Recommended API pattern:
+
+- scope=all for all accessible spaces, if preserving current compatibility
+- space_id=<id> for a single space
+- space_ids=<id1>,<id2>,<id3> for selected multiple spaces
+
+Better long-term naming:
+
+- view=all
+- space_id=<id>
+- space_ids=<id1>,<id2>,<id3>
+
+The frontend can still keep backward compatibility while migrating away from the word scope internally.
+
+
+Trip Sharing Flow
+
+User A creates a trip:
+
+- Name: Goa Trip
+- Type: Trip
+
+User A invites User B to that trip space.
+
+User B accepts the invite and gets a choice:
+
+- Add as new Expense Space
+- Map to an existing Expense Space
+
+If User B selects Add as new Expense Space:
+
+- User B sees Goa Trip as a Trip space.
+- Expenses added by permitted members appear in that trip space.
+
+If User B maps it to an existing space:
+
+- User B can map the shared trip to an existing local space such as Vacation 2026.
+- The backend should still keep the original shared space identity.
+- User B can have a local display name or mapping preference without duplicating the shared trip data.
+
+Example:
+
+- Shared space ID: space_123
+- Type: trip
+- User A display name: Goa Trip
+- User B display name: Vacation 2026
+
+Both users are still connected to the same shared trip expenses.
+
+
+Permissions
+
+Permissions are separate from space type.
+
+Recommended permissions:
+
+- Owner
+- Admin
+- Editor
+- Viewer
+
+Owner can:
+
+- Rename the shared space
+- Delete or archive the space
+- Invite and remove members
+- Change permissions
+- Add, edit, and delete expenses
+
+Admin can:
+
+- Invite members, if allowed by product policy
+- Add, edit, and delete expenses
+- Manage trip details, if allowed by product policy
+
+Editor can:
+
+- Add expenses
+- Edit their own expenses
+- View balances and reports
+
+Viewer can:
+
+- View expenses, balances, and reports only
+
+For trip spaces, Owner/Admin may also manage:
+
+- Participants
+- Trip dates
+- Destination
+- Settlements
+
+
+End User Experience
+
+The app should feel like this:
+
+1. The user opens the app and sees All expenses by default.
+2. The user can switch to Household and see only Household expenses.
+3. The user can switch to Business and see only Business expenses.
+4. The user can open Choose spaces and select Household + Business to compare or combine them.
+5. The user can create a Trip space and invite participants.
+6. Invited users can accept the trip and either add it as a new space or map it to an existing space.
+7. Permissions decide whether each participant can view, add, edit, rename, invite, or manage the space.
+
+
+Suggested Page/Navigation Changes
+
+Rename Groups to Expense Spaces.
+
+Current style:
+
+- Groups
+- scope selector
+- role
+
+Recommended style:
+
+- Expense Spaces
+- Expense Space selector
+- Permission
+
+Expense Spaces page should support:
+
+- Create space
+- Choose space type
+- Rename space
+- Archive/delete space
+- Invite members
+- Manage permissions
+- For trip spaces, manage trip details and participants
+
+
+Implementation Priorities
+
+Phase 1: Rename and clarify UI language
+
+- Change scope selector label/title to Expense Space.
+- Rename Groups page to Expense Spaces.
+- Replace role wording with permission where it refers to user access.
+- Keep existing backend behavior if needed.
+
+Phase 2: Add space type
+
+- Add type to spaces/groups.
+- Support types: personal, household, business, rental, trip, custom.
+- Display type in the UI where helpful, such as Goa Trip - Trip.
+
+Phase 3: Add multi-space views
+
+- Support selecting multiple spaces.
+- Update dashboard, expenses, charts, budgets, metrics, and reports to filter by selected space ids.
+- Keep All expenses as a shortcut for all accessible spaces.
+
+Phase 4: Improve trip sharing
+
+- Treat trips as spaces with type = trip.
+- Allow invitations to a specific trip space.
+- On accept, let invited users add as a new space or map to an existing space.
+- Keep shared trip identity consistent across users.
+
+
+Final Recommendation
+
+Build the app around Expense Spaces.
+
+Use Personal expenses as the default real space.
+
+Use All expenses as a combined dashboard/reporting view.
+
+Let users create any number of spaces, including Household, Business, Rental, Trip, and Custom.
+
+When a user selects one space, show only that space's expenses.
+
+When a user needs complete expenses across more than one space, let them choose multiple spaces or select All expenses.
+
+Treat trips as Expense Spaces with type = trip, and add trip-specific behavior on top of the shared Expense Space model.

@@ -106,23 +106,24 @@ export default function App() {
   const [trips, setTrips] = useState([])
   const [groups, setGroups] = useState([])
   const [dashboardScope, setDashboardScopeState] = useState('all')
+  const [dashboardSpaceIds, setDashboardSpaceIdsState] = useState([])
 
   function loadAll() {
     return Promise.all([
       fetchExpenses(),
-      fetchSummary(dashboardScope),
-      fetchTrends(dashboardScope),
-      fetchCategories(dashboardScope),
-      fetchBudgetStatus(dashboardScope),
+      fetchSummary(dashboardScope, dashboardSpaceIds),
+      fetchTrends(dashboardScope, dashboardSpaceIds),
+      fetchCategories(dashboardScope, dashboardSpaceIds),
+      fetchBudgetStatus(dashboardScope, dashboardSpaceIds),
       fetchIncome(),
       fetchIncomeSummary(),
       fetchRecurring(),
       fetchPendingBills(),
       fetchLedger(),
       fetchOptions(),
-      fetchMetrics(dashboardScope),
+      fetchMetrics(dashboardScope, dashboardSpaceIds),
       fetchBudgetConfig(),
-      fetchPeriodStatus(dashboardScope),
+      fetchPeriodStatus(dashboardScope, dashboardSpaceIds),
       fetchAlerts(),
       fetchTrips(),
       fetchGroups(),
@@ -151,9 +152,10 @@ export default function App() {
       .catch((err) => setError(err.message))
   }
 
-  // Re-fetch just the dashboard-relevant data scoped to "all", "personal", or one group.
+  // Re-fetch just the dashboard-relevant data scoped to "all", "personal", or one space.
   function handleSetDashboardScope(scope) {
     setDashboardScopeState(scope)
+    setDashboardSpaceIdsState([])
     return Promise.all([
       fetchSummary(scope),
       fetchTrends(scope),
@@ -161,6 +163,29 @@ export default function App() {
       fetchBudgetStatus(scope),
       fetchMetrics(scope),
       fetchPeriodStatus(scope),
+    ])
+      .then(([sum, tr, cat, bud, met, pstat]) => {
+        setSummary(sum)
+        setTrends(tr)
+        setCategories(cat)
+        setBudgets(bud)
+        setMetrics(met)
+        setPeriodStatus(pstat)
+        setError(null)
+      })
+      .catch((err) => setError(err.message))
+  }
+
+  // Re-fetch scoped to a combined view across several chosen Expense Spaces.
+  function handleSetDashboardSpaceIds(spaceIds) {
+    setDashboardSpaceIdsState(spaceIds)
+    return Promise.all([
+      fetchSummary(null, spaceIds),
+      fetchTrends(null, spaceIds),
+      fetchCategories(null, spaceIds),
+      fetchBudgetStatus(null, spaceIds),
+      fetchMetrics(null, spaceIds),
+      fetchPeriodStatus(null, spaceIds),
     ])
       .then(([sum, tr, cat, bud, met, pstat]) => {
         setSummary(sum)
@@ -298,9 +323,9 @@ export default function App() {
     }
   }
 
-  async function handleCreateGroup(name) {
+  async function handleCreateGroup(name, spaceType) {
     try {
-      await createGroup(name)
+      await createGroup(name, spaceType)
       await loadAll()
     } catch (err) {
       setError(err.message)
@@ -624,6 +649,8 @@ export default function App() {
               groups={groups}
               dashboardScope={dashboardScope}
               onSetDashboardScope={handleSetDashboardScope}
+              dashboardSpaceIds={dashboardSpaceIds}
+              onSetDashboardSpaceIds={handleSetDashboardSpaceIds}
             />
           }
         />

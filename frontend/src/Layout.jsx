@@ -8,7 +8,7 @@ const LINKS = [
   { to: '/recurring', label: 'Recurring', icon: '🔁' },
   { to: '/bills', label: 'Bills', icon: '📒' },
   { to: '/trips', label: 'Trips', icon: '🧳' },
-  { to: '/groups', label: 'Groups', icon: '👨‍👩‍👧' },
+  { to: '/groups', label: 'Expense Spaces', icon: '🗂️' },
   { to: '/prices', label: 'Prices', icon: '📈' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]

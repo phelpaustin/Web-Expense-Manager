@@ -4,6 +4,8 @@ import { suggestCategory, autoCategorize } from '../api/client.js'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
+const SPACE_TYPE_ICONS = { household: '🏠', business: '💼', rental: '🏢', trip: '✈️', custom: '📁' }
+
 export default function ExpensesPage({
   expenses,
   form,
@@ -44,6 +46,7 @@ export default function ExpensesPage({
   const [pageSize, setPageSize] = useState(25)
 
   const groupName = (id) => (groups || []).find((g) => g.id === id)?.name
+  const groupSpaceType = (id) => (groups || []).find((g) => g.id === id)?.space_type
 
   const filteredExpenses = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -388,12 +391,12 @@ export default function ExpensesPage({
             <select
               value={form.group_id || ''}
               onChange={(e) => setForm({ ...form, group_id: e.target.value })}
-              title="Add this expense to a shared group (optional)"
+              title="Add this expense to an Expense Space (optional)"
             >
-              <option value="">Personal</option>
+              <option value="">Personal expenses</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
-                  👨‍👩‍👧 {g.name}
+                  {SPACE_TYPE_ICONS[g.space_type] || '📁'} {g.name}
                 </option>
               ))}
             </select>
@@ -466,8 +469,8 @@ export default function ExpensesPage({
             </select>
             {groups && groups.length > 0 && (
               <select value={filterGroup} onChange={(e) => resetToFirstPage(setFilterGroup)(e.target.value)}>
-                <option value="">All (personal + groups)</option>
-                <option value="personal">Personal only</option>
+                <option value="">All expenses</option>
+                <option value="personal">Personal expenses</option>
                 {groups.map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.name}
@@ -603,7 +606,7 @@ export default function ExpensesPage({
                   <td>
                     {groupName(e.group_id) ? (
                       <span title={e.created_by ? `Added by ${e.created_by}` : undefined}>
-                        👨‍👩‍👧 {groupName(e.group_id)}
+                        {SPACE_TYPE_ICONS[groupSpaceType(e.group_id)] || '📁'} {groupName(e.group_id)}
                       </span>
                     ) : (
                       '—'

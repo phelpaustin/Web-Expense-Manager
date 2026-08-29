@@ -134,36 +134,41 @@ export function fetchExpenses() {
   return request('/api/expenses')
 }
 
-function scopeQuery(scope) {
+// spaceIds (array of 'personal' | group id) selects a combined view across several
+// Expense Spaces and takes priority over scope when given.
+function scopeQuery(scope, spaceIds) {
+  if (spaceIds && spaceIds.length > 0) {
+    return `?space_ids=${encodeURIComponent(spaceIds.join(','))}`
+  }
   return scope && scope !== 'all' ? `?scope=${encodeURIComponent(scope)}` : ''
 }
 
-export function fetchSummary(scope) {
-  return request(`/api/expenses/summary${scopeQuery(scope)}`)
+export function fetchSummary(scope, spaceIds) {
+  return request(`/api/expenses/summary${scopeQuery(scope, spaceIds)}`)
 }
 
-export function fetchTrends(scope) {
-  return request(`/api/analytics/trends${scopeQuery(scope)}`)
+export function fetchTrends(scope, spaceIds) {
+  return request(`/api/analytics/trends${scopeQuery(scope, spaceIds)}`)
 }
 
-export function fetchCategories(scope) {
-  return request(`/api/analytics/categories${scopeQuery(scope)}`)
+export function fetchCategories(scope, spaceIds) {
+  return request(`/api/analytics/categories${scopeQuery(scope, spaceIds)}`)
 }
 
-export function fetchBudgetStatus(scope) {
-  return request(`/api/budgets/status${scopeQuery(scope)}`)
+export function fetchBudgetStatus(scope, spaceIds) {
+  return request(`/api/budgets/status${scopeQuery(scope, spaceIds)}`)
 }
 
-export function fetchMetrics(scope) {
-  return request(`/api/metrics${scopeQuery(scope)}`)
+export function fetchMetrics(scope, spaceIds) {
+  return request(`/api/metrics${scopeQuery(scope, spaceIds)}`)
 }
 
 export function fetchBudgetConfig() {
   return request('/api/budgets/config')
 }
 
-export function fetchPeriodStatus(scope) {
-  return request(`/api/budgets/period-status${scopeQuery(scope)}`)
+export function fetchPeriodStatus(scope, spaceIds) {
+  return request(`/api/budgets/period-status${scopeQuery(scope, spaceIds)}`)
 }
 
 export function fetchAlerts() {
@@ -476,11 +481,11 @@ export function fetchGroups() {
   return request('/api/groups')
 }
 
-export function createGroup(name) {
+export function createGroup(name, spaceType) {
   return request('/api/groups', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, space_type: spaceType || 'custom' }),
   })
 }
 

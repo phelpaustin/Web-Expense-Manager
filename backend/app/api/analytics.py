@@ -14,10 +14,11 @@ router = APIRouter()
 @router.get("/analytics/trends")
 def analytics_trends(
     scope: str | None = None,
+    space_ids: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses(db, user.id, scope)
+    expenses = fetch_expenses(db, user.id, scope, space_ids)
     monthly = analytics_logic.monthly_totals(expenses)
     return {
         "monthly": monthly,
@@ -30,10 +31,11 @@ def analytics_trends(
 @router.get("/analytics/categories")
 def analytics_categories(
     scope: str | None = None,
+    space_ids: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return analytics_logic.category_breakdown(fetch_expenses(db, user.id, scope))
+    return analytics_logic.category_breakdown(fetch_expenses(db, user.id, scope, space_ids))
 
 
 @router.get("/analytics/price-trends")

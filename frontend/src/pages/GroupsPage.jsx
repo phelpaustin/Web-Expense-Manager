@@ -1,8 +1,21 @@
 import { useState } from 'react'
 import { fetchGroupMembers, inviteToGroup, removeGroupMember, cancelGroupInvite, renameGroup } from '../api/client.js'
 
+const SPACE_TYPES = [
+  { value: 'household', label: 'Household', icon: '🏠' },
+  { value: 'business', label: 'Business', icon: '💼' },
+  { value: 'rental', label: 'Rental', icon: '🏢' },
+  { value: 'trip', label: 'Trip', icon: '✈️' },
+  { value: 'custom', label: 'Custom', icon: '📁' },
+]
+
+function spaceTypeIcon(spaceType) {
+  return SPACE_TYPES.find((t) => t.value === spaceType)?.icon || '📁'
+}
+
 export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLeaveGroup, onRefresh, onError }) {
   const [name, setName] = useState('')
+  const [spaceType, setSpaceType] = useState('custom')
   const [expandedId, setExpandedId] = useState(null)
   const [members, setMembers] = useState([])
   const [inviteEmail, setInviteEmail] = useState('')
@@ -11,8 +24,9 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
   async function handleCreate(e) {
     e.preventDefault()
     if (!name.trim()) return
-    await onCreateGroup(name.trim())
+    await onCreateGroup(name.trim(), spaceType)
     setName('')
+    setSpaceType('custom')
   }
 
   async function loadMembers(groupId) {
@@ -81,36 +95,45 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
 
   return (
     <>
-      <h1 className="page-title">👨‍👩‍👧 Groups</h1>
+      <h1 className="page-title">�️ Expense Spaces</h1>
       <p className="subtitle">
-        Track expenses for different streams — a household, a rented flat, a business — each with its own members
-        who can all add expenses to it. Expenses tagged to a group show up for every member.
+        An Expense Space is where expenses belong — a household, a business, a rental, a trip, or anything custom.
+        Invite others to a space so every member can add expenses to it, all in one shared view.
       </p>
 
       <section className="panel">
-        <h2>➕ New group</h2>
+        <h2>➕ New Expense Space</h2>
         <form className="add-form" onSubmit={handleCreate}>
           <input
             type="text"
-            placeholder="e.g. Household, Business A, Rented Flat"
+            placeholder="e.g. Household, Business A, Goa Trip"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+          <select value={spaceType} onChange={(e) => setSpaceType(e.target.value)} title="Space type">
+            {SPACE_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.icon} {t.label}
+              </option>
+            ))}
+          </select>
           <button type="submit">Create</button>
         </form>
       </section>
 
       {groups.length === 0 ? (
-        <p className="subtitle">No groups yet — create one above to start sharing expenses with others.</p>
+        <p className="subtitle">No Expense Spaces yet — create one above to start sharing expenses with others.</p>
       ) : (
         <div className="trip-list">
           {groups.map((g) => (
             <section key={g.id} className="panel trip-card">
               <div className="trip-card-header" onClick={() => toggleExpand(g)}>
                 <div>
-                  <h2 style={{ margin: 0 }}>{g.name}</h2>
+                  <h2 style={{ margin: 0 }}>
+                    {spaceTypeIcon(g.space_type)} {g.name}
+                  </h2>
                   <p className="subtitle">
-                    {g.member_count} member{g.member_count === 1 ? '' : 's'} ·{' '}
+                    {g.space_type_label} · {g.member_count} member{g.member_count === 1 ? '' : 's'} ·{' '}
                     <span className={`role-badge role-${g.role}`}>{g.role}</span>
                   </p>
                 </div>
@@ -120,7 +143,7 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
                       <button className="ghost-btn" onClick={() => handleRename(g)}>
                         Rename
                       </button>
-                      <button className="delete-btn" onClick={() => onDeleteGroup(g.id)} title="Delete group">
+                      <button className="delete-btn" onClick={() => onDeleteGroup(g.id)} title="Delete space">
                         ✕
                       </button>
                     </>

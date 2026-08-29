@@ -8,13 +8,24 @@ from app.db import models
 
 router = APIRouter()
 
+SPACE_TYPES = ["household", "business", "rental", "trip", "custom"]
+SPACE_TYPE_LABELS = {
+    "household": "Household",
+    "business": "Business",
+    "rental": "Rental",
+    "trip": "Trip",
+    "custom": "Custom",
+}
+
 
 class GroupCreate(BaseModel):
     name: str = Field(min_length=1)
+    space_type: str = "custom"
 
 
 class GroupUpdate(BaseModel):
     name: str = Field(min_length=1)
+    space_type: str | None = None
 
 
 class InviteIn(BaseModel):
@@ -48,7 +59,14 @@ def _require_owner(db: Session, group_id: int, user_id: int) -> models.GroupMemb
 
 def _serialize_group(db: Session, group: models.Group, role: str) -> dict:
     member_count = db.query(models.GroupMember).filter(models.GroupMember.group_id == group.id).count()
-    return {"id": group.id, "name": group.name, "role": role, "member_count": member_count}
+    return {
+        "id": group.id,
+        "name": group.name,
+        "space_type": group.space_type,
+        "space_type_label": SPACE_TYPE_LABELS.get(group.space_type, "Custom"),
+        "role": role,
+        "member_count": member_count,
+    }
 
 
 @router.get("/groups")
@@ -71,7 +89,8 @@ def create_group(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    group = models.Group(owner_id=user.id, name=payload.name.strip())
+    space_type = payload.space_type if payload.space_type in SPACE_TYPES else "custom"
+    group = models.Group(owner_id=user.id, name=payload.name.strip(), space_type=space_type)
     db.add(group)
     db.flush()
     db.add(models.GroupMember(group_id=group.id, user_id=user.id, role="owner"))
@@ -90,6 +109,8 @@ def rename_group(
     group = _group_or_404(db, group_id)
     member = _require_owner(db, group_id, user.id)
     group.name = payload.name.strip()
+    if payload.space_type and payload.space_type in SPACE_TYPES:
+        group.space_type = payload.space_type
     db.commit()
     return _serialize_group(db, group, member.role)
 
