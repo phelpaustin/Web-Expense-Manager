@@ -25,3 +25,18 @@ def get_current_user(
     if user is None:
         raise credentials_exc
     return user
+
+
+def get_user_group_ids(db: Session, user_id: int) -> list[int]:
+    """IDs of every group (household/business/...) this user belongs to."""
+    rows = db.query(models.GroupMember.group_id).filter(models.GroupMember.user_id == user_id).all()
+    return [r[0] for r in rows]
+
+
+def is_group_member(db: Session, group_id: int, user_id: int) -> bool:
+    return (
+        db.query(models.GroupMember)
+        .filter(models.GroupMember.group_id == group_id, models.GroupMember.user_id == user_id)
+        .first()
+        is not None
+    )

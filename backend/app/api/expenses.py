@@ -5,9 +5,10 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_user_group_ids, is_group_member
 from app.api.options import ensure_options
 from app.db.database import get_db
 from app.db import models
@@ -47,6 +48,7 @@ class ExpenseOut(BaseModel):
     currency: str
     price_per_unit: float
     trip_id: int | None = None
+    group_id: int | None = None
 
 
 class ExpenseCreate(BaseModel):
@@ -61,6 +63,7 @@ class ExpenseCreate(BaseModel):
     brand: str = ""
     currency: str = "SEK"
     trip_id: int | None = None
+    group_id: int | None = None
 
 
 class ExpenseUpdate(BaseModel):
@@ -75,13 +78,21 @@ class ExpenseUpdate(BaseModel):
     brand: str | None = None
     currency: str | None = None
     trip_id: int | None = None
+    group_id: int | None = None
 
 
 def fetch_expenses(db: Session, user_id: int) -> list[dict]:
-    """Shared accessor: a user's expenses as plain dicts for the logic modules."""
+    """Shared accessor: expenses this user can see — their own, plus any in
+    groups (household/business/...) they belong to — as plain dicts for the
+    logic modules.
+    """
+    group_ids = get_user_group_ids(db, user_id)
+    visibility = models.Expense.user_id == user_id
+    if group_ids:
+        visibility = or_(visibility, models.Expense.group_id.in_(group_ids))
     rows = (
         db.query(models.Expense)
-        .filter(models.Expense.user_id == user_id)
+        .filter(visibility)
         .order_by(models.Expense.date)
         .all()
     )
@@ -100,29 +111,46 @@ def fetch_expenses(db: Session, user_id: int) -> list[dict]:
             "currency": r.currency,
             "price_per_unit": r.price_per_unit,
             "trip_id": r.trip_id,
+            "group_id": r.group_id,
+            "user_id": r.user_id,
         }
         for r in rows
     ]
 
 
-def _get_owned_or_404(db: Session, expense_id: int, user_id: int) -> models.Expense:
+def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Expense:
+    """An expense the user owns, or that belongs to a group they're a member of."""
     expense = db.get(models.Expense, expense_id)
-    if expense is None or expense.user_id != user_id:
+    if expense is None:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    owns_it = expense.user_id == user_id
+    in_shared_group = expense.group_id is not None and is_group_member(db, expense.group_id, user_id)
+    if not (owns_it or in_shared_group):
         raise HTTPException(status_code=404, detail="Expense not found")
     return expense
 
 
-@router.get("/expenses", response_model=list[ExpenseOut])
+def _require_group_membership(db: Session, group_id: int | None, user_id: int) -> None:
+    if group_id is not None and not is_group_member(db, group_id, user_id):
+        raise HTTPException(status_code=403, detail="Not a member of that group")
+
+
+@router.get("/expenses")
 def list_expenses(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return (
-        db.query(models.Expense)
-        .filter(models.Expense.user_id == user.id)
-        .order_by(models.Expense.date)
-        .all()
-    )
+    expenses = fetch_expenses(db, user.id)
+    creator_ids = {e["user_id"] for e in expenses if e["group_id"] is not None}
+    creators = {}
+    if creator_ids:
+        for u in db.query(models.User).filter(models.User.id.in_(creator_ids)).all():
+            creators[u.id] = u.name or u.email
+    for e in expenses:
+        e["created_by"] = creators.get(e["user_id"]) if e["group_id"] is not None else None
+        e["date"] = e["date"].isoformat()
+        del e["user_id"]
+    return expenses
 
 
 @router.post("/expenses", response_model=ExpenseOut, status_code=201)
@@ -131,6 +159,7 @@ def create_expense(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
+    _require_group_membership(db, payload.group_id, user.id)
     expense = models.Expense(user_id=user.id, **payload.model_dump())
     expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
     db.add(expense)
@@ -148,8 +177,11 @@ def update_expense(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expense = _get_owned_or_404(db, expense_id, user.id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    expense = _get_visible_or_404(db, expense_id, user.id)
+    data = payload.model_dump(exclude_unset=True)
+    if "group_id" in data:
+        _require_group_membership(db, data["group_id"], user.id)
+    for field, value in data.items():
         setattr(expense, field, value)
     expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
     db.commit()
@@ -164,7 +196,7 @@ def delete_expense(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expense = _get_owned_or_404(db, expense_id, user.id)
+    expense = _get_visible_or_404(db, expense_id, user.id)
     db.delete(expense)
     db.commit()
 

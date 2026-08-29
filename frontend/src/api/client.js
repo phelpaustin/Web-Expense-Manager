@@ -466,3 +466,52 @@ export function fetchTripSummary(id) {
 export function fetchTripExpenses(id) {
   return request(`/api/trips/${id}/expenses`)
 }
+
+// ── Groups (household / business / shared expense spaces) ────
+export function fetchGroups() {
+  return request('/api/groups')
+}
+
+export function createGroup(name) {
+  return request('/api/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function renameGroup(id, name) {
+  return request(`/api/groups/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function deleteGroup(id) {
+  return request(`/api/groups/${id}`, { method: 'DELETE' })
+}
+
+export function fetchGroupMembers(id) {
+  return request(`/api/groups/${id}/members`)
+}
+
+export function inviteToGroup(id, email) {
+  return request(`/api/groups/${id}/invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function removeGroupMember(id, userId) {
+  return request(`/api/groups/${id}/members/${userId}`, { method: 'DELETE' })
+}
+
+export function cancelGroupInvite(id, email) {
+  return request(`/api/groups/${id}/invites/${encodeURIComponent(email)}`, { method: 'DELETE' })
+}
+
+export function leaveGroup(id) {
+  return request(`/api/groups/${id}/leave`, { method: 'POST' })
+}

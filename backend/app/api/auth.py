@@ -63,6 +63,22 @@ class DeleteAccountIn(BaseModel):
     password: str
 
 
+def _claim_group_invites(db: Session, user: models.User) -> None:
+    """Add a newly-registered user to any groups they were invited to by email."""
+    invites = db.query(models.GroupInvite).filter(models.GroupInvite.email == user.email).all()
+    for invite in invites:
+        already_member = (
+            db.query(models.GroupMember)
+            .filter(models.GroupMember.group_id == invite.group_id, models.GroupMember.user_id == user.id)
+            .first()
+        )
+        if not already_member:
+            db.add(models.GroupMember(group_id=invite.group_id, user_id=user.id, role="member"))
+        db.delete(invite)
+    if invites:
+        db.commit()
+
+
 @router.post("/auth/register", response_model=TokenOut, status_code=201)
 @limiter.limit("10/hour")
 def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
@@ -77,6 +93,9 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    _claim_group_invites(db, user)
+
     return TokenOut(access_token=create_access_token(str(user.id)))
 
 
@@ -124,6 +143,7 @@ def google_login(payload: GoogleIn, db: Session = Depends(get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
+        _claim_group_invites(db, user)
     return TokenOut(access_token=create_access_token(str(user.id)))
 
 

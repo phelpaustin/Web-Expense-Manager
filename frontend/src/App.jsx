@@ -47,6 +47,10 @@ import {
   createTrip,
   updateTrip,
   deleteTrip,
+  fetchGroups,
+  createGroup,
+  deleteGroup,
+  leaveGroup,
 } from './api/client.js'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
@@ -59,9 +63,10 @@ import BillsPage from './pages/BillsPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
 import TripsPage from './pages/TripsPage.jsx'
 import PriceTrackerPage from './pages/PriceTrackerPage.jsx'
+import GroupsPage from './pages/GroupsPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 
-const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK', trip_id: '' }
+const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK', trip_id: '', group_id: '' }
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
 const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
@@ -99,6 +104,7 @@ export default function App() {
   const [budgetConfig, setBudgetConfigState] = useState({ period: 'Monthly', rollover: false })
   const [alerts, setAlerts] = useState([])
   const [trips, setTrips] = useState([])
+  const [groups, setGroups] = useState([])
 
   function loadAll() {
     return Promise.all([
@@ -118,8 +124,9 @@ export default function App() {
       fetchPeriodStatus(),
       fetchAlerts(),
       fetchTrips(),
+      fetchGroups(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt, trps]) => {
+      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt, trps, grps]) => {
         setExpenses(exp)
         setSummary(sum)
         setTrends(tr)
@@ -137,6 +144,7 @@ export default function App() {
         setPeriodStatus(pstat)
         setAlerts(alrt)
         setTrips(trps)
+        setGroups(grps)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -208,6 +216,7 @@ export default function App() {
         brand: form.brand,
         currency: form.currency || 'SEK',
         trip_id: form.trip_id ? parseInt(form.trip_id, 10) : null,
+        group_id: form.group_id ? parseInt(form.group_id, 10) : null,
       })
       setForm(EMPTY_FORM)
       await loadAll()
@@ -259,6 +268,33 @@ export default function App() {
   async function handleDeleteTrip(id) {
     try {
       await deleteTrip(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleCreateGroup(name) {
+    try {
+      await createGroup(name)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDeleteGroup(id) {
+    try {
+      await deleteGroup(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleLeaveGroup(id) {
+    try {
+      await leaveGroup(id)
       await loadAll()
     } catch (err) {
       setError(err.message)
@@ -587,6 +623,7 @@ export default function App() {
               setImportCurrency={setImportCurrency}
               onAddRow={handleAddRow}
               trips={trips}
+              groups={groups}
             />
           }
         />
@@ -666,6 +703,19 @@ export default function App() {
           }
         />
         <Route path="prices" element={<PriceTrackerPage onError={setError} />} />
+        <Route
+          path="groups"
+          element={
+            <GroupsPage
+              groups={groups}
+              onCreateGroup={handleCreateGroup}
+              onDeleteGroup={handleDeleteGroup}
+              onLeaveGroup={handleLeaveGroup}
+              onRefresh={loadAll}
+              onError={setError}
+            />
+          }
+        />
       </Route>
     </Routes>
   )

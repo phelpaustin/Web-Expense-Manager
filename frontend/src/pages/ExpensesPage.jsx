@@ -24,6 +24,7 @@ export default function ExpensesPage({
   setImportCurrency,
   onAddRow,
   trips,
+  groups,
 }) {
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
@@ -36,10 +37,13 @@ export default function ExpensesPage({
   const [search, setSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterShop, setFilterShop] = useState('')
+  const [filterGroup, setFilterGroup] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
+
+  const groupName = (id) => (groups || []).find((g) => g.id === id)?.name
 
   const filteredExpenses = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -47,6 +51,8 @@ export default function ExpensesPage({
       .filter((e) => {
         if (filterCategory && e.category !== filterCategory) return false
         if (filterShop && e.shop !== filterShop) return false
+        if (filterGroup === 'personal' && e.group_id) return false
+        if (filterGroup && filterGroup !== 'personal' && String(e.group_id) !== filterGroup) return false
         if (dateFrom && e.date < dateFrom) return false
         if (dateTo && e.date > dateTo) return false
         if (q) {
@@ -57,7 +63,7 @@ export default function ExpensesPage({
       })
       .slice()
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id))
-  }, [expenses, search, filterCategory, filterShop, dateFrom, dateTo])
+  }, [expenses, search, filterCategory, filterShop, filterGroup, dateFrom, dateTo])
 
   const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -71,12 +77,13 @@ export default function ExpensesPage({
     }
   }
 
-  const hasActiveFilters = search || filterCategory || filterShop || dateFrom || dateTo
+  const hasActiveFilters = search || filterCategory || filterShop || filterGroup || dateFrom || dateTo
 
   function clearFilters() {
     setSearch('')
     setFilterCategory('')
     setFilterShop('')
+    setFilterGroup('')
     setDateFrom('')
     setDateTo('')
     setPage(1)
@@ -377,6 +384,20 @@ export default function ExpensesPage({
               ))}
             </select>
           )}
+          {groups && groups.length > 0 && (
+            <select
+              value={form.group_id || ''}
+              onChange={(e) => setForm({ ...form, group_id: e.target.value })}
+              title="Add this expense to a shared group (optional)"
+            >
+              <option value="">Personal</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  👨‍👩‍👧 {g.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Add'}
           </button>
@@ -443,6 +464,17 @@ export default function ExpensesPage({
                 </option>
               ))}
             </select>
+            {groups && groups.length > 0 && (
+              <select value={filterGroup} onChange={(e) => resetToFirstPage(setFilterGroup)(e.target.value)}>
+                <option value="">All (personal + groups)</option>
+                <option value="personal">Personal only</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <input
               type="date"
               title="From date"
@@ -473,6 +505,7 @@ export default function ExpensesPage({
               <th>Subcat</th>
               <th>Shop</th>
               <th>Description</th>
+              <th>Group</th>
               <th className="right">Qty</th>
               <th>Unit</th>
               <th className="right">Amount</th>
@@ -521,6 +554,7 @@ export default function ExpensesPage({
                       onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
                     />
                   </td>
+                  <td>{groupName(e.group_id) || (e.trip_id ? '🧳 trip' : '—')}</td>
                   <td className="right">
                     <input
                       type="number"
@@ -566,6 +600,15 @@ export default function ExpensesPage({
                   <td>{e.subcategory}</td>
                   <td>{e.shop}</td>
                   <td>{e.description}</td>
+                  <td>
+                    {groupName(e.group_id) ? (
+                      <span title={e.created_by ? `Added by ${e.created_by}` : undefined}>
+                        👨‍👩‍👧 {groupName(e.group_id)}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="right">{e.quantity}</td>
                   <td>{e.unit}</td>
                   <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>

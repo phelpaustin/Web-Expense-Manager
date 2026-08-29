@@ -29,6 +29,7 @@ class Expense(Base):
     currency = Column(String, nullable=False, default="SEK")
     price_per_unit = Column(Float, nullable=False, default=0.0)
     trip_id = Column(Integer, ForeignKey("trips.id"), nullable=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
 
 
 class UserOptions(Base):
@@ -130,6 +131,36 @@ class Trip(Base):
     budget = Column(Float, nullable=True)
     currency = Column(String, nullable=False, default="SEK")
     status = Column(String, nullable=False, default="Planned")
+
+
+class Group(Base):
+    """A shared expense-tracking space (household, rented flat, business, ...)."""
+    __tablename__ = "groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    role = Column(String, nullable=False, default="member")  # "owner" | "member"
+
+    __table_args__ = (UniqueConstraint("group_id", "user_id", name="uq_group_user"),)
+
+
+class GroupInvite(Base):
+    """A pending invite for an email that hasn't registered yet; claimed on signup."""
+    __tablename__ = "group_invites"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
+    email = Column(String, nullable=False, index=True)
+    invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 
 
 
