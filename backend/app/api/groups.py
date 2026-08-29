@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -7,6 +7,7 @@ from app.api.deps import (
     is_group_member,
     require_role_at_least,
 )
+from app.core.rate_limit import limiter
 from app.db.database import get_db
 from app.db import models
 
@@ -168,8 +169,13 @@ def delete_group(
 
 
 def cascade_delete_group(db: Session, group: models.Group) -> None:
-    """Detach the group's expenses (kept, just un-tagged) and remove its members/invites/self."""
+    """Detach the group's expenses (kept, just un-tagged), un-nest any child trips/spaces,
+    clear any member's local mapping pointing at it, and remove its members/invites/self."""
     db.query(models.Expense).filter(models.Expense.group_id == group.id).update({"group_id": None})
+    db.query(models.Group).filter(models.Group.parent_group_id == group.id).update({"parent_group_id": None})
+    db.query(models.GroupMember).filter(models.GroupMember.local_parent_group_id == group.id).update(
+        {"local_parent_group_id": None}
+    )
     db.query(models.GroupMember).filter(models.GroupMember.group_id == group.id).delete()
     db.query(models.GroupInvite).filter(models.GroupInvite.group_id == group.id).delete()
     db.delete(group)
@@ -195,7 +201,9 @@ def list_members(
 
 
 @router.post("/groups/{group_id}/invite", status_code=201)
+@limiter.limit("20/hour")
 def invite_member(
+    request: Request,
     group_id: int,
     payload: InviteIn,
     db: Session = Depends(get_db),

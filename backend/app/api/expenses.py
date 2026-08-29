@@ -167,9 +167,15 @@ def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Ex
     return expense
 
 
-def _require_group_write_access(db: Session, group_id: int | None, user_id: int) -> None:
-    if group_id is not None:
-        require_role_at_least(db, group_id, user_id, "editor", "Viewers can't add or edit expenses in this space")
+def _require_group_write_access(
+    db: Session, group_id: int | None, user_id: int, expense_owner_id: int | None = None
+) -> None:
+    """Owners/admins may write any expense in the space; editors only their own; viewers none."""
+    if group_id is None:
+        return
+    member = require_role_at_least(db, group_id, user_id, "editor", "Viewers can't add or edit expenses in this space")
+    if member.role == "editor" and expense_owner_id is not None and expense_owner_id != user_id:
+        raise HTTPException(status_code=403, detail="Editors can only edit or delete their own expenses in this space")
 
 
 @router.get("/expenses")
@@ -215,10 +221,10 @@ def update_expense(
     user: models.User = Depends(get_current_user),
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
-    _require_group_write_access(db, expense.group_id, user.id)
+    _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
     data = payload.model_dump(exclude_unset=True)
     if "group_id" in data:
-        _require_group_write_access(db, data["group_id"], user.id)
+        _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
     for field, value in data.items():
         setattr(expense, field, value)
     expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
@@ -235,7 +241,7 @@ def delete_expense(
     user: models.User = Depends(get_current_user),
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
-    _require_group_write_access(db, expense.group_id, user.id)
+    _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
     db.delete(expense)
     db.commit()
 
