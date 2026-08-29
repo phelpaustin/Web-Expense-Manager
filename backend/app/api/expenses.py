@@ -81,21 +81,36 @@ class ExpenseUpdate(BaseModel):
     group_id: int | None = None
 
 
-def fetch_expenses(db: Session, user_id: int) -> list[dict]:
-    """Shared accessor: expenses this user can see — their own, plus any in
-    groups (household/business/...) they belong to — as plain dicts for the
-    logic modules.
+def fetch_expenses(db: Session, user_id: int, scope: str | None = None) -> list[dict]:
+    """Shared accessor: expenses this user can see, as plain dicts for the logic modules.
+
+    scope controls which expenses are included:
+      - None / "all" (default): the user's own expenses + every group they belong to.
+      - "personal": only the user's own, ungrouped expenses.
+      - "<group id>": only that one group's expenses (caller must have already
+        verified the user is a member — non-members simply get an empty list).
     """
     group_ids = get_user_group_ids(db, user_id)
-    visibility = models.Expense.user_id == user_id
-    if group_ids:
-        visibility = or_(visibility, models.Expense.group_id.in_(group_ids))
-    rows = (
-        db.query(models.Expense)
-        .filter(visibility)
-        .order_by(models.Expense.date)
-        .all()
-    )
+
+    if scope == "personal":
+        q = db.query(models.Expense).filter(
+            models.Expense.user_id == user_id, models.Expense.group_id.is_(None)
+        )
+    elif scope and scope != "all":
+        try:
+            requested_group_id = int(scope)
+        except ValueError:
+            requested_group_id = None
+        if requested_group_id is None or requested_group_id not in group_ids:
+            return []
+        q = db.query(models.Expense).filter(models.Expense.group_id == requested_group_id)
+    else:
+        visibility = models.Expense.user_id == user_id
+        if group_ids:
+            visibility = or_(visibility, models.Expense.group_id.in_(group_ids))
+        q = db.query(models.Expense).filter(visibility)
+
+    rows = q.order_by(models.Expense.date).all()
     return [
         {
             "id": r.id,
@@ -203,10 +218,11 @@ def delete_expense(
 
 @router.get("/expenses/summary")
 def expenses_summary(
+    scope: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses(db, user.id)
+    expenses = fetch_expenses(db, user.id, scope)
     total = sum(e["amount"] for e in expenses)
     by_category: dict[str, float] = {}
     for e in expenses:

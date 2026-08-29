@@ -78,11 +78,12 @@ def delete_budget(
 @router.get("/budgets/status")
 def budgets_status(
     month: str | None = None,
+    scope: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     return budgets_logic.calculate_budget_status(
-        fetch_expenses(db, user.id), fetch_budgets(db, user.id), month
+        fetch_expenses(db, user.id, scope), fetch_budgets(db, user.id), month
     )
 
 
@@ -110,11 +111,12 @@ def set_budget_config(
 
 @router.get("/budgets/period-status")
 def budgets_period_status(
+    scope: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     opts = get_or_create_options(db, user.id)
     total_budget = fetch_budgets(db, user.id).get(TOTAL_BUDGET_KEY)
     return budgets_logic.period_budget_status(
-        fetch_expenses(db, user.id), total_budget, opts.budget_period, opts.budget_rollover
+        fetch_expenses(db, user.id, scope), total_budget, opts.budget_period, opts.budget_rollover
     )

@@ -105,23 +105,24 @@ export default function App() {
   const [alerts, setAlerts] = useState([])
   const [trips, setTrips] = useState([])
   const [groups, setGroups] = useState([])
+  const [dashboardScope, setDashboardScopeState] = useState('all')
 
   function loadAll() {
     return Promise.all([
       fetchExpenses(),
-      fetchSummary(),
-      fetchTrends(),
-      fetchCategories(),
-      fetchBudgetStatus(),
+      fetchSummary(dashboardScope),
+      fetchTrends(dashboardScope),
+      fetchCategories(dashboardScope),
+      fetchBudgetStatus(dashboardScope),
       fetchIncome(),
       fetchIncomeSummary(),
       fetchRecurring(),
       fetchPendingBills(),
       fetchLedger(),
       fetchOptions(),
-      fetchMetrics(),
+      fetchMetrics(dashboardScope),
       fetchBudgetConfig(),
-      fetchPeriodStatus(),
+      fetchPeriodStatus(dashboardScope),
       fetchAlerts(),
       fetchTrips(),
       fetchGroups(),
@@ -145,6 +146,29 @@ export default function App() {
         setAlerts(alrt)
         setTrips(trps)
         setGroups(grps)
+        setError(null)
+      })
+      .catch((err) => setError(err.message))
+  }
+
+  // Re-fetch just the dashboard-relevant data scoped to "all", "personal", or one group.
+  function handleSetDashboardScope(scope) {
+    setDashboardScopeState(scope)
+    return Promise.all([
+      fetchSummary(scope),
+      fetchTrends(scope),
+      fetchCategories(scope),
+      fetchBudgetStatus(scope),
+      fetchMetrics(scope),
+      fetchPeriodStatus(scope),
+    ])
+      .then(([sum, tr, cat, bud, met, pstat]) => {
+        setSummary(sum)
+        setTrends(tr)
+        setCategories(cat)
+        setBudgets(bud)
+        setMetrics(met)
+        setPeriodStatus(pstat)
         setError(null)
       })
       .catch((err) => setError(err.message))
@@ -597,6 +621,9 @@ export default function App() {
               periodStatus={periodStatus}
               budgetConfig={budgetConfig}
               onSetBudgetConfig={handleSetBudgetConfig}
+              groups={groups}
+              dashboardScope={dashboardScope}
+              onSetDashboardScope={handleSetDashboardScope}
             />
           }
         />

@@ -134,32 +134,36 @@ export function fetchExpenses() {
   return request('/api/expenses')
 }
 
-export function fetchSummary() {
-  return request('/api/expenses/summary')
+function scopeQuery(scope) {
+  return scope && scope !== 'all' ? `?scope=${encodeURIComponent(scope)}` : ''
 }
 
-export function fetchTrends() {
-  return request('/api/analytics/trends')
+export function fetchSummary(scope) {
+  return request(`/api/expenses/summary${scopeQuery(scope)}`)
 }
 
-export function fetchCategories() {
-  return request('/api/analytics/categories')
+export function fetchTrends(scope) {
+  return request(`/api/analytics/trends${scopeQuery(scope)}`)
 }
 
-export function fetchBudgetStatus() {
-  return request('/api/budgets/status')
+export function fetchCategories(scope) {
+  return request(`/api/analytics/categories${scopeQuery(scope)}`)
 }
 
-export function fetchMetrics() {
-  return request('/api/metrics')
+export function fetchBudgetStatus(scope) {
+  return request(`/api/budgets/status${scopeQuery(scope)}`)
+}
+
+export function fetchMetrics(scope) {
+  return request(`/api/metrics${scopeQuery(scope)}`)
 }
 
 export function fetchBudgetConfig() {
   return request('/api/budgets/config')
 }
 
-export function fetchPeriodStatus() {
-  return request('/api/budgets/period-status')
+export function fetchPeriodStatus(scope) {
+  return request(`/api/budgets/period-status${scopeQuery(scope)}`)
 }
 
 export function fetchAlerts() {

@@ -436,6 +436,23 @@ h3 {
   font-weight: 800;
 }
 
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-header .page-title {
+  margin-bottom: 1.5rem;
+}
+
+.scope-select {
+  margin-bottom: 1.5rem;
+  height: fit-content;
+}
+
 /* ============================================================
    Cards / stats
    ============================================================ */

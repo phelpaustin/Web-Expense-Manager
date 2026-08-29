@@ -14,10 +14,31 @@ export default function DashboardPage({
   periodStatus,
   budgetConfig,
   onSetBudgetConfig,
+  groups,
+  dashboardScope,
+  onSetDashboardScope,
 }) {
   return (
     <>
-      <h1 className="page-title">📊 Dashboard</h1>
+      <div className="dashboard-header">
+        <h1 className="page-title">📊 Dashboard</h1>
+        {groups && groups.length > 0 && (
+          <select
+            className="scope-select"
+            value={dashboardScope}
+            onChange={(e) => onSetDashboardScope(e.target.value)}
+            title="Show data for personal expenses only, one group, or everything combined"
+          >
+            <option value="all">All (personal + groups)</option>
+            <option value="personal">Personal only</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                👨‍👩‍👧 {g.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       {summary && (
         <section className="cards">

@@ -13,7 +13,8 @@ router = APIRouter()
 
 @router.get("/metrics")
 def get_metrics(
+    scope: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return metrics_logic.summary(fetch_expenses(db, user.id), fetch_income(db, user.id))
+    return metrics_logic.summary(fetch_expenses(db, user.id, scope), fetch_income(db, user.id))
