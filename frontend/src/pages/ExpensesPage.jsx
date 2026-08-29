@@ -45,8 +45,9 @@ export default function ExpensesPage({
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
 
-  const groupName = (id) => (groups || []).find((g) => g.id === id)?.name
-  const groupSpaceType = (id) => (groups || []).find((g) => g.id === id)?.space_type
+  const groupName = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.name
+  const groupSpaceType = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.space_type || 'trip'
+  const allSpaces = (groups || []).concat(trips || [])
 
   const filteredExpenses = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -373,30 +374,16 @@ export default function ExpensesPage({
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
           />
-          {trips && trips.length > 0 && (
-            <select
-              value={form.trip_id || ''}
-              onChange={(e) => setForm({ ...form, trip_id: e.target.value })}
-              title="Tag this expense to a trip (optional)"
-            >
-              <option value="">No trip</option>
-              {trips.map((t) => (
-                <option key={t.id} value={t.id}>
-                  🧳 {t.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {groups && groups.length > 0 && (
+          {allSpaces.length > 0 && (
             <select
               value={form.group_id || ''}
               onChange={(e) => setForm({ ...form, group_id: e.target.value })}
-              title="Add this expense to an Expense Space (optional)"
+              title="Add this expense to an Expense Space or trip (optional)"
             >
               <option value="">Personal expenses</option>
-              {groups.map((g) => (
+              {allSpaces.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {SPACE_TYPE_ICONS[g.space_type] || '📁'} {g.name}
+                  {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
                 </option>
               ))}
             </select>
@@ -467,13 +454,13 @@ export default function ExpensesPage({
                 </option>
               ))}
             </select>
-            {groups && groups.length > 0 && (
+            {allSpaces.length > 0 && (
               <select value={filterGroup} onChange={(e) => resetToFirstPage(setFilterGroup)(e.target.value)}>
                 <option value="">All expenses</option>
                 <option value="personal">Personal expenses</option>
-                {groups.map((g) => (
+                {allSpaces.map((g) => (
                   <option key={g.id} value={g.id}>
-                    {g.name}
+                    {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
                   </option>
                 ))}
               </select>
@@ -557,7 +544,7 @@ export default function ExpensesPage({
                       onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
                     />
                   </td>
-                  <td>{groupName(e.group_id) || (e.trip_id ? '🧳 trip' : '—')}</td>
+                  <td>{groupName(e.group_id) || '—'}</td>
                   <td className="right">
                     <input
                       type="number"

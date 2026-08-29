@@ -647,6 +647,7 @@ export default function App() {
               budgetConfig={budgetConfig}
               onSetBudgetConfig={handleSetBudgetConfig}
               groups={groups}
+              trips={trips}
               dashboardScope={dashboardScope}
               onSetDashboardScope={handleSetDashboardScope}
               dashboardSpaceIds={dashboardSpaceIds}
@@ -749,9 +750,11 @@ export default function App() {
           element={
             <TripsPage
               trips={trips}
+              groups={groups}
               onAddTrip={handleAddTrip}
               onUpdateTrip={handleUpdateTrip}
               onDeleteTrip={handleDeleteTrip}
+              onRefresh={loadAll}
               onError={setError}
             />
           }

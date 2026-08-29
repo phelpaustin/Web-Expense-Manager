@@ -28,7 +28,6 @@ class Expense(Base):
     brand = Column(String, nullable=False, default="")
     currency = Column(String, nullable=False, default="SEK")
     price_per_unit = Column(Float, nullable=False, default=0.0)
-    trip_id = Column(Integer, ForeignKey("trips.id"), nullable=True, index=True)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
 
 
@@ -120,6 +119,10 @@ class Receipt(Base):
 
 
 class Trip(Base):
+    """Legacy standalone trips table — superseded by Group(space_type='trip').
+    Left unmapped-from going forward; existing rows are migrated into groups by
+    the 0005 migration and this table is kept only as an untouched historical copy.
+    """
     __tablename__ = "trips"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -134,7 +137,14 @@ class Trip(Base):
 
 
 class Group(Base):
-    """An Expense Space: a shared expense-tracking space (household, business, trip, ...)."""
+    """An Expense Space: a shared expense-tracking space (household, business, trip, ...).
+
+    A Group with space_type='trip' is a Trip: it can optionally sit under a
+    parent_group_id (e.g. a "Goa Trip" filed under "Household") and carries a
+    few trip-only fields (destination/dates/budget/currency/status). Trip
+    membership is independent of the parent space's membership — inviting
+    someone to a trip never exposes the parent space's other data.
+    """
     __tablename__ = "groups"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -142,6 +152,16 @@ class Group(Base):
     name = Column(String, nullable=False)
     # personal | household | business | rental | trip | custom
     space_type = Column(String, nullable=False, default="custom")
+    parent_group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
+    # Trip-only fields (unused for other space types):
+    destination = Column(String, nullable=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    budget = Column(Float, nullable=True)
+    currency = Column(String, nullable=True, default="SEK")
+    status = Column(String, nullable=True, default="Planned")
+    # Set only on rows created by the legacy-trips data migration, to make it idempotent.
+    migrated_from_trip_id = Column(Integer, nullable=True, index=True)
 
 
 class GroupMember(Base):
@@ -151,6 +171,12 @@ class GroupMember(Base):
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String, nullable=False, default="member")  # "owner" | "member"
+    # Per-member preference: how *this* member organises a shared space on their
+    # own side (e.g. filing a shared trip under their own "Business" space, or
+    # calling it something different locally). Purely organisational — it never
+    # affects the underlying shared space or other members' views.
+    local_name = Column(String, nullable=True)
+    local_parent_group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
 
     __table_args__ = (UniqueConstraint("group_id", "user_id", name="uq_group_user"),)
 

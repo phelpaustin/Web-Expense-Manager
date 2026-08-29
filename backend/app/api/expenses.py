@@ -47,7 +47,6 @@ class ExpenseOut(BaseModel):
     brand: str
     currency: str
     price_per_unit: float
-    trip_id: int | None = None
     group_id: int | None = None
 
 
@@ -62,7 +61,6 @@ class ExpenseCreate(BaseModel):
     shop: str = ""
     brand: str = ""
     currency: str = "SEK"
-    trip_id: int | None = None
     group_id: int | None = None
 
 
@@ -77,7 +75,6 @@ class ExpenseUpdate(BaseModel):
     shop: str | None = None
     brand: str | None = None
     currency: str | None = None
-    trip_id: int | None = None
     group_id: int | None = None
 
 
@@ -151,7 +148,6 @@ def fetch_expenses(
             "brand": r.brand,
             "currency": r.currency,
             "price_per_unit": r.price_per_unit,
-            "trip_id": r.trip_id,
             "group_id": r.group_id,
             "user_id": r.user_id,
         }

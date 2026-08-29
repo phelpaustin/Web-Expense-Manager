@@ -32,6 +32,11 @@ class InviteIn(BaseModel):
     email: EmailStr
 
 
+class MyMappingIn(BaseModel):
+    local_name: str | None = None
+    local_parent_group_id: int | None = None
+
+
 def _group_or_404(db: Session, group_id: int) -> models.Group:
     group = db.get(models.Group, group_id)
     if group is None:
@@ -57,14 +62,17 @@ def _require_owner(db: Session, group_id: int, user_id: int) -> models.GroupMemb
     return member
 
 
-def _serialize_group(db: Session, group: models.Group, role: str) -> dict:
+def _serialize_group(db: Session, group: models.Group, member: models.GroupMember) -> dict:
     member_count = db.query(models.GroupMember).filter(models.GroupMember.group_id == group.id).count()
     return {
         "id": group.id,
-        "name": group.name,
+        "name": member.local_name or group.name,
         "space_type": group.space_type,
         "space_type_label": SPACE_TYPE_LABELS.get(group.space_type, "Custom"),
-        "role": role,
+        "parent_group_id": group.parent_group_id,
+        "local_name": member.local_name,
+        "local_parent_group_id": member.local_parent_group_id,
+        "role": member.role,
         "member_count": member_count,
     }
 
@@ -78,8 +86,8 @@ def list_groups(
     groups = []
     for m in memberships:
         group = db.get(models.Group, m.group_id)
-        if group:
-            groups.append(_serialize_group(db, group, m.role))
+        if group and group.space_type != "trip":
+            groups.append(_serialize_group(db, group, m))
     return groups
 
 
@@ -90,13 +98,16 @@ def create_group(
     user: models.User = Depends(get_current_user),
 ):
     space_type = payload.space_type if payload.space_type in SPACE_TYPES else "custom"
+    if space_type == "trip":
+        raise HTTPException(status_code=400, detail="Create trips from the Trips page instead")
     group = models.Group(owner_id=user.id, name=payload.name.strip(), space_type=space_type)
     db.add(group)
     db.flush()
-    db.add(models.GroupMember(group_id=group.id, user_id=user.id, role="owner"))
+    member = models.GroupMember(group_id=group.id, user_id=user.id, role="owner")
+    db.add(member)
     db.commit()
     db.refresh(group)
-    return _serialize_group(db, group, "owner")
+    return _serialize_group(db, group, member)
 
 
 @router.put("/groups/{group_id}")
@@ -109,10 +120,30 @@ def rename_group(
     group = _group_or_404(db, group_id)
     member = _require_owner(db, group_id, user.id)
     group.name = payload.name.strip()
-    if payload.space_type and payload.space_type in SPACE_TYPES:
+    if payload.space_type and payload.space_type in SPACE_TYPES and payload.space_type != "trip":
         group.space_type = payload.space_type
     db.commit()
-    return _serialize_group(db, group, member.role)
+    return _serialize_group(db, group, member)
+
+
+@router.put("/groups/{group_id}/my-mapping")
+def set_my_mapping(
+    group_id: int,
+    payload: MyMappingIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Let a member file a shared space under their own space and/or rename it locally,
+    without touching the owner's structure or other members' views."""
+    group = _group_or_404(db, group_id)
+    member = _require_member(db, group_id, user.id)
+    if payload.local_parent_group_id is not None:
+        if not is_group_member(db, payload.local_parent_group_id, user.id):
+            raise HTTPException(status_code=400, detail="You can only map to a space you belong to")
+    member.local_name = (payload.local_name or "").strip() or None
+    member.local_parent_group_id = payload.local_parent_group_id
+    db.commit()
+    return _serialize_group(db, group, member)
 
 
 @router.delete("/groups/{group_id}", status_code=204)
@@ -123,12 +154,16 @@ def delete_group(
 ):
     group = _group_or_404(db, group_id)
     _require_owner(db, group_id, user.id)
-    # Keep the expenses, just detach them from the deleted group.
+    cascade_delete_group(db, group)
+    db.commit()
+
+
+def cascade_delete_group(db: Session, group: models.Group) -> None:
+    """Detach the group's expenses (kept, just un-tagged) and remove its members/invites/self."""
     db.query(models.Expense).filter(models.Expense.group_id == group.id).update({"group_id": None})
     db.query(models.GroupMember).filter(models.GroupMember.group_id == group.id).delete()
     db.query(models.GroupInvite).filter(models.GroupInvite.group_id == group.id).delete()
     db.delete(group)
-    db.commit()
 
 
 @router.get("/groups/{group_id}/members")

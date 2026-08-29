@@ -18,6 +18,7 @@ export default function DashboardPage({
   budgetConfig,
   onSetBudgetConfig,
   groups,
+  trips,
   dashboardScope,
   onSetDashboardScope,
   dashboardSpaceIds,
@@ -26,10 +27,11 @@ export default function DashboardPage({
   const [choosingSpaces, setChoosingSpaces] = useState(false)
   const [pendingSelection, setPendingSelection] = useState(dashboardSpaceIds || [])
   const multiActive = dashboardSpaceIds && dashboardSpaceIds.length > 0
+  const allSpaces = (groups || []).concat(trips || [])
 
   function spaceLabel(id) {
     if (id === 'personal') return 'Personal expenses'
-    return groups.find((g) => String(g.id) === String(id))?.name || id
+    return allSpaces.find((g) => String(g.id) === String(id))?.name || id
   }
 
   function handleSelectChange(value) {
@@ -55,7 +57,7 @@ export default function DashboardPage({
     <>
       <div className="dashboard-header">
         <h1 className="page-title">📊 Dashboard</h1>
-        {groups && groups.length > 0 && (
+        {allSpaces.length > 0 && (
           <div className="scope-picker">
             <select
               className="scope-select"
@@ -65,7 +67,7 @@ export default function DashboardPage({
             >
               <option value="all">All expenses</option>
               <option value="personal">Personal expenses</option>
-              {groups.map((g) => (
+              {allSpaces.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
                 </option>
@@ -94,7 +96,7 @@ export default function DashboardPage({
                 Personal expenses
               </label>
             </li>
-            {groups.map((g) => (
+            {allSpaces.map((g) => (
               <li key={g.id}>
                 <label>
                   <input

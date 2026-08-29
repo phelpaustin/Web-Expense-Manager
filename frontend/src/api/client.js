@@ -524,3 +524,12 @@ export function cancelGroupInvite(id, email) {
 export function leaveGroup(id) {
   return request(`/api/groups/${id}/leave`, { method: 'POST' })
 }
+
+// Let a member file a shared space under one of their own spaces, and/or rename it locally.
+export function setMyMapping(id, { localName, localParentGroupId } = {}) {
+  return request(`/api/groups/${id}/my-mapping`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ local_name: localName ?? null, local_parent_group_id: localParentGroupId ?? null }),
+  })
+}
