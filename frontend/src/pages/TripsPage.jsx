@@ -3,6 +3,7 @@ import { money } from '../format.js'
 import {
   fetchTripSummary,
   fetchTripExpenses,
+  fetchTripSettlement,
   fetchGroupMembers,
   inviteToGroup,
   removeGroupMember,
@@ -58,12 +59,13 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
   async function loadDetail(trip) {
     setLoadingDetail(true)
     try {
-      const [summary, expenses, mem] = await Promise.all([
+      const [summary, expenses, mem, settlement] = await Promise.all([
         fetchTripSummary(trip.id),
         fetchTripExpenses(trip.id),
         fetchGroupMembers(trip.id),
+        fetchTripSettlement(trip.id),
       ])
-      setDetail({ summary, expenses })
+      setDetail({ summary, expenses, settlement })
       setMembers(mem)
       setLocalName(trip.local_name || '')
       setLocalParent(trip.local_parent_group_id ? String(trip.local_parent_group_id) : '')
@@ -303,6 +305,53 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                             ))}
                           </tbody>
                         </table>
+                      )}
+
+                      {detail.settlement && detail.settlement.per_member.length > 1 && (
+                        <>
+                          <h3>💰 Settlement</h3>
+                          <p className="subtitle">
+                            Split equally · {money(detail.settlement.share_per_person)} per person of{' '}
+                            {money(detail.settlement.total_spent)} total.
+                          </p>
+                          <table className="table">
+                            <thead>
+                              <tr>
+                                <th>Person</th>
+                                <th className="right">Paid</th>
+                                <th className="right">Share</th>
+                                <th className="right">Balance</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {detail.settlement.per_member.map((m) => (
+                                <tr key={m.user_id}>
+                                  <td>{m.name}</td>
+                                  <td className="right">{money(m.paid)}</td>
+                                  <td className="right">{money(m.share)}</td>
+                                  <td
+                                    className="right"
+                                    style={{ color: m.balance > 0 ? 'var(--ok)' : m.balance < 0 ? 'var(--danger)' : undefined }}
+                                  >
+                                    {m.balance > 0 ? '+' : ''}
+                                    {money(m.balance)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {detail.settlement.transactions.length > 0 ? (
+                            <ul className="settlement-list">
+                              {detail.settlement.transactions.map((tx, i) => (
+                                <li key={i}>
+                                  <strong>{tx.from_name}</strong> owes <strong>{tx.to_name}</strong> {money(tx.amount)}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="subtitle">Everyone's settled up.</p>
+                          )}
+                        </>
                       )}
 
                       <h3>👥 Who's on this trip</h3>

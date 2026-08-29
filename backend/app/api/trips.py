@@ -210,3 +210,29 @@ def trip_expenses(
         }
         for r in rows
     ]
+
+
+@router.get("/trips/{trip_id}/settlement")
+def trip_settlement(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Who paid what vs. an equal split, and the minimal set of payments to settle up."""
+    _trip_or_404(db, trip_id)
+    _member_or_403(db, trip_id, user.id)
+
+    member_rows = db.query(models.GroupMember).filter(models.GroupMember.group_id == trip_id).all()
+    members = []
+    for m in member_rows:
+        u = db.get(models.User, m.user_id)
+        members.append({"user_id": m.user_id, "name": u.name if u else "", "email": u.email if u else ""})
+
+    expenses = (
+        db.query(models.Expense.user_id, models.Expense.amount)
+        .filter(models.Expense.group_id == trip_id)
+        .all()
+    )
+    expense_dicts = [{"user_id": e.user_id, "amount": e.amount} for e in expenses]
+
+    return trips_logic.trip_settlement(members, expense_dicts)

@@ -356,6 +356,22 @@ h3 {
   color: var(--muted);
 }
 
+.settlement-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.settlement-list li {
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+
 .clickable-row {
   cursor: pointer;
 }

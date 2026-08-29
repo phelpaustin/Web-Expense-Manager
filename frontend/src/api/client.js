@@ -476,6 +476,10 @@ export function fetchTripExpenses(id) {
   return request(`/api/trips/${id}/expenses`)
 }
 
+export function fetchTripSettlement(id) {
+  return request(`/api/trips/${id}/settlement`)
+}
+
 // ── Groups (household / business / shared expense spaces) ────
 export function fetchGroups() {
   return request('/api/groups')
