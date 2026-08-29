@@ -326,6 +326,11 @@ h3 {
   gap: 0.5rem;
 }
 
+.trip-card-header .subtitle {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+}
+
 .trip-detail {
   margin-top: 1rem;
   padding-top: 1rem;
