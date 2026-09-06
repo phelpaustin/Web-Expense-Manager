@@ -11,6 +11,10 @@ used as the ledger label.
 """
 from __future__ import annotations
 
+import io
+
+import pandas as pd
+
 SOURCE_EXPENSE = "Expense"
 SOURCE_PENDING = "Pending"
 SOURCE_MANUAL = "Manual"
@@ -65,3 +69,70 @@ def build_ledger(expenses: list[dict], pending: list[dict], manual: list[dict]) 
 
     unique.sort(key=lambda r: r["date"], reverse=True)
     return unique
+
+
+# ═══════════════════════════════════════════════════════════════
+# BULK IMPORT (bank statement spreadsheet → pending bills)
+# ═══════════════════════════════════════════════════════════════
+_DATE_HEADERS = {"date", "transaction date", "posted date", "posting date", "value date"}
+_SHOP_HEADERS = {"shop", "merchant", "description", "payee", "narrative", "details", "name"}
+_AMOUNT_HEADERS = {"amount", "debit", "withdrawal", "value", "transaction amount"}
+
+
+def _find_column(columns, candidates: set[str]) -> str | None:
+    lower = {str(c).strip().lower(): c for c in columns}
+    for cand in candidates:
+        if cand in lower:
+            return lower[cand]
+    return None
+
+
+def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]:
+    """Parse an uploaded bank-statement spreadsheet (date, shop, amount columns).
+
+    Returns (rows, skipped): rows are {"date": date, "shop": str, "amount": float}
+    (positive, rounded to 2 decimals); skipped is [{"row": <1-based, header excluded>,
+    "reason": str}] for rows that couldn't be parsed.
+    """
+    buf = io.BytesIO(data)
+    if (filename or "").lower().endswith(".csv"):
+        df = pd.read_csv(buf)
+    else:
+        df = pd.read_excel(buf)
+
+    date_col = _find_column(df.columns, _DATE_HEADERS)
+    shop_col = _find_column(df.columns, _SHOP_HEADERS)
+    amount_col = _find_column(df.columns, _AMOUNT_HEADERS)
+    if not date_col or not shop_col or not amount_col:
+        raise ValueError(
+            "Could not find date/shop/amount columns. Expected headers such as "
+            "'Date', 'Shop' (or 'Description'/'Merchant'), and 'Amount'."
+        )
+
+    rows: list[dict] = []
+    skipped: list[dict] = []
+    for i, raw in enumerate(df.to_dict("records"), start=2):  # row 1 is the header
+        try:
+            date_val = pd.to_datetime(raw[date_col]).date()
+            shop_val = str(raw[shop_col]).strip()
+            amount_val = abs(float(raw[amount_col]))
+            if not shop_val or shop_val.lower() == "nan":
+                raise ValueError("missing shop name")
+            if not amount_val:
+                raise ValueError("missing or zero amount")
+        except Exception as exc:  # noqa: BLE001 – any parse issue just skips the row
+            skipped.append({"row": i, "reason": str(exc)})
+            continue
+        rows.append({"date": date_val, "shop": shop_val, "amount": round(amount_val, 2)})
+    return rows, skipped
+
+
+def flag_duplicates(rows: list[dict], existing: list[tuple]) -> None:
+    """Mark rows (in place, adds "possible_duplicate") whose (date, amount) matches
+    an existing expense or pending bill. The shop name is deliberately ignored —
+    bank statement wording rarely matches what was typed in by hand — so these are
+    flagged for the user to manually verify and delete if they're truly duplicates.
+    """
+    existing_keys = {(str(d), round(float(a), 2)) for d, a in existing}
+    for row in rows:
+        row["possible_duplicate"] = (str(row["date"]), row["amount"]) in existing_keys

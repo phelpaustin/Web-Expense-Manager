@@ -9,6 +9,10 @@ export default function BillsPage({
   onDeletePending,
   onUploadReceipt,
   onUploadBill,
+  onBulkUploadBills,
+  bulkImportNotice,
+  onDismissBulkNotice,
+  onDismissDuplicate,
   onViewReceipt,
   onDeleteReceipt,
   ledger,
@@ -36,8 +40,43 @@ export default function BillsPage({
               }}
             />
           </label>
+          <label className="btn-upload btn-upload-bulk">
+            📊 Bulk import from bank statement
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => {
+                const f = e.target.files[0]
+                if (f) onBulkUploadBills(f)
+                e.target.value = ''
+              }}
+            />
+          </label>
           <span className="subtitle">Attach a receipt now and itemise it later.</span>
         </div>
+        {bulkImportNotice && (
+          <div className="notice">
+            <p>
+              Imported {bulkImportNotice.created} bill(s)
+              {bulkImportNotice.possible_duplicates > 0 &&
+                ` — ${bulkImportNotice.possible_duplicates} flagged as possible duplicates, please review below`}
+              {bulkImportNotice.skipped?.length > 0 && ` — ${bulkImportNotice.skipped.length} row(s) skipped`}
+              .
+            </p>
+            {bulkImportNotice.skipped?.length > 0 && (
+              <ul className="notice-details">
+                {bulkImportNotice.skipped.map((s) => (
+                  <li key={s.row}>
+                    Row {s.row}: {s.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button className="icon-btn" onClick={onDismissBulkNotice} title="Dismiss">
+              ✕
+            </button>
+          </div>
+        )}
         <form className="add-form" onSubmit={onAddPending}>
           <input
             type="date"
@@ -84,8 +123,15 @@ export default function BillsPage({
             </thead>
             <tbody>
               {pendingBills.map((b) => (
-                <tr key={b.id}>
-                  <td>{b.date}</td>
+                <tr key={b.id} className={b.possible_duplicate ? 'row-flagged' : ''}>
+                  <td>
+                    {b.date}
+                    {b.possible_duplicate && (
+                      <span className="duplicate-badge" title="Same date/amount as an existing bill — please verify">
+                        ⚠ possible duplicate
+                      </span>
+                    )}
+                  </td>
                   <td>{b.shop}</td>
                   <td>{b.note}</td>
                   <td className="right">{money(b.amount)}</td>
@@ -114,6 +160,15 @@ export default function BillsPage({
                     </label>
                   </td>
                   <td className="right nowrap">
+                    {b.possible_duplicate && (
+                      <button
+                        className="icon-btn"
+                        onClick={() => onDismissDuplicate(b.id)}
+                        title="Not a duplicate — clear flag"
+                      >
+                        ✔
+                      </button>
+                    )}
                     <button className="icon-btn" onClick={() => onItemise(b.id)} title="Itemise into an expense">
                       ✓
                     </button>

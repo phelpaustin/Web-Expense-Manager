@@ -31,6 +31,8 @@ import {
   itemisePendingBill,
   uploadReceipt,
   uploadBill,
+  bulkUploadPendingBills,
+  dismissDuplicate,
   viewReceipt,
   deleteReceipt,
   fetchLedger,
@@ -94,6 +96,7 @@ export default function App() {
   const [recurringForm, setRecurringForm] = useState(EMPTY_RECURRING)
   const [savingRecurring, setSavingRecurring] = useState(false)
   const [pendingBills, setPendingBills] = useState([])
+  const [bulkImportNotice, setBulkImportNotice] = useState(null)
   const [pendingForm, setPendingForm] = useState(EMPTY_BILL)
   const [ledger, setLedger] = useState([])
   const [manualForm, setManualForm] = useState(EMPTY_BILL)
@@ -565,6 +568,25 @@ export default function App() {
     }
   }
 
+  async function handleBulkUploadBills(file) {
+    try {
+      const result = await bulkUploadPendingBills(file)
+      setBulkImportNotice(result)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDismissDuplicate(id) {
+    try {
+      await dismissDuplicate(id)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   function handleViewReceipt(id) {
     viewReceipt(id).catch((err) => setError(err.message))
   }
@@ -723,6 +745,10 @@ export default function App() {
               onDeletePending={handleDeletePending}
               onUploadReceipt={handleUploadReceipt}
               onUploadBill={handleUploadBill}
+              onBulkUploadBills={handleBulkUploadBills}
+              bulkImportNotice={bulkImportNotice}
+              onDismissBulkNotice={() => setBulkImportNotice(null)}
+              onDismissDuplicate={handleDismissDuplicate}
               onViewReceipt={handleViewReceipt}
               onDeleteReceipt={handleDeleteReceipt}
               ledger={ledger}

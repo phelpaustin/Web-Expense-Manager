@@ -288,6 +288,16 @@ export function uploadBill(file, { shop = '', amount = '' } = {}) {
   return request('/api/pending-bills/upload', { method: 'POST', body })
 }
 
+export function bulkUploadPendingBills(file) {
+  const body = new FormData()
+  body.append('file', file)
+  return request('/api/pending-bills/bulk-upload', { method: 'POST', body })
+}
+
+export function dismissDuplicate(billId) {
+  return request(`/api/pending-bills/${billId}/dismiss-duplicate`, { method: 'POST' })
+}
+
 export function uploadReceipt(billId, file) {
   const body = new FormData()
   body.append('file', file)

@@ -848,6 +848,37 @@ button {
   display: none;
 }
 
+.btn-upload-bulk {
+  background: #4f46e5;
+}
+
+.notice {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  position: relative;
+  color: #92400e;
+}
+
+.notice p {
+  margin: 0;
+  padding-right: 1.5rem;
+}
+
+.notice-details {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+}
+
+.notice .icon-btn {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+}
+
 .add-form input[type='file'] {
   font-size: 0.85rem;
   color: var(--muted);
@@ -1163,6 +1194,22 @@ button {
 .source-manual {
   background: rgba(109, 123, 255, 0.14);
   color: #4f46e5;
+}
+
+.duplicate-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+.row-flagged td {
+  background: rgba(239, 68, 68, 0.04);
 }
 
 /* ============================================================

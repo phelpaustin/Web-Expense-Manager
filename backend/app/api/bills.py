@@ -39,6 +39,7 @@ def _serialize_pending(b: models.PendingBill, has_receipt: bool) -> dict:
         "note": b.note,
         "status": b.status,
         "has_receipt": has_receipt,
+        "possible_duplicate": bool(b.possible_duplicate),
     }
 
 
@@ -110,6 +111,73 @@ async def upload_pending(
     db.commit()
     db.refresh(b)
     return _serialize_pending(b, True)
+
+
+@router.post("/pending-bills/bulk-upload", status_code=201)
+async def bulk_upload_pending(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Import pending bills in bulk from a bank-statement spreadsheet (date, shop,
+    amount columns) — no receipt is attached, attach one later per bill. Rows whose
+    (date, amount) match an existing expense or pending bill are flagged as possible
+    duplicates so they can be reviewed and deleted if needed.
+    """
+    name = file.filename or ""
+    if not name.lower().endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Only .xlsx, .xls or .csv files are allowed")
+    data = await file.read()
+    if len(data) > _MAX_RECEIPT_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+
+    try:
+        rows, skipped = bills_logic.parse_bill_rows(data, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not rows:
+        return {"created": 0, "possible_duplicates": 0, "skipped": skipped}
+
+    existing = [(e["date"], e["amount"]) for e in fetch_expenses(db, user.id, scope="personal")]
+    existing += [
+        (p.date, p.amount)
+        for p in db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id).all()
+    ]
+    bills_logic.flag_duplicates(rows, existing)
+
+    duplicates = 0
+    for row in rows:
+        db.add(
+            models.PendingBill(
+                user_id=user.id,
+                date=row["date"],
+                shop=row["shop"],
+                amount=row["amount"],
+                note="Bulk import",
+                status="pending",
+                possible_duplicate=row["possible_duplicate"],
+            )
+        )
+        duplicates += 1 if row["possible_duplicate"] else 0
+    db.commit()
+    return {"created": len(rows), "possible_duplicates": duplicates, "skipped": skipped}
+
+
+@router.post("/pending-bills/{bill_id}/dismiss-duplicate")
+def dismiss_duplicate(
+    bill_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Acknowledge a flagged bill isn't actually a duplicate, clearing the flag."""
+    bill = _pending_or_404(db, bill_id, user.id)
+    bill.possible_duplicate = False
+    db.commit()
+    has_receipt = (
+        db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first() is not None
+    )
+    return _serialize_pending(bill, has_receipt)
 
 
 @router.delete("/pending-bills/{bill_id}", status_code=204)

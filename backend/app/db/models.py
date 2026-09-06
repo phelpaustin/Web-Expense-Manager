@@ -94,6 +94,8 @@ class PendingBill(Base):
     note = Column(String, nullable=False, default="")
     # "pending" until itemised into a real expense.
     status = Column(String, nullable=False, default="pending")
+    # Set on bulk import when (date, amount) matches an existing expense/pending bill.
+    possible_duplicate = Column(Boolean, nullable=False, default=False)
 
 
 class ManualBill(Base):
