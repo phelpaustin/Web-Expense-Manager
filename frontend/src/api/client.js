@@ -251,6 +251,22 @@ export function deleteRecurring(id) {
   return request(`/api/recurring/${id}`, { method: 'DELETE' })
 }
 
+export function updateRecurring(id, template) {
+  return request(`/api/recurring/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(template),
+  })
+}
+
+export function backfillRecurring(id, entry) {
+  return request(`/api/recurring/${id}/backfill`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  })
+}
+
 export function applyRecurring(id) {
   return request(`/api/recurring/${id}/apply`, { method: 'POST' })
 }
@@ -445,12 +461,12 @@ export function fetchPriceTrends() {
   return request('/api/analytics/price-trends')
 }
 
-export function fetchPriceShopComparison(item) {
-  return request(`/api/analytics/price-trends/shops?item=${encodeURIComponent(item)}`)
+export function fetchPriceShopComparison(item, unit) {
+  return request(`/api/analytics/price-trends/shops?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}`)
 }
 
-export function fetchPriceHistory(item) {
-  return request(`/api/analytics/price-trends/history?item=${encodeURIComponent(item)}`)
+export function fetchPriceHistory(item, unit) {
+  return request(`/api/analytics/price-trends/history?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}`)
 }
 
 // ── Trips ─────────────────────────────────────────────

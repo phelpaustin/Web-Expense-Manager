@@ -337,6 +337,25 @@ h3 {
   border-top: 1px solid var(--border-soft);
 }
 
+.recurring-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.recurring-detail h3 {
+  margin: 0 0 0.35rem;
+}
+
+.recurring-detail .add-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .trip-summary-row {
   display: flex;
   gap: 1.5rem;

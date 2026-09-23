@@ -30,6 +30,12 @@ class RecurringCreate(BaseModel):
         return v
 
 
+class RecurringBackfill(BaseModel):
+    start_date: datetime.date
+    end_date: datetime.date | None = None
+    amount: float | None = Field(default=None, gt=0)
+
+
 class RecurringUpdate(BaseModel):
     item: str | None = Field(default=None, min_length=1)
     category: str | None = None
@@ -146,6 +152,44 @@ def apply_recurring(
     t.last_applied = today
     db.commit()
     return {"applied": 1, "item": t.item}
+
+
+@router.post("/recurring/{template_id}/backfill")
+def backfill_recurring(
+    template_id: int,
+    payload: RecurringBackfill,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Post historical expenses for a template that existed before it was
+    tracked (e.g. rent paid monthly for the past year). Pass ``amount`` to
+    use a different rate than the template's current amount for this
+    stretch — call again with a later ``start_date`` and the new amount to
+    record a mid-history rate change (e.g. a rent increase).
+    """
+    today = datetime.date.today()
+    t = _get_owned_or_404(db, template_id, user.id)
+    end = min(payload.end_date or today, today)
+    if payload.start_date > end:
+        raise HTTPException(status_code=400, detail="start_date must not be after end_date")
+    dates = rec.backfill_dates(payload.start_date, end, t.frequency)
+    if not dates:
+        return {"applied": 0, "item": t.item}
+    amount = payload.amount if payload.amount is not None else t.amount
+    for when in dates:
+        db.add(
+            models.Expense(
+                user_id=user.id,
+                date=when,
+                category=t.category or "Recurring",
+                description=t.item,
+                amount=amount,
+            )
+        )
+    if t.last_applied is None or dates[-1] > t.last_applied:
+        t.last_applied = dates[-1]
+    db.commit()
+    return {"applied": len(dates), "item": t.item, "dates": [d.isoformat() for d in dates]}
 
 
 @router.post("/recurring/apply-due")

@@ -49,16 +49,18 @@ def analytics_price_trends(
 @router.get("/analytics/price-trends/shops")
 def analytics_price_shop_comparison(
     item: str,
+    unit: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.shop_comparison(fetch_expenses(db, user.id), item)
+    return price_tracker.shop_comparison(fetch_expenses(db, user.id), item, unit)
 
 
 @router.get("/analytics/price-trends/history")
 def analytics_price_history(
     item: str,
+    unit: str | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.price_history(fetch_expenses(db, user.id), item)
+    return price_tracker.price_history(fetch_expenses(db, user.id), item, unit)

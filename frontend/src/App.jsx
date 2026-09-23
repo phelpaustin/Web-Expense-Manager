@@ -22,7 +22,9 @@ import {
   deleteIncome,
   fetchRecurring,
   createRecurring,
+  updateRecurring,
   deleteRecurring,
+  backfillRecurring,
   applyRecurring,
   applyDueRecurring,
   fetchPendingBills,
@@ -504,6 +506,24 @@ export default function App() {
     }
   }
 
+  async function handleUpdateRecurring(id, changes) {
+    try {
+      await updateRecurring(id, changes)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleBackfillRecurring(id, entry) {
+    try {
+      await backfillRecurring(id, entry)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function handleAddPending(e) {
     e.preventDefault()
     try {
@@ -730,6 +750,8 @@ export default function App() {
               onApply={handleApplyRecurring}
               onApplyDue={handleApplyDue}
               onDelete={handleDeleteRecurring}
+              onUpdate={handleUpdateRecurring}
+              onBackfill={handleBackfillRecurring}
             />
           }
         />

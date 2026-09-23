@@ -50,3 +50,19 @@ def due_dates(last_applied: date | None, frequency: str, today: date | None = No
         dates.append(nxt)
         nxt = nxt + timedelta(days=days)
     return dates
+
+
+def backfill_dates(start: date, end: date, frequency: str) -> list[date]:
+    """Every posting date from ``start`` through ``end`` (both inclusive), one
+    per period. Used to fill in history for a template that existed before it
+    was entered into the tracker (e.g. rent paid monthly for the past year).
+    """
+    if start > end:
+        return []
+    days = _freq_days(frequency)
+    dates: list[date] = [start]
+    nxt = start + timedelta(days=days)
+    while nxt <= end and len(dates) < _CATCHUP_CAP:
+        dates.append(nxt)
+        nxt = nxt + timedelta(days=days)
+    return dates
