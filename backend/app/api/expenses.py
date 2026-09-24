@@ -78,6 +78,10 @@ class ExpenseUpdate(BaseModel):
     group_id: int | None = None
 
 
+class ExpenseBulkCreate(BaseModel):
+    items: list[ExpenseCreate] = Field(min_length=1)
+
+
 def fetch_expenses(
     db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
 ) -> list[dict]:
@@ -211,6 +215,29 @@ def create_expense(
     # Auto-learn any new category/subcategory/unit/shop into the user's taxonomy.
     ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
     return expense
+
+
+@router.post("/expenses/bulk", response_model=list[ExpenseOut], status_code=201)
+def create_expenses_bulk(
+    payload: ExpenseBulkCreate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Add several line items from a single bill/receipt in one request."""
+    for item in payload.items:
+        _require_group_write_access(db, item.group_id, user.id)
+
+    created: list[models.Expense] = []
+    for item in payload.items:
+        expense = models.Expense(user_id=user.id, **item.model_dump())
+        expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
+        db.add(expense)
+        created.append(expense)
+    db.commit()
+    for expense in created:
+        db.refresh(expense)
+        ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
+    return created
 
 
 @router.put("/expenses/{expense_id}", response_model=ExpenseOut)

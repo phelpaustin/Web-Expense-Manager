@@ -191,6 +191,14 @@ export function createExpense(expense) {
   })
 }
 
+export function createExpensesBulk(items) {
+  return request('/api/expenses/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+}
+
 export function updateExpense(id, changes) {
   return request(`/api/expenses/${id}`, {
     method: 'PUT',

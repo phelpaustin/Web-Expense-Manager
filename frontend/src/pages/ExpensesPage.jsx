@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { money } from '../format.js'
 import { suggestCategory, autoCategorize } from '../api/client.js'
 
@@ -12,6 +12,7 @@ export default function ExpensesPage({
   setForm,
   saving,
   onAdd,
+  onAddBill,
   editingId,
   editForm,
   setEditForm,
@@ -28,6 +29,9 @@ export default function ExpensesPage({
   trips,
   groups,
 }) {
+  const [billMode, setBillMode] = useState(false)
+  const [billItems, setBillItems] = useState([])
+  const [submittingBill, setSubmittingBill] = useState(false)
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
@@ -44,6 +48,7 @@ export default function ExpensesPage({
   const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
+  const [groupByBill, setGroupByBill] = useState(true)
 
   const groupName = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.name
   const groupSpaceType = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.space_type || 'trip'
@@ -74,6 +79,26 @@ export default function ExpensesPage({
   const currentPage = Math.min(page, totalPages)
   const pageStart = (currentPage - 1) * pageSize
   const pagedExpenses = filteredExpenses.slice(pageStart, pageStart + pageSize)
+
+  // Club same-day, same-shop rows into one "bill" group (mirrors how a single
+  // receipt is entered, whether one at a time or via bill mode). Rows without a
+  // shop aren't grouped — there's nothing tying them to the same receipt.
+  const billGroups = useMemo(() => {
+    const groups = []
+    const indexByKey = new Map()
+    for (const e of pagedExpenses) {
+      const shop = (e.shop || '').trim()
+      const key = shop ? `${e.date}::${shop}::${e.group_id ?? 'personal'}` : `single-${e.id}`
+      let group = indexByKey.get(key)
+      if (!group) {
+        group = { key, date: e.date, shop, group_id: e.group_id, items: [] }
+        indexByKey.set(key, group)
+        groups.push(group)
+      }
+      group.items.push(e)
+    }
+    return groups
+  }, [pagedExpenses])
 
   function resetToFirstPage(setter) {
     return (value) => {
@@ -132,6 +157,79 @@ export default function ExpensesPage({
     }
   }
 
+  const billTotal = billItems.reduce((sum, it) => sum + it.amount, 0)
+
+  function toggleBillMode() {
+    if (billMode && billItems.length > 0 && !window.confirm(`Discard ${billItems.length} unsaved item(s) from this bill?`)) {
+      return
+    }
+    setBillMode((v) => !v)
+    setBillItems([])
+  }
+
+  // In bill mode, submitting the form stashes the current line item locally
+  // instead of saving it, so the item fields can be reused for the next one.
+  function handleFormSubmit(e) {
+    if (!billMode) {
+      onAdd(e)
+      return
+    }
+    e.preventDefault()
+    setBillItems((prev) => [
+      ...prev,
+      {
+        category: form.category,
+        subcategory: form.subcategory,
+        description: form.description,
+        brand: form.brand,
+        amount: parseFloat(form.amount),
+        quantity: parseFloat(form.quantity) || 1,
+        unit: form.unit || 'Count',
+      },
+    ])
+    setForm((f) => ({ ...f, category: '', subcategory: '', description: '', brand: '', amount: '', quantity: '1', unit: 'Count' }))
+  }
+
+  function removeBillItem(i) {
+    setBillItems((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  async function handleSubmitBill() {
+    if (billItems.length === 0) return
+    setSubmittingBill(true)
+    try {
+      await onAddBill(
+        billItems.map((it) => ({
+          date: form.date,
+          category: it.category,
+          subcategory: it.subcategory,
+          description: it.description,
+          amount: it.amount,
+          quantity: it.quantity,
+          unit: it.unit,
+          shop: form.shop,
+          brand: it.brand,
+          currency: form.currency || 'SEK',
+          group_id: form.group_id ? parseInt(form.group_id, 10) : null,
+        })),
+      )
+      setBillItems([])
+      setForm((f) => ({
+        ...f,
+        category: '',
+        subcategory: '',
+        description: '',
+        brand: '',
+        amount: '',
+        quantity: '1',
+        unit: 'Count',
+        shop: '',
+      }))
+    } finally {
+      setSubmittingBill(false)
+    }
+  }
+
   async function handleImportSubmit(e) {
     e.preventDefault()
     if (!file) return
@@ -173,6 +271,126 @@ export default function ExpensesPage({
     } catch (err) {
       updateSkipped(i, 'reason', err.message)
     }
+  }
+
+  function renderExpenseRow(e) {
+    if (editingId === e.id) {
+      return (
+        <tr key={e.id} className="editing">
+          <td>
+            <input
+              type="date"
+              value={editForm.date}
+              onChange={(ev) => setEditForm({ ...editForm, date: ev.target.value })}
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              list="cat-options"
+              value={editForm.category}
+              onChange={(ev) => setEditForm({ ...editForm, category: ev.target.value })}
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              list="subcat-edit-options"
+              value={editForm.subcategory}
+              onChange={(ev) => setEditForm({ ...editForm, subcategory: ev.target.value })}
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              list="shop-options"
+              value={editForm.shop}
+              onChange={(ev) => setEditForm({ ...editForm, shop: ev.target.value })}
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              value={editForm.description}
+              onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
+            />
+          </td>
+          <td>{groupName(e.group_id) || '—'}</td>
+          <td className="right">
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              className="amount-input"
+              value={editForm.quantity}
+              onChange={(ev) => setEditForm({ ...editForm, quantity: ev.target.value })}
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              list="unit-options"
+              className="unit-input"
+              value={editForm.unit}
+              onChange={(ev) => setEditForm({ ...editForm, unit: ev.target.value })}
+            />
+          </td>
+          <td className="right">
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              className="amount-input"
+              value={editForm.amount}
+              onChange={(ev) => setEditForm({ ...editForm, amount: ev.target.value })}
+            />
+          </td>
+          <td className="right nowrap">
+            <button className="icon-btn save" onClick={() => saveEdit(e.id)} title="Save">
+              ✓
+            </button>
+            <button className="icon-btn" onClick={cancelEdit} title="Cancel">
+              ✕
+            </button>
+          </td>
+        </tr>
+      )
+    }
+    return (
+      <tr key={e.id}>
+        <td>{e.date}</td>
+        <td>{e.category}</td>
+        <td>{e.subcategory}</td>
+        <td>{e.shop}</td>
+        <td>{e.description}</td>
+        <td>
+          {groupName(e.group_id) ? (
+            <span title={e.created_by ? `Added by ${e.created_by}` : undefined}>
+              {SPACE_TYPE_ICONS[groupSpaceType(e.group_id)] || '📁'} {groupName(e.group_id)}
+            </span>
+          ) : (
+            '—'
+          )}
+        </td>
+        <td className="right">{e.quantity}</td>
+        <td>{e.unit}</td>
+        <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
+          {money(e.amount)}
+        </td>
+        <td className="right nowrap">
+          {canEditExpense(e) && (
+            <>
+              <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
+                ✎
+              </button>
+              <button className="delete-btn" onClick={() => onDelete(e.id)} title="Delete">
+                ✕
+              </button>
+            </>
+          )}
+        </td>
+      </tr>
+    )
   }
 
   return (
@@ -296,7 +514,18 @@ export default function ExpensesPage({
 
       <section className="panel">
         <h2>➕ Add expense</h2>
-        <form className="add-form" onSubmit={onAdd}>
+        <div className="auto-cat-row">
+          <button type="button" className="ghost-btn" onClick={toggleBillMode}>
+            {billMode ? '✕ Exit bill mode' : '🧾 Add by bill'}
+          </button>
+          {billMode && (
+            <span className="subtitle">
+              Add every item from one receipt, then submit them all together. Date/shop/currency/space are shared by
+              the whole bill.
+            </span>
+          )}
+        </div>
+        <form className="add-form" onSubmit={handleFormSubmit}>
           <input
             type="date"
             required
@@ -391,10 +620,58 @@ export default function ExpensesPage({
                 ))}
             </select>
           )}
-          <button type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Add'}
+          <button type="submit" disabled={billMode ? false : saving}>
+            {billMode ? '➕ Add item to bill' : saving ? 'Saving…' : 'Add'}
           </button>
         </form>
+
+        {billMode && (
+          <div className="bill-tray">
+            {billItems.length === 0 ? (
+              <p className="subtitle">No items added yet — fill in the fields above and click "Add item to bill".</p>
+            ) : (
+              <>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Description</th>
+                      <th className="right">Qty</th>
+                      <th>Unit</th>
+                      <th className="right">Amount</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billItems.map((it, i) => (
+                      <tr key={i}>
+                        <td>{it.category}</td>
+                        <td>{it.description}</td>
+                        <td className="right">{it.quantity}</td>
+                        <td>{it.unit}</td>
+                        <td className="right">{money(it.amount)}</td>
+                        <td className="right nowrap">
+                          <button className="delete-btn" onClick={() => removeBillItem(i)} title="Remove">
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="bill-total-row">
+                  <strong>
+                    Bill total so far: {money(billTotal)} ({billItems.length} item{billItems.length === 1 ? '' : 's'})
+                  </strong>
+                  <span className="subtitle">Check this against the receipt total before submitting.</span>
+                </div>
+                <button type="button" onClick={handleSubmitBill} disabled={submittingBill}>
+                  {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal)})`}
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="auto-cat-row">
           <button type="button" className="ghost-btn" onClick={handleAutoCategorize} disabled={autoCatBusy}>
@@ -485,6 +762,9 @@ export default function ExpensesPage({
                 Clear filters
               </button>
             )}
+            <button type="button" className="ghost-btn" onClick={() => setGroupByBill((v) => !v)}>
+              {groupByBill ? '📄 Flat view' : '🧾 Bill view'}
+            </button>
           </div>
         </section>
       )}
@@ -506,122 +786,21 @@ export default function ExpensesPage({
             </tr>
           </thead>
           <tbody>
-            {pagedExpenses.map((e) =>
-              editingId === e.id ? (
-                <tr key={e.id} className="editing">
-                  <td>
-                    <input
-                      type="date"
-                      value={editForm.date}
-                      onChange={(ev) => setEditForm({ ...editForm, date: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="cat-options"
-                      value={editForm.category}
-                      onChange={(ev) => setEditForm({ ...editForm, category: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="subcat-edit-options"
-                      value={editForm.subcategory}
-                      onChange={(ev) => setEditForm({ ...editForm, subcategory: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="shop-options"
-                      value={editForm.shop}
-                      onChange={(ev) => setEditForm({ ...editForm, shop: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      value={editForm.description}
-                      onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
-                    />
-                  </td>
-                  <td>{groupName(e.group_id) || '—'}</td>
-                  <td className="right">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className="amount-input"
-                      value={editForm.quantity}
-                      onChange={(ev) => setEditForm({ ...editForm, quantity: ev.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      list="unit-options"
-                      className="unit-input"
-                      value={editForm.unit}
-                      onChange={(ev) => setEditForm({ ...editForm, unit: ev.target.value })}
-                    />
-                  </td>
-                  <td className="right">
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className="amount-input"
-                      value={editForm.amount}
-                      onChange={(ev) => setEditForm({ ...editForm, amount: ev.target.value })}
-                    />
-                  </td>
-                  <td className="right nowrap">
-                    <button className="icon-btn save" onClick={() => saveEdit(e.id)} title="Save">
-                      ✓
-                    </button>
-                    <button className="icon-btn" onClick={cancelEdit} title="Cancel">
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={e.id}>
-                  <td>{e.date}</td>
-                  <td>{e.category}</td>
-                  <td>{e.subcategory}</td>
-                  <td>{e.shop}</td>
-                  <td>{e.description}</td>
-                  <td>
-                    {groupName(e.group_id) ? (
-                      <span title={e.created_by ? `Added by ${e.created_by}` : undefined}>
-                        {SPACE_TYPE_ICONS[groupSpaceType(e.group_id)] || '📁'} {groupName(e.group_id)}
-                      </span>
-                    ) : (
-                      '—'
+            {groupByBill
+              ? billGroups.map((group) => (
+                  <Fragment key={group.key}>
+                    {group.items.length > 1 && (
+                      <tr className="bill-group-header">
+                        <td colSpan={10}>
+                          🧾 {group.date} · {group.shop || 'No shop'} · {group.items.length} items · Bill total:{' '}
+                          {money(group.items.reduce((sum, e) => sum + e.amount, 0))}
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="right">{e.quantity}</td>
-                  <td>{e.unit}</td>
-                  <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
-                    {money(e.amount)}
-                  </td>
-                  <td className="right nowrap">
-                    {canEditExpense(e) && (
-                      <>
-                        <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
-                          ✎
-                        </button>
-                        <button className="delete-btn" onClick={() => onDelete(e.id)} title="Delete">
-                          ✕
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              )
-            )}
+                    {group.items.map((e) => renderExpenseRow(e))}
+                  </Fragment>
+                ))
+              : pagedExpenses.map((e) => renderExpenseRow(e))}
           </tbody>
         </table>
       )}

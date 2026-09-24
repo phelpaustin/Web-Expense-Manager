@@ -926,6 +926,26 @@ button {
   margin-top: 0.85rem;
 }
 
+.bill-tray {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.bill-total-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.75rem 0;
+}
+
+.bill-group-header td {
+  background: var(--surface-2);
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 0.4rem 0.75rem;
+}
+
 .add-form input[type='file']::file-selector-button {
   background: var(--surface-2);
   border: 1px solid var(--border);

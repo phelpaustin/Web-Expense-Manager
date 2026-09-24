@@ -7,6 +7,7 @@ import {
   fetchCategories,
   fetchBudgetStatus,
   createExpense,
+  createExpensesBulk,
   updateExpense,
   deleteExpense,
   setBudget,
@@ -298,6 +299,11 @@ export default function App() {
 
   async function handleAddRow(payload) {
     await createExpense(payload)
+    await loadAll()
+  }
+
+  async function handleAddBill(items) {
+    await createExpensesBulk(items)
     await loadAll()
   }
 
@@ -706,6 +712,7 @@ export default function App() {
               setForm={setForm}
               saving={saving}
               onAdd={handleAdd}
+              onAddBill={handleAddBill}
               editingId={editingId}
               editForm={editForm}
               setEditForm={setEditForm}
