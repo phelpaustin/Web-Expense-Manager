@@ -18,7 +18,7 @@ export default function PriceTrackerPage({ onError }) {
   }, [])
 
   async function selectItem(t) {
-    const key = `${t.item}::${t.unit}`
+    const key = `${t.item}::${t.unit}::${t.category}`
     if (selected === key) {
       setSelected(null)
       setDetail(null)
@@ -27,8 +27,8 @@ export default function PriceTrackerPage({ onError }) {
     setSelected(key)
     try {
       const [shops, history] = await Promise.all([
-        fetchPriceShopComparison(t.item, t.unit),
-        fetchPriceHistory(t.item, t.unit),
+        fetchPriceShopComparison(t.item, t.unit, t.category),
+        fetchPriceHistory(t.item, t.unit, t.category),
       ])
       setDetail({ shops, history })
     } catch (err) {
@@ -41,8 +41,9 @@ export default function PriceTrackerPage({ onError }) {
       <h1 className="page-title">📈 Price tracker</h1>
       <p className="subtitle">
         See how prices for items you've bought more than once have changed over time, and compare shops. Prices are
-        only compared across purchases of the same item recorded in the same unit — a toothpaste bought "1 Count" is
-        tracked separately from one logged in "kg" or "litre", since mixing units would compare unrelated numbers.
+        only compared across purchases of the same item recorded in the same unit and category — a toothpaste bought
+        "1 Count" is tracked separately from one logged in "kg" or "litre", or filed under a different category, since
+        mixing either would compare unrelated numbers.
       </p>
 
       {loading ? (
@@ -65,7 +66,7 @@ export default function PriceTrackerPage({ onError }) {
           </thead>
           <tbody>
             {trends.map((t) => {
-              const key = `${t.item}::${t.unit}`
+              const key = `${t.item}::${t.unit}::${t.category}`
               return (
                 <Fragment key={key}>
                   <tr className="clickable-row" onClick={() => selectItem(t)}>

@@ -461,12 +461,16 @@ export function fetchPriceTrends() {
   return request('/api/analytics/price-trends')
 }
 
-export function fetchPriceShopComparison(item, unit) {
-  return request(`/api/analytics/price-trends/shops?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}`)
+export function fetchPriceShopComparison(item, unit, category) {
+  return request(
+    `/api/analytics/price-trends/shops?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}&category=${encodeURIComponent(category)}`,
+  )
 }
 
-export function fetchPriceHistory(item, unit) {
-  return request(`/api/analytics/price-trends/history?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}`)
+export function fetchPriceHistory(item, unit, category) {
+  return request(
+    `/api/analytics/price-trends/history?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}&category=${encodeURIComponent(category)}`,
+  )
 }
 
 // ── Trips ─────────────────────────────────────────────
