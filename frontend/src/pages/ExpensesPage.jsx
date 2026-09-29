@@ -381,7 +381,26 @@ export default function ExpensesPage({
               onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
             />
           </td>
-          <td>{groupName(e.group_id) || '—'}</td>
+          <td>
+            {allSpaces.length > 0 ? (
+              <select
+                value={editForm.group_id || ''}
+                onChange={(ev) => setEditForm({ ...editForm, group_id: ev.target.value })}
+                title="Move this expense to a different Expense Space (or personal)"
+              >
+                <option value="">Personal expenses</option>
+                {allSpaces
+                  .filter((g) => g.role !== 'viewer')
+                  .map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
+                    </option>
+                  ))}
+              </select>
+            ) : (
+              '—'
+            )}
+          </td>
           <td className="right">
             <input
               type="number"
@@ -874,18 +893,16 @@ export default function ExpensesPage({
           <tbody>
             {groupByBill
               ? billGroups.map((group) => {
-                  const isSingle = group.items.length <= 1
-                  const isExpanded = isSingle || expandedBillKeys.has(group.key)
+                  const isExpanded = expandedBillKeys.has(group.key)
                   return (
                     <Fragment key={group.key}>
-                      {!isSingle && (
-                        <tr className="bill-group-header clickable-row" onClick={() => toggleBillGroup(group.key)}>
-                          <td colSpan={10}>
-                            {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {group.shop || 'No shop'} · {group.items.length}{' '}
-                            items · Bill total: {money(group.items.reduce((sum, e) => sum + e.amount, 0))}
-                          </td>
-                        </tr>
-                      )}
+                      <tr className="bill-group-header clickable-row" onClick={() => toggleBillGroup(group.key)}>
+                        <td colSpan={10}>
+                          {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {group.shop || 'No shop'} · {group.items.length}{' '}
+                          item{group.items.length === 1 ? '' : 's'} · Bill total:{' '}
+                          {money(group.items.reduce((sum, e) => sum + e.amount, 0))}
+                        </td>
+                      </tr>
                       {isExpanded && group.items.map((e) => renderExpenseRow(e))}
                     </Fragment>
                   )

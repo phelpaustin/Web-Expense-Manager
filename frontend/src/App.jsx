@@ -377,6 +377,7 @@ export default function App() {
       quantity: String(expense.quantity ?? 1),
       unit: expense.unit || 'Count',
       shop: expense.shop || '',
+      group_id: expense.group_id ? String(expense.group_id) : '',
     })
   }
 
@@ -396,6 +397,7 @@ export default function App() {
         quantity: parseFloat(editForm.quantity) || 1,
         unit: editForm.unit || 'Count',
         shop: editForm.shop,
+        group_id: editForm.group_id ? parseInt(editForm.group_id, 10) : null,
       })
       cancelEdit()
       await loadAll()
