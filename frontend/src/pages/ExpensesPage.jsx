@@ -49,6 +49,16 @@ export default function ExpensesPage({
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [groupByBill, setGroupByBill] = useState(true)
+  const [expandedBillKeys, setExpandedBillKeys] = useState(() => new Set())
+
+  function toggleBillGroup(key) {
+    setExpandedBillKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   const groupName = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.name
   const groupSpaceType = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.space_type || 'trip'
@@ -787,19 +797,23 @@ export default function ExpensesPage({
           </thead>
           <tbody>
             {groupByBill
-              ? billGroups.map((group) => (
-                  <Fragment key={group.key}>
-                    {group.items.length > 1 && (
-                      <tr className="bill-group-header">
-                        <td colSpan={10}>
-                          🧾 {group.date} · {group.shop || 'No shop'} · {group.items.length} items · Bill total:{' '}
-                          {money(group.items.reduce((sum, e) => sum + e.amount, 0))}
-                        </td>
-                      </tr>
-                    )}
-                    {group.items.map((e) => renderExpenseRow(e))}
-                  </Fragment>
-                ))
+              ? billGroups.map((group) => {
+                  const isSingle = group.items.length <= 1
+                  const isExpanded = isSingle || expandedBillKeys.has(group.key)
+                  return (
+                    <Fragment key={group.key}>
+                      {!isSingle && (
+                        <tr className="bill-group-header clickable-row" onClick={() => toggleBillGroup(group.key)}>
+                          <td colSpan={10}>
+                            {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {group.shop || 'No shop'} · {group.items.length}{' '}
+                            items · Bill total: {money(group.items.reduce((sum, e) => sum + e.amount, 0))}
+                          </td>
+                        </tr>
+                      )}
+                      {isExpanded && group.items.map((e) => renderExpenseRow(e))}
+                    </Fragment>
+                  )
+                })
               : pagedExpenses.map((e) => renderExpenseRow(e))}
           </tbody>
         </table>
