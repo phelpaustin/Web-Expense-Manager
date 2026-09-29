@@ -82,10 +82,8 @@ class ExpenseBulkCreate(BaseModel):
     items: list[ExpenseCreate] = Field(min_length=1)
 
 
-def fetch_expenses(
-    db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
-) -> list[dict]:
-    """Shared accessor: expenses this user can see, as plain dicts for the logic modules.
+def _visible_expenses_query(db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None):
+    """Query of Expense rows this user can see, before any extra filtering/pagination.
 
     space_ids (comma-separated: "personal", group ids, or both) selects a combined
     view across several Expense Spaces and takes priority over scope when given.
@@ -94,6 +92,8 @@ def fetch_expenses(
       - "personal": only the user's own, unassigned-to-a-space expenses.
       - "<space id>": only that one Expense Space's expenses (caller must have
         already verified the user is a member — non-members get an empty list).
+
+    Returns None when the requested scope resolves to no visible expenses at all.
     """
     group_ids = get_user_group_ids(db, user_id)
 
@@ -117,10 +117,10 @@ def fetch_expenses(
         if requested_group_ids:
             conditions.append(models.Expense.group_id.in_(requested_group_ids))
         if not conditions:
-            return []
-        q = db.query(models.Expense).filter(or_(*conditions))
+            return None
+        return db.query(models.Expense).filter(or_(*conditions))
     elif scope == "personal":
-        q = db.query(models.Expense).filter(
+        return db.query(models.Expense).filter(
             models.Expense.user_id == user_id, models.Expense.group_id.is_(None)
         )
     elif scope and scope != "all":
@@ -129,14 +129,26 @@ def fetch_expenses(
         except ValueError:
             requested_group_id = None
         if requested_group_id is None or requested_group_id not in group_ids:
-            return []
-        q = db.query(models.Expense).filter(models.Expense.group_id == requested_group_id)
+            return None
+        return db.query(models.Expense).filter(models.Expense.group_id == requested_group_id)
     else:
         visibility = models.Expense.user_id == user_id
         if group_ids:
             visibility = or_(visibility, models.Expense.group_id.in_(group_ids))
-        q = db.query(models.Expense).filter(visibility)
+        return db.query(models.Expense).filter(visibility)
 
+
+def fetch_expenses(
+    db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
+) -> list[dict]:
+    """Shared accessor: every expense this user can see, as plain dicts for the logic
+    modules (analytics/budgets/alerts/metrics all need the full set to aggregate
+    correctly, so this is intentionally unpaginated — see list_expenses for the
+    paginated version used by the expenses list page).
+    """
+    q = _visible_expenses_query(db, user_id, scope, space_ids)
+    if q is None:
+        return []
     rows = q.order_by(models.Expense.date).all()
     return [
         {
@@ -184,20 +196,82 @@ def _require_group_write_access(
 
 @router.get("/expenses")
 def list_expenses(
+    scope: str | None = None,
+    space_ids: str | None = None,
+    search: str | None = None,
+    category: str | None = None,
+    shop: str | None = None,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    page: int = 1,
+    page_size: int = 25,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses(db, user.id)
-    creator_ids = {e["user_id"] for e in expenses if e["group_id"] is not None}
+    """Paginated + filtered expense list for the expenses page. Analytics/budgets/
+    alerts/metrics use fetch_expenses() instead — they need the full, unpaginated set.
+    """
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 200)
+
+    q = _visible_expenses_query(db, user.id, scope, space_ids)
+    if q is None:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+
+    if category:
+        q = q.filter(models.Expense.category == category)
+    if shop:
+        q = q.filter(models.Expense.shop == shop)
+    if date_from:
+        q = q.filter(models.Expense.date >= date_from)
+    if date_to:
+        q = q.filter(models.Expense.date <= date_to)
+    if search:
+        like = f"%{search.strip()}%"
+        q = q.filter(
+            or_(
+                models.Expense.description.ilike(like),
+                models.Expense.shop.ilike(like),
+                models.Expense.brand.ilike(like),
+                models.Expense.category.ilike(like),
+                models.Expense.subcategory.ilike(like),
+            )
+        )
+
+    total = q.count()
+    rows = (
+        q.order_by(models.Expense.date.desc(), models.Expense.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    creator_ids = {r.user_id for r in rows if r.group_id is not None}
     creators = {}
     if creator_ids:
         for u in db.query(models.User).filter(models.User.id.in_(creator_ids)).all():
             creators[u.id] = u.name or u.email
-    for e in expenses:
-        e["created_by"] = creators.get(e["user_id"]) if e["group_id"] is not None else None
-        e["date"] = e["date"].isoformat()
-        del e["user_id"]
-    return expenses
+
+    items = [
+        {
+            "id": r.id,
+            "date": r.date.isoformat(),
+            "category": r.category,
+            "subcategory": r.subcategory,
+            "description": r.description,
+            "amount": r.amount,
+            "quantity": r.quantity,
+            "unit": r.unit,
+            "shop": r.shop,
+            "brand": r.brand,
+            "currency": r.currency,
+            "price_per_unit": r.price_per_unit,
+            "group_id": r.group_id,
+            "created_by": creators.get(r.user_id) if r.group_id is not None else None,
+        }
+        for r in rows
+    ]
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 @router.post("/expenses", response_model=ExpenseOut, status_code=201)

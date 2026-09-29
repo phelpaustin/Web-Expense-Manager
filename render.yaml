@@ -9,6 +9,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9 # pin: latest psycopg2-binary has no wheel yet for the newest Python (e.g. 3.14)
       - key: SECRET_KEY
         generateValue: true # Render generates a strong random value
       - key: DATABASE_URL

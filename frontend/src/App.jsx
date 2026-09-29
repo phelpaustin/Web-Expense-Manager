@@ -80,7 +80,6 @@ const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [],
 export default function App() {
   const [user, setUser] = useState(null)
   const [authChecked, setAuthChecked] = useState(false)
-  const [expenses, setExpenses] = useState([])
   const [summary, setSummary] = useState(null)
   const [trends, setTrends] = useState(null)
   const [categories, setCategories] = useState([])
@@ -116,7 +115,6 @@ export default function App() {
 
   function loadAll() {
     return Promise.all([
-      fetchExpenses(),
       fetchSummary(dashboardScope, dashboardSpaceIds),
       fetchTrends(dashboardScope, dashboardSpaceIds),
       fetchCategories(dashboardScope, dashboardSpaceIds),
@@ -134,8 +132,7 @@ export default function App() {
       fetchTrips(),
       fetchGroups(),
     ])
-      .then(([exp, sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt, trps, grps]) => {
-        setExpenses(exp)
+      .then(([sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt, trps, grps]) => {
         setSummary(sum)
         setTrends(tr)
         setCategories(cat)
@@ -240,7 +237,6 @@ export default function App() {
   function handleLogout() {
     logout()
     setUser(null)
-    setExpenses([])
     setSummary(null)
     setTrends(null)
     setCategories([])
@@ -707,7 +703,6 @@ export default function App() {
           path="expenses"
           element={
             <ExpensesPage
-              expenses={expenses}
               form={form}
               setForm={setForm}
               saving={saving}
@@ -728,6 +723,7 @@ export default function App() {
               onAddRow={handleAddRow}
               trips={trips}
               groups={groups}
+              onError={setError}
             />
           }
         />

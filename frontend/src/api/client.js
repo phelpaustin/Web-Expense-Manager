@@ -130,8 +130,15 @@ export function deleteAccount(password) {
 }
 
 // ── Data ──────────────────────────────────────────────
-export function fetchExpenses() {
-  return request('/api/expenses')
+// filters: { scope, search, category, shop, date_from, date_to, page, page_size }
+// Returns { items, total, page, page_size }.
+export function fetchExpenses(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, value)
+  }
+  const qs = params.toString()
+  return request(`/api/expenses${qs ? `?${qs}` : ''}`)
 }
 
 // spaceIds (array of 'personal' | group id) selects a combined view across several

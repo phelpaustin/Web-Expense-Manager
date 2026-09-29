@@ -1,13 +1,12 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { money } from '../format.js'
-import { suggestCategory, autoCategorize } from '../api/client.js'
+import { suggestCategory, autoCategorize, fetchExpenses } from '../api/client.js'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
 const SPACE_TYPE_ICONS = { household: '🏠', business: '💼', rental: '🏢', trip: '✈️', custom: '📁' }
 
 export default function ExpensesPage({
-  expenses,
   form,
   setForm,
   saving,
@@ -28,10 +27,12 @@ export default function ExpensesPage({
   onAddRow,
   trips,
   groups,
+  onError,
 }) {
   const [billMode, setBillMode] = useState(false)
   const [billItems, setBillItems] = useState([])
   const [submittingBill, setSubmittingBill] = useState(false)
+  const [receiptTotal, setReceiptTotal] = useState('')
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
@@ -41,6 +42,7 @@ export default function ExpensesPage({
   const [autoCatResult, setAutoCatResult] = useState(null)
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterShop, setFilterShop] = useState('')
   const [filterGroup, setFilterGroup] = useState('')
@@ -50,6 +52,10 @@ export default function ExpensesPage({
   const [pageSize, setPageSize] = useState(25)
   const [groupByBill, setGroupByBill] = useState(true)
   const [expandedBillKeys, setExpandedBillKeys] = useState(() => new Set())
+
+  const [pageExpenses, setPageExpenses] = useState([])
+  const [total, setTotal] = useState(0)
+  const [loadingExpenses, setLoadingExpenses] = useState(true)
 
   function toggleBillGroup(key) {
     setExpandedBillKeys((prev) => {
@@ -65,30 +71,59 @@ export default function ExpensesPage({
   const allSpaces = (groups || []).concat(trips || [])
   const canEditExpense = (e) => !e.group_id || allSpaces.find((g) => g.id === e.group_id)?.role !== 'viewer'
 
-  const filteredExpenses = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return expenses
-      .filter((e) => {
-        if (filterCategory && e.category !== filterCategory) return false
-        if (filterShop && e.shop !== filterShop) return false
-        if (filterGroup === 'personal' && e.group_id) return false
-        if (filterGroup && filterGroup !== 'personal' && String(e.group_id) !== filterGroup) return false
-        if (dateFrom && e.date < dateFrom) return false
-        if (dateTo && e.date > dateTo) return false
-        if (q) {
-          const haystack = `${e.description} ${e.shop} ${e.brand} ${e.category} ${e.subcategory}`.toLowerCase()
-          if (!haystack.includes(q)) return false
-        }
-        return true
-      })
-      .slice()
-      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id))
-  }, [expenses, search, filterCategory, filterShop, filterGroup, dateFrom, dateTo])
+  // Debounce free-text search so it doesn't fire a request per keystroke.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search.trim()), 400)
+    return () => clearTimeout(handle)
+  }, [search])
 
-  const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / pageSize))
+  const refetch = useCallback(() => {
+    setLoadingExpenses(true)
+    return fetchExpenses({
+      scope: filterGroup,
+      search: debouncedSearch,
+      category: filterCategory,
+      shop: filterShop,
+      date_from: dateFrom,
+      date_to: dateTo,
+      page,
+      page_size: pageSize,
+    })
+      .then((res) => {
+        setPageExpenses(res.items)
+        setTotal(res.total)
+      })
+      .catch((err) => onError?.(err.message))
+      .finally(() => setLoadingExpenses(false))
+  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, page, pageSize, onError])
+
+  // Fetch the current page whenever filters/pagination change (and once on mount).
+  useEffect(() => {
+    refetch()
+  }, [refetch])
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const currentPage = Math.min(page, totalPages)
-  const pageStart = (currentPage - 1) * pageSize
-  const pagedExpenses = filteredExpenses.slice(pageStart, pageStart + pageSize)
+  const pageStart = total === 0 ? 0 : (currentPage - 1) * pageSize
+
+  // Once a mutation (add/edit/import/…) completes elsewhere, re-pull this page.
+  async function afterMutation(promise) {
+    const result = await promise
+    await refetch()
+    return result
+  }
+
+  // Same, but for deletes: clamps back a page if that was the last item on it
+  // (the effect below then refetches for the new page automatically).
+  async function afterDelete(promise) {
+    const result = await promise
+    if (page > 1 && pageExpenses.length === 1) {
+      setPage((p) => Math.max(1, p - 1))
+    } else {
+      await refetch()
+    }
+    return result
+  }
 
   // Club same-day, same-shop rows into one "bill" group (mirrors how a single
   // receipt is entered, whether one at a time or via bill mode). Rows without a
@@ -96,7 +131,7 @@ export default function ExpensesPage({
   const billGroups = useMemo(() => {
     const groups = []
     const indexByKey = new Map()
-    for (const e of pagedExpenses) {
+    for (const e of pageExpenses) {
       const shop = (e.shop || '').trim()
       const key = shop ? `${e.date}::${shop}::${e.group_id ?? 'personal'}` : `single-${e.id}`
       let group = indexByKey.get(key)
@@ -108,7 +143,7 @@ export default function ExpensesPage({
       group.items.push(e)
     }
     return groups
-  }, [pagedExpenses])
+  }, [pageExpenses])
 
   function resetToFirstPage(setter) {
     return (value) => {
@@ -160,6 +195,7 @@ export default function ExpensesPage({
     try {
       const res = await autoCategorize()
       setAutoCatResult(`Categorized ${res.updated} expense(s).`)
+      await refetch()
     } catch (err) {
       setAutoCatResult(err.message)
     } finally {
@@ -168,6 +204,9 @@ export default function ExpensesPage({
   }
 
   const billTotal = billItems.reduce((sum, it) => sum + it.amount, 0)
+  const receiptTotalNum = receiptTotal.trim() === '' ? null : parseFloat(receiptTotal)
+  const billMismatch =
+    receiptTotalNum !== null && !Number.isNaN(receiptTotalNum) ? Math.round((billTotal - receiptTotalNum) * 100) / 100 : null
 
   function toggleBillMode() {
     if (billMode && billItems.length > 0 && !window.confirm(`Discard ${billItems.length} unsaved item(s) from this bill?`)) {
@@ -175,13 +214,14 @@ export default function ExpensesPage({
     }
     setBillMode((v) => !v)
     setBillItems([])
+    setReceiptTotal('')
   }
 
   // In bill mode, submitting the form stashes the current line item locally
   // instead of saving it, so the item fields can be reused for the next one.
-  function handleFormSubmit(e) {
+  async function handleFormSubmit(e) {
     if (!billMode) {
-      onAdd(e)
+      await afterMutation(onAdd(e))
       return
     }
     e.preventDefault()
@@ -206,24 +246,38 @@ export default function ExpensesPage({
 
   async function handleSubmitBill() {
     if (billItems.length === 0) return
+    if (billMismatch !== null && billMismatch !== 0) {
+      const direction = billMismatch > 0 ? 'more than' : 'less than'
+      if (
+        !window.confirm(
+          `Your items add up to ${money(billTotal)}, ${direction} the receipt total of ${money(receiptTotalNum)} ` +
+            `(off by ${money(Math.abs(billMismatch))}). Submit anyway?`,
+        )
+      ) {
+        return
+      }
+    }
     setSubmittingBill(true)
     try {
-      await onAddBill(
-        billItems.map((it) => ({
-          date: form.date,
-          category: it.category,
-          subcategory: it.subcategory,
-          description: it.description,
-          amount: it.amount,
-          quantity: it.quantity,
-          unit: it.unit,
-          shop: form.shop,
-          brand: it.brand,
-          currency: form.currency || 'SEK',
-          group_id: form.group_id ? parseInt(form.group_id, 10) : null,
-        })),
+      await afterMutation(
+        onAddBill(
+          billItems.map((it) => ({
+            date: form.date,
+            category: it.category,
+            subcategory: it.subcategory,
+            description: it.description,
+            amount: it.amount,
+            quantity: it.quantity,
+            unit: it.unit,
+            shop: form.shop,
+            brand: it.brand,
+            currency: form.currency || 'SEK',
+            group_id: form.group_id ? parseInt(form.group_id, 10) : null,
+          })),
+        ),
       )
       setBillItems([])
+      setReceiptTotal('')
       setForm((f) => ({
         ...f,
         category: '',
@@ -246,7 +300,7 @@ export default function ExpensesPage({
     setImporting(true)
     setImportResult(null)
     try {
-      const result = await onImport(file)
+      const result = await afterMutation(onImport(file))
       setImportResult(result)
       setSkipped(result.skipped_rows || [])
       setFile(null)
@@ -265,18 +319,20 @@ export default function ExpensesPage({
   async function addSkipped(i) {
     const r = skipped[i]
     try {
-      await onAddRow({
-        date: r.date,
-        category: r.category,
-        subcategory: r.subcategory,
-        description: r.description,
-        amount: parseFloat(r.amount),
-        quantity: parseFloat(r.quantity) || 1,
-        unit: r.unit || 'Count',
-        shop: r.shop,
-        brand: r.brand,
-        currency: r.currency || 'SEK',
-      })
+      await afterMutation(
+        onAddRow({
+          date: r.date,
+          category: r.category,
+          subcategory: r.subcategory,
+          description: r.description,
+          amount: parseFloat(r.amount),
+          quantity: parseFloat(r.quantity) || 1,
+          unit: r.unit || 'Count',
+          shop: r.shop,
+          brand: r.brand,
+          currency: r.currency || 'SEK',
+        }),
+      )
       setSkipped((prev) => prev.filter((_, idx) => idx !== i))
     } catch (err) {
       updateSkipped(i, 'reason', err.message)
@@ -356,7 +412,7 @@ export default function ExpensesPage({
             />
           </td>
           <td className="right nowrap">
-            <button className="icon-btn save" onClick={() => saveEdit(e.id)} title="Save">
+            <button className="icon-btn save" onClick={() => afterMutation(saveEdit(e.id))} title="Save">
               ✓
             </button>
             <button className="icon-btn" onClick={cancelEdit} title="Cancel">
@@ -393,7 +449,7 @@ export default function ExpensesPage({
               <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
                 ✎
               </button>
-              <button className="delete-btn" onClick={() => onDelete(e.id)} title="Delete">
+              <button className="delete-btn" onClick={() => afterDelete(onDelete(e.id))} title="Delete">
                 ✕
               </button>
             </>
@@ -673,8 +729,26 @@ export default function ExpensesPage({
                   <strong>
                     Bill total so far: {money(billTotal)} ({billItems.length} item{billItems.length === 1 ? '' : 's'})
                   </strong>
-                  <span className="subtitle">Check this against the receipt total before submitting.</span>
+                  <label className="receipt-total-input">
+                    Receipt total
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="e.g. from the printed total"
+                      value={receiptTotal}
+                      onChange={(e) => setReceiptTotal(e.target.value)}
+                    />
+                  </label>
                 </div>
+                {billMismatch !== null && (
+                  <p className={billMismatch === 0 ? 'ok-note' : 'auth-error'}>
+                    {billMismatch === 0
+                      ? '✓ Matches the receipt total.'
+                      : `⚠️ Items add up to ${money(billTotal)}, ${billMismatch > 0 ? 'more than' : 'less than'} the receipt total ` +
+                        `of ${money(receiptTotalNum)} (off by ${money(Math.abs(billMismatch))}).`}
+                  </p>
+                )}
                 <button type="button" onClick={handleSubmitBill} disabled={submittingBill}>
                   {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal)})`}
                 </button>
@@ -718,7 +792,7 @@ export default function ExpensesPage({
         </datalist>
       </section>
 
-      {expenses.length > 0 && (
+      {(total > 0 || hasActiveFilters) && (
         <section className="panel">
           <h2>🔍 Search &amp; filter</h2>
           <div className="add-form">
@@ -779,7 +853,9 @@ export default function ExpensesPage({
         </section>
       )}
 
-      {expenses.length > 0 && (
+      {loadingExpenses && <p className="subtitle">Loading…</p>}
+
+      {!loadingExpenses && total > 0 && (
         <table className="table">
           <thead>
             <tr>
@@ -814,17 +890,15 @@ export default function ExpensesPage({
                     </Fragment>
                   )
                 })
-              : pagedExpenses.map((e) => renderExpenseRow(e))}
+              : pageExpenses.map((e) => renderExpenseRow(e))}
           </tbody>
         </table>
       )}
 
-      {filteredExpenses.length > 0 && (
+      {total > 0 && (
         <div className="pagination-bar">
           <span className="subtitle">
-            Showing {pageStart + 1}–{Math.min(pageStart + pageSize, filteredExpenses.length)} of{' '}
-            {filteredExpenses.length}
-            {hasActiveFilters ? ` (filtered from ${expenses.length})` : ''}
+            Showing {pageStart + 1}–{Math.min(pageStart + pageSize, total)} of {total}
           </span>
           <div className="pagination-controls">
             <select
@@ -858,8 +932,8 @@ export default function ExpensesPage({
         </div>
       )}
 
-      {expenses.length > 0 && filteredExpenses.length === 0 && (
-        <p className="subtitle">No expenses match your filters.</p>
+      {!loadingExpenses && total === 0 && (
+        <p className="subtitle">{hasActiveFilters ? 'No expenses match your filters.' : 'No expenses yet — add one above.'}</p>
       )}
     </>
   )

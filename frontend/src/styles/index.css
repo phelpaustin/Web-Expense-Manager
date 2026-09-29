@@ -939,6 +939,18 @@ button {
   margin: 0.75rem 0;
 }
 
+.receipt-total-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.receipt-total-input input {
+  width: 8rem;
+}
+
 .bill-group-header td {
   background: var(--surface-2);
   font-size: 0.85rem;
