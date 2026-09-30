@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -6,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.file_validation import detect_receipt_content_type
 from app.api.expenses import fetch_expenses
 from app.db.database import get_db
 from app.db import models
@@ -20,7 +22,7 @@ _MAX_RECEIPT_BYTES = 10 * 1024 * 1024  # 10 MB
 class PendingCreate(BaseModel):
     date: datetime.date
     shop: str = Field(min_length=1)
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     note: str = ""
 
 
@@ -83,12 +85,13 @@ async def upload_pending(
     user: models.User = Depends(get_current_user),
 ):
     """Create a pending bill straight from an uploaded PDF/photo, to itemise later."""
-    content_type = file.content_type or "application/octet-stream"
-    if not (content_type == "application/pdf" or content_type.startswith("image/")):
-        raise HTTPException(status_code=400, detail="Only PDF or image files are allowed")
-    data = await file.read()
+    data = await file.read(_MAX_RECEIPT_BYTES + 1)
     if len(data) > _MAX_RECEIPT_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+    try:
+        content_type = detect_receipt_content_type(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Autofill whatever the caller left blank by best-effort parsing the receipt
     # itself (see app/logic/receipt_ocr.py — degrades gracefully if unavailable).
@@ -234,12 +237,13 @@ async def upload_receipt(
     user: models.User = Depends(get_current_user),
 ):
     bill = _pending_or_404(db, bill_id, user.id)
-    content_type = file.content_type or "application/octet-stream"
-    if not (content_type == "application/pdf" or content_type.startswith("image/")):
-        raise HTTPException(status_code=400, detail="Only PDF or image files are allowed")
-    data = await file.read()
+    data = await file.read(_MAX_RECEIPT_BYTES + 1)
     if len(data) > _MAX_RECEIPT_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+    try:
+        content_type = detect_receipt_content_type(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     existing = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first()
     if existing:

@@ -131,6 +131,16 @@ own expenses and budgets (JWT bearer tokens).
 Auth endpoints: `POST /api/auth/register`, `POST /api/auth/login`,
 `GET /api/auth/me`.
 
+### Account deletion policy
+
+Deleting an account removes personal expenses, budgets, income, recurring
+templates, bills, receipts, options, and legacy trip records. Expenses in a
+shared Expense Space are retained as financial history, but their creator
+reference is cleared and the UI displays **Deleted user**. Spaces owned by the
+deleted account are transferred to an existing member when possible; an empty
+space remains as an ownerless historical container. The complete deletion is
+performed in one database transaction and rolls back if any step fails.
+
 ## Deployment
 
 Managed, free-tier stack (no server to maintain):

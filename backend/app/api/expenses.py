@@ -1,16 +1,18 @@
 import datetime
 import io
+from decimal import Decimal
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_group_ids, is_group_member, require_role_at_least
 from app.api.options import ensure_options, get_or_create_options
 from app.core import fx
+from app.core.currency import normalize_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import categorizer
@@ -42,13 +44,13 @@ class ExpenseOut(BaseModel):
     category: str
     subcategory: str
     description: str
-    amount: float
+    amount: Decimal
     quantity: float
     unit: str
     shop: str
     brand: str
     currency: str
-    price_per_unit: float
+    price_per_unit: Decimal
     group_id: int | None = None
 
 
@@ -57,7 +59,7 @@ class ExpenseCreate(BaseModel):
     category: str = Field(min_length=1)
     subcategory: str = ""
     description: str = ""
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     quantity: float = Field(default=1.0, gt=0)
     unit: str = "Count"
     shop: str = ""
@@ -65,19 +67,29 @@ class ExpenseCreate(BaseModel):
     currency: str = "SEK"
     group_id: int | None = None
 
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, value: str) -> str:
+        return normalize_currency(value)
+
 
 class ExpenseUpdate(BaseModel):
     date: datetime.date | None = None
     category: str | None = Field(default=None, min_length=1)
     subcategory: str | None = None
     description: str | None = None
-    amount: float | None = Field(default=None, gt=0)
+    amount: Decimal | None = Field(default=None, gt=0)
     quantity: float | None = Field(default=None, gt=0)
     unit: str | None = None
     shop: str | None = None
     brand: str | None = None
     currency: str | None = None
     group_id: int | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, value: str | None) -> str | None:
+        return normalize_currency(value) if value is not None else None
 
 
 class ExpenseBulkCreate(BaseModel):
@@ -182,7 +194,10 @@ def fetch_expenses_in_base_currency(
     """
     expenses = fetch_expenses(db, user_id, scope, space_ids)
     base_currency = get_or_create_options(db, user_id).base_currency or "SEK"
-    return currency_logic.convert_expenses(expenses, base_currency, fx.get_rate)
+    try:
+        return currency_logic.convert_expenses(expenses, base_currency, fx.get_rate)
+    except currency_logic.CurrencyConversionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Expense:
@@ -260,7 +275,7 @@ def list_expenses(
         .all()
     )
 
-    creator_ids = {r.user_id for r in rows if r.group_id is not None}
+    creator_ids = {r.user_id for r in rows if r.group_id is not None and r.user_id is not None}
     creators = {}
     if creator_ids:
         for u in db.query(models.User).filter(models.User.id.in_(creator_ids)).all():
@@ -281,7 +296,9 @@ def list_expenses(
             "currency": r.currency,
             "price_per_unit": r.price_per_unit,
             "group_id": r.group_id,
-            "created_by": creators.get(r.user_id) if r.group_id is not None else None,
+            "created_by": (
+                (creators.get(r.user_id) or "Deleted user") if r.user_id is not None else "Deleted user"
+            ) if r.group_id is not None else None,
         }
         for r in rows
     ]
@@ -296,7 +313,7 @@ def create_expense(
 ):
     _require_group_write_access(db, payload.group_id, user.id)
     expense = models.Expense(user_id=user.id, **payload.model_dump())
-    expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
+    expense.price_per_unit = round(float(expense.amount) / max(expense.quantity, 0.01), 2)
     db.add(expense)
     db.commit()
     db.refresh(expense)
@@ -318,7 +335,7 @@ def create_expenses_bulk(
     created: list[models.Expense] = []
     for item in payload.items:
         expense = models.Expense(user_id=user.id, **item.model_dump())
-        expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
+        expense.price_per_unit = round(float(expense.amount) / max(expense.quantity, 0.01), 2)
         db.add(expense)
         created.append(expense)
     db.commit()
@@ -342,7 +359,7 @@ def update_expense(
         _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
     for field, value in data.items():
         setattr(expense, field, value)
-    expense.price_per_unit = round(expense.amount / max(expense.quantity, 0.01), 2)
+    expense.price_per_unit = round(float(expense.amount) / max(expense.quantity, 0.01), 2)
     db.commit()
     db.refresh(expense)
     ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
@@ -425,6 +442,13 @@ async def import_expenses(
     If currency_override is given, it is applied to every row (ignoring any
     Currency column in the file).
     """
+    override = currency_override.strip()
+    if override:
+        try:
+            override = normalize_currency(override)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     raw = await file.read()
     name = (file.filename or "").lower()
     try:
@@ -530,8 +554,13 @@ async def import_expenses(
             shop = str(_cell(row, shop_c) or "").strip()
             brand = str(_cell(row, brand_c) or "").strip()
             currency = str(_cell(row, cur_c) or "SEK").strip() or "SEK"
-            if currency_override.strip():
-                currency = currency_override.strip().upper()
+            if override:
+                currency = override
+            try:
+                currency = normalize_currency(currency)
+            except ValueError:
+                record_skip(row, f"Unsupported currency code: {currency}", line)
+                continue
 
             key = (str(when), category.lower(), description.lower(), round(amount, 2))
             if key in existing:

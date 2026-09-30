@@ -4,10 +4,11 @@ Ported from the old dropdown_options.json + ui_components.py behavior. Each
 user gets their own editable taxonomy, seeded with sensible defaults.
 """
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.currency import normalize_currency
 from app.db.database import get_db
 from app.db import models
 
@@ -137,6 +138,11 @@ class ShopIn(BaseModel):
 
 class CurrencyIn(BaseModel):
     currency: str = Field(min_length=1, max_length=8)
+
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, value: str) -> str:
+        return normalize_currency(value)
 
 
 @router.get("/options")

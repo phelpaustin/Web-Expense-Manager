@@ -14,8 +14,18 @@ function setToken(token) {
   localStorage.setItem(TOKEN_KEY, token)
 }
 
-export function logout() {
+export async function logout() {
+  const token = getToken()
   localStorage.removeItem(TOKEN_KEY)
+  if (!token) return
+  try {
+    await fetch(`${API_BASE}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  } catch {
+    // The local token is already cleared; the server may be unreachable.
+  }
 }
 
 // Central fetch wrapper: attaches the auth header and normalizes errors.

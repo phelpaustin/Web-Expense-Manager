@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -17,7 +18,7 @@ FREQUENCIES = list(rec.FREQUENCIES.keys())
 class RecurringCreate(BaseModel):
     item: str = Field(min_length=1)
     category: str = ""
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     frequency: str = "Monthly"
     note: str = ""
     auto_post: bool = False
@@ -33,13 +34,13 @@ class RecurringCreate(BaseModel):
 class RecurringBackfill(BaseModel):
     start_date: datetime.date
     end_date: datetime.date | None = None
-    amount: float | None = Field(default=None, gt=0)
+    amount: Decimal | None = Field(default=None, gt=0)
 
 
 class RecurringUpdate(BaseModel):
     item: str | None = Field(default=None, min_length=1)
     category: str | None = None
-    amount: float | None = Field(default=None, gt=0)
+    amount: Decimal | None = Field(default=None, gt=0)
     frequency: str | None = None
     note: str | None = None
     auto_post: bool | None = None

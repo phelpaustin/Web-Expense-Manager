@@ -42,7 +42,7 @@ export function useAuth(loadAll, resetData, setError) {
   }
 
   function handleLogout() {
-    logout()
+    void logout()
     setUser(null)
     resetData()
   }

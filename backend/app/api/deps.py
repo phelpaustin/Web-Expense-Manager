@@ -18,11 +18,12 @@ def get_current_user(
         detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    subject = decode_token(token)
-    if subject is None:
+    decoded = decode_token(token)
+    if decoded is None:
         raise credentials_exc
+    subject, token_session_version = decoded
     user = db.get(models.User, int(subject))
-    if user is None:
+    if user is None or token_session_version != user.session_version:
         raise credentials_exc
     return user
 

@@ -8,21 +8,38 @@ currency, which is wrong whenever a user has expenses in more than one).
 """
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Callable
+
+from app.core.currency import normalize_currency
+
+
+class CurrencyConversionUnavailable(ValueError):
+    pass
 
 
 def convert_expenses(
-    expenses: list[dict], base_currency: str, get_rate: Callable[[str, str], float]
+    expenses: list[dict], base_currency: str, get_rate: Callable[[str, str], Decimal | None]
 ) -> list[dict]:
-    base_currency = (base_currency or "SEK").upper()
+    try:
+        base_currency = normalize_currency(base_currency or "SEK")
+    except ValueError as exc:
+        raise CurrencyConversionUnavailable(str(exc)) from exc
     converted = []
     for e in expenses:
-        currency = (e.get("currency") or base_currency).upper()
+        try:
+            currency = normalize_currency(e.get("currency") or base_currency)
+        except ValueError as exc:
+            raise CurrencyConversionUnavailable(str(exc)) from exc
         rate = get_rate(currency, base_currency)
+        if rate is None:
+            raise CurrencyConversionUnavailable(
+                f"FX conversion unavailable for {currency} -> {base_currency}"
+            )
         out = dict(e)
         out["original_amount"] = e["amount"]
         out["original_currency"] = currency
-        out["amount"] = round(e["amount"] * rate, 2)
+        out["amount"] = (Decimal(str(e["amount"])) * rate).quantize(Decimal("0.01"))
         out["currency"] = base_currency
         converted.append(out)
     return converted

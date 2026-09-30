@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -15,7 +17,7 @@ router = APIRouter()
 
 class BudgetSet(BaseModel):
     category: str = Field(min_length=1)
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
 
 
 class BudgetConfig(BaseModel):

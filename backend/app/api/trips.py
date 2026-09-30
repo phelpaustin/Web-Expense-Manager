@@ -1,11 +1,13 @@
 import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, is_group_member, require_role_at_least
 from app.api.groups import cascade_delete_group
+from app.core.currency import normalize_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import trips as trips_logic
@@ -20,10 +22,15 @@ class TripCreate(BaseModel):
     destination: str = ""
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
-    budget: float | None = Field(default=None, gt=0)
+    budget: Decimal | None = Field(default=None, gt=0)
     currency: str = "SEK"
     status: str = "Planned"
     parent_group_id: int | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, value: str) -> str:
+        return normalize_currency(value)
 
 
 class TripUpdate(BaseModel):
@@ -31,10 +38,15 @@ class TripUpdate(BaseModel):
     destination: str | None = None
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
-    budget: float | None = Field(default=None, gt=0)
+    budget: Decimal | None = Field(default=None, gt=0)
     currency: str | None = None
     status: str | None = None
     parent_group_id: int | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, value: str | None) -> str | None:
+        return normalize_currency(value) if value is not None else None
 
 
 def _trip_or_404(db: Session, trip_id: int) -> models.Group:

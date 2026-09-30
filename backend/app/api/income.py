@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,21 +18,21 @@ class IncomeOut(BaseModel):
 
     id: int
     date: datetime.date
-    amount: float
+    amount: Decimal
     source: str
     note: str
 
 
 class IncomeCreate(BaseModel):
     date: datetime.date
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     source: str = Field(min_length=1)
     note: str = ""
 
 
 class IncomeUpdate(BaseModel):
     date: datetime.date | None = None
-    amount: float | None = Field(default=None, gt=0)
+    amount: Decimal | None = Field(default=None, gt=0)
     source: str | None = Field(default=None, min_length=1)
     note: str | None = None
 
