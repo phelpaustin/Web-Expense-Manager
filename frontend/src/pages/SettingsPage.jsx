@@ -141,9 +141,9 @@ export default function SettingsPage({ user, options, onOptionsUpdated, onError,
             />
             <input
               type="password"
-              placeholder="New password (min 6 characters)"
+              placeholder="New password (min 12 characters)"
               required
-              minLength={6}
+              minLength={12}
               value={pwNew}
               onChange={(e) => setPwNew(e.target.value)}
             />

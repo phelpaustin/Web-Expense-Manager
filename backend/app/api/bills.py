@@ -80,7 +80,7 @@ def create_pending(
 async def upload_pending(
     file: UploadFile = File(...),
     shop: str = Form(""),
-    amount: float = Form(0.0),
+    amount: Decimal = Form(Decimal("0")),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
@@ -96,14 +96,14 @@ async def upload_pending(
     # Autofill whatever the caller left blank by best-effort parsing the receipt
     # itself (see app/logic/receipt_ocr.py — degrades gracefully if unavailable).
     parsed = None
-    if not shop.strip() or amount <= 0:
+    if not shop.strip() or amount <= Decimal("0"):
         parsed = receipt_ocr.extract_fields(data, content_type)
 
     b = models.PendingBill(
         user_id=user.id,
         date=(parsed and parsed["date"]) or datetime.date.today(),
         shop=(shop.strip() or (parsed and parsed["shop"]) or (file.filename or "Uploaded bill")),
-        amount=amount or (parsed and parsed["amount"]) or 0.0,
+        amount=amount or (parsed and parsed["amount"]) or Decimal("0"),
         note="",
         status="pending",
     )
@@ -206,7 +206,7 @@ def delete_pending(
 def itemise_pending(
     bill_id: int,
     category: str = "Bills",
-    amount: float | None = None,
+    amount: Decimal | None = None,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
@@ -299,14 +299,14 @@ class ManualOut(BaseModel):
     id: int
     date: datetime.date
     shop: str
-    amount: float
+    amount: Decimal
     note: str
 
 
 class ManualCreate(BaseModel):
     date: datetime.date
     shop: str = Field(min_length=1)
-    amount: float = Field(gt=0)
+    amount: Decimal = Field(gt=0)
     note: str = ""
 
 

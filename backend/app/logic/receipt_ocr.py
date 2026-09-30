@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime
 import io
 import re
+from decimal import Decimal
 
 try:
     from pypdf import PdfReader
@@ -57,12 +58,12 @@ def _text_from_image(data: bytes) -> str:
         return ""
 
 
-def _parse_amount(text: str) -> float | None:
+def _parse_amount(text: str) -> Decimal | None:
     match = _AMOUNT_RE.search(text)
     if not match:
         return None
     try:
-        return float(match.group(1).replace(",", "."))
+        return Decimal(match.group(1).replace(",", "."))
     except ValueError:
         return None
 

@@ -13,6 +13,7 @@ from app.api.deps import get_current_user, get_user_group_ids, is_group_member, 
 from app.api.options import ensure_options, get_or_create_options
 from app.core import fx
 from app.core.currency import normalize_currency
+from app.core.money import as_decimal, quantize_money
 from app.db.database import get_db
 from app.db import models
 from app.logic import categorizer
@@ -94,6 +95,11 @@ class ExpenseUpdate(BaseModel):
 
 class ExpenseBulkCreate(BaseModel):
     items: list[ExpenseCreate] = Field(min_length=1)
+
+
+def _price_per_unit(amount: Decimal, quantity: float) -> Decimal:
+    divisor = max(as_decimal(quantity), Decimal("0.01"))
+    return (amount / divisor).quantize(Decimal("0.01"))
 
 
 def _visible_expenses_query(db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None):
@@ -313,7 +319,7 @@ def create_expense(
 ):
     _require_group_write_access(db, payload.group_id, user.id)
     expense = models.Expense(user_id=user.id, **payload.model_dump())
-    expense.price_per_unit = round(float(expense.amount) / max(expense.quantity, 0.01), 2)
+    expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
     db.add(expense)
     db.commit()
     db.refresh(expense)
@@ -335,7 +341,7 @@ def create_expenses_bulk(
     created: list[models.Expense] = []
     for item in payload.items:
         expense = models.Expense(user_id=user.id, **item.model_dump())
-        expense.price_per_unit = round(float(expense.amount) / max(expense.quantity, 0.01), 2)
+        expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
         db.add(expense)
         created.append(expense)
     db.commit()
@@ -359,7 +365,7 @@ def update_expense(
         _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
     for field, value in data.items():
         setattr(expense, field, value)
-    expense.price_per_unit = round(float(expense.amount) / max(expense.quantity, 0.01), 2)
+    expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
     db.commit()
     db.refresh(expense)
     ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
@@ -483,7 +489,7 @@ async def import_expenses(
 
     # Dedup against existing expenses (date, category, description, amount).
     existing = {
-        (str(e["date"]), (e["category"] or "").strip().lower(), (e["description"] or "").strip().lower(), round(float(e["amount"]), 2))
+        (str(e["date"]), (e["category"] or "").strip().lower(), (e["description"] or "").strip().lower(), quantize_money(e["amount"]))
         for e in fetch_expenses(db, user.id)
     }
 
@@ -533,7 +539,7 @@ async def import_expenses(
             when = parsed.date()
             category = str(category).strip()
             try:
-                amount = float(amount_raw)
+                amount = quantize_money(amount_raw)
             except (TypeError, ValueError):
                 record_skip(row, "Amount is not a number", line)
                 continue
@@ -562,7 +568,7 @@ async def import_expenses(
                 record_skip(row, f"Unsupported currency code: {currency}", line)
                 continue
 
-            key = (str(when), category.lower(), description.lower(), round(amount, 2))
+            key = (str(when), category.lower(), description.lower(), amount)
             if key in existing:
                 record_skip(row, "Duplicate of an existing expense", line)
                 continue
@@ -581,7 +587,7 @@ async def import_expenses(
                 brand=brand,
                 currency=currency,
             )
-            expense.price_per_unit = round(amount / max(quantity, 0.01), 2)
+            expense.price_per_unit = _price_per_unit(amount, quantity)
             db.add(expense)
             learned.add((category, subcategory, unit, shop))
             added += 1

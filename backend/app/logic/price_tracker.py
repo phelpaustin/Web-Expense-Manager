@@ -13,10 +13,12 @@ from __future__ import annotations
 from collections import defaultdict
 from statistics import mean, pstdev
 
+from app.core.money import quantize_money
 
-def _price(e: dict) -> float:
-    ppu = e.get("price_per_unit") or 0.0
-    return float(ppu) if ppu else float(e.get("amount") or 0.0)
+
+def _price(e: dict):
+    ppu = e.get("price_per_unit")
+    return quantize_money(ppu if ppu else e.get("amount"))
 
 
 def _unit(e: dict) -> str:
@@ -54,13 +56,13 @@ def price_trends(expenses: list[dict]) -> list[dict]:
             "unit": unit,
             "first_date": rows[0]["date"].isoformat() if hasattr(rows[0]["date"], "isoformat") else rows[0]["date"],
             "last_date": rows[-1]["date"].isoformat() if hasattr(rows[-1]["date"], "isoformat") else rows[-1]["date"],
-            "first_price": round(first_price, 2),
-            "last_price": round(last_price, 2),
-            "change": round(change, 2),
+            "first_price": quantize_money(first_price),
+            "last_price": quantize_money(last_price),
+            "change": quantize_money(change),
             "change_pct": round(change_pct, 1),
-            "avg_price": round(mean(prices), 2),
-            "min_price": round(min(prices), 2),
-            "max_price": round(max(prices), 2),
+            "avg_price": quantize_money(mean(prices)),
+            "min_price": quantize_money(min(prices)),
+            "max_price": quantize_money(max(prices)),
             "volatility": round(pstdev(prices), 2) if len(prices) > 1 else 0.0,
             "trend": trend,
             "purchases": len(rows),
@@ -110,7 +112,7 @@ def price_history(expenses: list[dict], item: str, unit: str | None = None, cate
     return [
         {
             "date": e["date"].isoformat() if hasattr(e["date"], "isoformat") else e["date"],
-            "price": round(_price(e), 2),
+            "price": quantize_money(_price(e)),
             "shop": e.get("shop", ""),
         }
         for e in matches

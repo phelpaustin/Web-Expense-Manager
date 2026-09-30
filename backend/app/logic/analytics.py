@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from app.core.money import as_decimal, quantize_money
+
 # statsmodels is optional — forecasting degrades gracefully without it,
 # exactly like the HAS_STATS flag in the original module.
 try:
@@ -23,7 +25,7 @@ def _to_frame(expenses: list[dict]) -> pd.DataFrame:
     if not expenses:
         return pd.DataFrame(columns=["date", "category", "amount"])
     df = pd.DataFrame(expenses)
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+    df["amount"] = df["amount"].map(lambda value: as_decimal(value) if not pd.isna(value) else as_decimal(0))
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     return df
 
@@ -35,7 +37,7 @@ def monthly_totals(expenses: list[dict]) -> list[dict]:
         return []
     df["month"] = df["date"].dt.to_period("M").astype(str)
     monthly = df.groupby("month")["amount"].sum().reset_index().sort_values("month")
-    return [{"month": row.month, "total": round(float(row.amount), 2)} for row in monthly.itertuples()]
+    return [{"month": row.month, "total": quantize_money(row.amount)} for row in monthly.itertuples()]
 
 
 def month_over_month_change(monthly: list[dict]) -> dict | None:
@@ -60,7 +62,7 @@ def forecast_next_month(monthly: list[dict]) -> float | None:
     series = pd.Series([m["total"] for m in monthly])
     try:
         fit = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
-        return round(float(fit.forecast(1).iloc[0]), 2)
+        return quantize_money(fit.forecast(1).iloc[0])
     except Exception:
         return None
 
@@ -70,7 +72,7 @@ def category_breakdown(expenses: list[dict]) -> list[dict]:
     df = _to_frame(expenses)
     if df.empty:
         return []
-    total = float(df["amount"].sum())
+    total = quantize_money(df["amount"].sum())
     grouped = (
         df.groupby("category")
         .agg(total=("amount", "sum"), count=("amount", "count"))
@@ -80,13 +82,13 @@ def category_breakdown(expenses: list[dict]) -> list[dict]:
     result = []
     for row in grouped.itertuples():
         count = int(row.count)
-        cat_total = float(row.total)
+        cat_total = quantize_money(row.total)
         result.append(
             {
                 "category": row.category,
-                "total": round(cat_total, 2),
+                "total": cat_total,
                 "count": count,
-                "avg_per_purchase": round(cat_total / count, 2) if count else 0.0,
+                "avg_per_purchase": quantize_money(cat_total / count) if count else quantize_money(0),
                 "pct_of_total": round(cat_total / total * 100, 1) if total else 0.0,
             }
         )

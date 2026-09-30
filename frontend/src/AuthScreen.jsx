@@ -105,9 +105,9 @@ export default function AuthScreen({ onAuthed }) {
           {mode !== 'forgot' && (
             <input
               type="password"
-              placeholder="Password (min 6 characters)"
+              placeholder="Password (min 12 characters)"
               required
-              minLength={6}
+              minLength={12}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />

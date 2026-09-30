@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import pandas as pd
 
+from app.core.money import as_decimal, quantize_money
+
 
 def _to_frame(income: list[dict]) -> pd.DataFrame:
     if not income:
         return pd.DataFrame(columns=["date", "amount"])
     df = pd.DataFrame(income)
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+    df["amount"] = df["amount"].map(lambda value: as_decimal(value) if not pd.isna(value) else as_decimal(0))
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     return df.dropna(subset=["date"])
 
@@ -25,30 +27,30 @@ def monthly_totals(income: list[dict]) -> list[dict]:
         return []
     df["month"] = df["date"].dt.to_period("M").astype(str)
     monthly = df.groupby("month")["amount"].sum().reset_index().sort_values("month")
-    return [{"month": row.month, "total": round(float(row.amount), 2)} for row in monthly.itertuples()]
+    return [{"month": row.month, "total": quantize_money(row.amount)} for row in monthly.itertuples()]
 
 
 def income_for_month(income: list[dict], month: str | None = None) -> float:
     """Total income for a 'YYYY-MM' month (defaults to the current month)."""
     df = _to_frame(income)
     if df.empty:
-        return 0.0
+        return quantize_money(0)
     target = pd.Period(month, "M") if month else pd.Timestamp.now().to_period("M")
     df["_ym"] = df["date"].dt.to_period("M")
-    return round(float(df.loc[df["_ym"] == target, "amount"].sum()), 2)
+    return quantize_money(df.loc[df["_ym"] == target, "amount"].sum())
 
 
 def average_monthly_income(income: list[dict]) -> float:
     """Average income across the months that have any income recorded."""
     monthly = monthly_totals(income)
     if not monthly:
-        return 0.0
-    return round(sum(m["total"] for m in monthly) / len(monthly), 2)
+        return quantize_money(0)
+    return quantize_money(sum(m["total"] for m in monthly) / len(monthly))
 
 
 def total_income(income: list[dict]) -> float:
     df = _to_frame(income)
-    return round(float(df["amount"].sum()), 2) if not df.empty else 0.0
+    return quantize_money(df["amount"].sum()) if not df.empty else quantize_money(0)
 
 
 def summary(income: list[dict]) -> dict:

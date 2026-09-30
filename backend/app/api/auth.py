@@ -20,11 +20,12 @@ from app.db.database import get_db
 from app.db import models
 
 router = APIRouter()
+PASSWORD_MIN_LENGTH = 12
 
 
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=PASSWORD_MIN_LENGTH)
     name: str = ""
 
 
@@ -47,7 +48,7 @@ class GoogleIn(BaseModel):
 
 class PasswordChange(BaseModel):
     current_password: str
-    new_password: str = Field(min_length=6)
+    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class ForgotPasswordIn(BaseModel):
@@ -56,7 +57,7 @@ class ForgotPasswordIn(BaseModel):
 
 class ResetPasswordIn(BaseModel):
     token: str
-    new_password: str = Field(min_length=6)
+    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class DeleteAccountIn(BaseModel):

@@ -122,6 +122,8 @@ Tables: `expenses`, `budgets` (see `backend/app/db/models.py`).
 Every data endpoint requires a logged-in user, and each user only sees their
 own expenses and budgets (JWT bearer tokens).
 
+Passwords must contain at least 12 characters.
+
 - **Register or log in** on the first screen. The token is stored in the
   browser and sent on every request.
 - **Demo account** (seeded automatically): `demo@example.com` / `demo1234`.

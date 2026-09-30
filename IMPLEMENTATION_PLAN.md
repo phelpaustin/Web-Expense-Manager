@@ -5,8 +5,11 @@ Check items off as they're completed. Ordered by phase/priority per the review's
 
 ## Phase 1 — Security + Financial Correctness (🔴 High)
 
+- [x] Increase the minimum password length from 6 to 12 characters across backend and frontend
 - [x] Replace `Float` with `Numeric/Decimal` for all monetary columns (expenses, budgets,
       income, bills, recurring, trip/group budgets, price_per_unit)
+- [x] Remove explicit Decimal-to-float financial calculations from aggregation, ledger,
+      budget, income, trip, metric, price, import, and OCR logic
 - [x] Validate currency codes against a supported ISO 4217 list (reject `banana`, `ABC`, etc.)
 - [x] Fix FX silent `1.0` fallback — return `None`/explicit "unavailable" instead of guessing a rate
 - [x] Harden file uploads — validate by magic bytes/file signature (PDF `%PDF`, JPEG `FFD8FF`,

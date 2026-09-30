@@ -8,9 +8,9 @@ from __future__ import annotations
 import calendar
 from datetime import date
 
-import pandas as pd
-
 from app.logic import analytics, income as income_logic
+
+from app.core.money import quantize_money
 
 
 def _current_month_key() -> str:
@@ -25,8 +25,8 @@ def summary(expenses: list[dict], income: list[dict]) -> dict:
     inc_map = {m["month"]: m["total"] for m in inc_monthly}
 
     cur = _current_month_key()
-    this_spent = exp_map.get(cur, 0.0)
-    this_income = inc_map.get(cur, 0.0)
+    this_spent = exp_map.get(cur, quantize_money(0))
+    this_income = inc_map.get(cur, quantize_money(0))
 
     monthly_savings = round(this_income - this_spent, 2)
     savings_rate = round(monthly_savings / this_income * 100, 1) if this_income > 0 else 0.0
@@ -39,26 +39,26 @@ def summary(expenses: list[dict], income: list[dict]) -> dict:
 
     vals = [m["total"] for m in exp_monthly]
     if len(vals) >= 2:
-        series = pd.Series(vals)
-        mean = float(series.mean())
-        std = float(series.std())
+        mean = sum(vals, quantize_money(0)) / len(vals)
+        variance = sum((value - mean) ** 2 for value in vals) / (len(vals) - 1)
+        std = variance.sqrt()
         cv = round(std / mean * 100, 1) if mean > 0 else 0.0
     else:
         cv = 0.0
 
     months = sorted(set(exp_map) | set(inc_map))
     cash_flow = []
-    cumulative = 0.0
+    cumulative = quantize_money(0)
     for m in months:
-        exp = round(exp_map.get(m, 0.0), 2)
-        inc = round(inc_map.get(m, 0.0), 2)
-        cf = round(inc - exp, 2)
-        cumulative = round(cumulative + cf, 2)
+        exp = quantize_money(exp_map.get(m, 0))
+        inc = quantize_money(inc_map.get(m, 0))
+        cf = quantize_money(inc - exp)
+        cumulative = quantize_money(cumulative + cf)
         cash_flow.append({"month": m, "income": inc, "expenses": exp, "cash_flow": cf, "cumulative": cumulative})
 
     return {
-        "this_month_income": round(this_income, 2),
-        "this_month_spent": round(this_spent, 2),
+        "this_month_income": quantize_money(this_income),
+        "this_month_spent": quantize_money(this_spent),
         "monthly_savings": monthly_savings,
         "savings_rate": savings_rate,
         "daily_burn": daily_burn,

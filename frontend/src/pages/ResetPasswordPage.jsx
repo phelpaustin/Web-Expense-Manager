@@ -52,9 +52,9 @@ export default function ResetPasswordPage() {
           <form className="auth-form" onSubmit={handleSubmit}>
             <input
               type="password"
-              placeholder="New password (min 6 characters)"
+              placeholder="New password (min 12 characters)"
               required
-              minLength={6}
+              minLength={12}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />

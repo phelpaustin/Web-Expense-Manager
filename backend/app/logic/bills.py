@@ -15,6 +15,8 @@ import io
 
 import pandas as pd
 
+from app.core.money import quantize_money
+
 SOURCE_EXPENSE = "Expense"
 SOURCE_PENDING = "Pending"
 SOURCE_MANUAL = "Manual"
@@ -22,11 +24,11 @@ SOURCE_MANUAL = "Manual"
 _SOURCE_PRIORITY = {SOURCE_EXPENSE: 0, SOURCE_PENDING: 1, SOURCE_MANUAL: 2}
 
 
-def _key(date, label, amount) -> tuple[str, str, float]:
+def _key(date, label, amount) -> tuple[str, str, object]:
     try:
-        amt = round(float(amount or 0.0), 2)
+        amt = quantize_money(amount)
     except (TypeError, ValueError):
-        amt = 0.0
+        amt = quantize_money(0)
     return (str(date), str(label or "").strip().lower(), amt)
 
 
@@ -35,30 +37,30 @@ def build_ledger(expenses: list[dict], pending: list[dict], manual: list[dict]) 
     rows: list[dict] = []
 
     # Collapse itemised expenses into one bill total per (date, shop/label).
-    groups: dict[tuple[str, str], float] = {}
+    groups: dict[tuple[str, str], object] = {}
     for e in expenses:
         label = (e.get("shop") or e.get("description") or "").strip()
         gkey = (str(e["date"]), label)
-        groups[gkey] = groups.get(gkey, 0.0) + float(e.get("amount") or 0.0)
+        groups[gkey] = groups.get(gkey, quantize_money(0)) + quantize_money(e.get("amount"))
     for (date_str, label), amount in groups.items():
         rows.append(
-            {"date": date_str, "shop": label, "amount": round(amount, 2), "source": SOURCE_EXPENSE, "id": None}
+            {"date": date_str, "shop": label, "amount": quantize_money(amount), "source": SOURCE_EXPENSE, "id": None}
         )
 
     for p in pending:
         rows.append(
-            {"date": str(p["date"]), "shop": p.get("shop", ""), "amount": round(float(p["amount"]), 2),
+            {"date": str(p["date"]), "shop": p.get("shop", ""), "amount": quantize_money(p["amount"]),
              "source": SOURCE_PENDING, "id": p.get("id")}
         )
     for m in manual:
         rows.append(
-            {"date": str(m["date"]), "shop": m.get("shop", ""), "amount": round(float(m["amount"]), 2),
+            {"date": str(m["date"]), "shop": m.get("shop", ""), "amount": quantize_money(m["amount"]),
              "source": SOURCE_MANUAL, "id": m.get("id")}
         )
 
     # De-duplicate keeping the highest-priority source.
     rows.sort(key=lambda r: _SOURCE_PRIORITY.get(r["source"], 9))
-    seen: set[tuple[str, str, float]] = set()
+    seen: set[tuple[str, str, object]] = set()
     unique: list[dict] = []
     for r in rows:
         k = _key(r["date"], r["shop"], r["amount"])
@@ -90,7 +92,7 @@ def _find_column(columns, candidates: set[str]) -> str | None:
 def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]:
     """Parse an uploaded bank-statement spreadsheet (date, shop, amount columns).
 
-    Returns (rows, skipped): rows are {"date": date, "shop": str, "amount": float}
+    Returns (rows, skipped): rows are {"date": date, "shop": str, "amount": Decimal}
     (positive, rounded to 2 decimals); skipped is [{"row": <1-based, header excluded>,
     "reason": str}] for rows that couldn't be parsed.
     """
@@ -115,7 +117,7 @@ def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]
         try:
             date_val = pd.to_datetime(raw[date_col]).date()
             shop_val = str(raw[shop_col]).strip()
-            amount_val = abs(float(raw[amount_col]))
+            amount_val = abs(quantize_money(raw[amount_col]))
             if not shop_val or shop_val.lower() == "nan":
                 raise ValueError("missing shop name")
             if not amount_val:
@@ -123,7 +125,7 @@ def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]
         except Exception as exc:  # noqa: BLE001 – any parse issue just skips the row
             skipped.append({"row": i, "reason": str(exc)})
             continue
-        rows.append({"date": date_val, "shop": shop_val, "amount": round(amount_val, 2)})
+        rows.append({"date": date_val, "shop": shop_val, "amount": amount_val})
     return rows, skipped
 
 
@@ -133,6 +135,6 @@ def flag_duplicates(rows: list[dict], existing: list[tuple]) -> None:
     bank statement wording rarely matches what was typed in by hand — so these are
     flagged for the user to manually verify and delete if they're truly duplicates.
     """
-    existing_keys = {(str(d), round(float(a), 2)) for d, a in existing}
+    existing_keys = {(str(d), quantize_money(a)) for d, a in existing}
     for row in rows:
         row["possible_duplicate"] = (str(row["date"]), row["amount"]) in existing_keys
