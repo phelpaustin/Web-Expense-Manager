@@ -9,10 +9,12 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_group_ids, is_group_member, require_role_at_least
-from app.api.options import ensure_options
+from app.api.options import ensure_options, get_or_create_options
+from app.core import fx
 from app.db.database import get_db
 from app.db import models
 from app.logic import categorizer
+from app.logic import currency as currency_logic
 
 router = APIRouter()
 
@@ -169,6 +171,18 @@ def fetch_expenses(
         }
         for r in rows
     ]
+
+
+def fetch_expenses_in_base_currency(
+    db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
+) -> list[dict]:
+    """Same rows as fetch_expenses, but every amount converted into the user's
+    base_currency — analytics/budgets/metrics/alerts need one common unit to
+    aggregate across currencies (see app/logic/currency.py + app/core/fx.py).
+    """
+    expenses = fetch_expenses(db, user_id, scope, space_ids)
+    base_currency = get_or_create_options(db, user_id).base_currency or "SEK"
+    return currency_logic.convert_expenses(expenses, base_currency, fx.get_rate)
 
 
 def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Expense:

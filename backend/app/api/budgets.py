@@ -6,7 +6,7 @@ from app.api.deps import get_current_user
 from app.api.options import get_or_create_options
 from app.db.database import get_db
 from app.db import models
-from app.api.expenses import fetch_expenses
+from app.api.expenses import fetch_expenses_in_base_currency
 from app.logic import budgets as budgets_logic
 from app.logic.budgets import TOTAL_BUDGET_KEY
 
@@ -84,7 +84,7 @@ def budgets_status(
     user: models.User = Depends(get_current_user),
 ):
     return budgets_logic.calculate_budget_status(
-        fetch_expenses(db, user.id, scope, space_ids), fetch_budgets(db, user.id), month
+        fetch_expenses_in_base_currency(db, user.id, scope, space_ids), fetch_budgets(db, user.id), month
     )
 
 
@@ -120,5 +120,5 @@ def budgets_period_status(
     opts = get_or_create_options(db, user.id)
     total_budget = fetch_budgets(db, user.id).get(TOTAL_BUDGET_KEY)
     return budgets_logic.period_budget_status(
-        fetch_expenses(db, user.id, scope, space_ids), total_budget, opts.budget_period, opts.budget_rollover
+        fetch_expenses_in_base_currency(db, user.id, scope, space_ids), total_budget, opts.budget_period, opts.budget_rollover
     )

@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.api.budgets import fetch_budgets
 from app.api.options import get_or_create_options
-from app.api.expenses import fetch_expenses
+from app.api.expenses import fetch_expenses_in_base_currency
+from app.core.config import settings
+from app.core.email import send_email
 from app.db.database import get_db
 from app.db import models
 from app.logic import alerts as alerts_logic
@@ -14,17 +16,51 @@ from app.logic.budgets import TOTAL_BUDGET_KEY
 router = APIRouter()
 
 
-@router.get("/alerts")
-def get_alerts(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    expenses = fetch_expenses(db, user.id)
-    budgets = fetch_budgets(db, user.id)
-    opts = get_or_create_options(db, user.id)
+def _alerts_for_user(db: Session, user_id: int) -> list[dict]:
+    expenses = fetch_expenses_in_base_currency(db, user_id)
+    budgets = fetch_budgets(db, user_id)
+    opts = get_or_create_options(db, user_id)
 
     category_statuses = budgets_logic.calculate_budget_status(expenses, budgets)
     period_status = budgets_logic.period_budget_status(
         expenses, budgets.get(TOTAL_BUDGET_KEY), opts.budget_period, opts.budget_rollover
     )
     return alerts_logic.generate_alerts(category_statuses, period_status)
+
+
+@router.get("/alerts")
+def get_alerts(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    return _alerts_for_user(db, user.id)
+
+
+def _digest_body(alerts: list[dict]) -> str:
+    lines = [f"- [{a['severity'].upper()}] {a['message']}" for a in alerts]
+    return "Your budget alerts:\n\n" + "\n".join(lines)
+
+
+@router.post("/alerts/send-digest")
+def send_alert_digest(
+    db: Session = Depends(get_db),
+    x_cron_secret: str = Header(default=""),
+):
+    """Email every user their current budget alerts (if any). Meant to be called
+    by an external scheduler (e.g. a daily GitHub Actions cron), not the frontend —
+    protected by a shared secret instead of a user login.
+    """
+    if not settings.cron_secret or x_cron_secret != settings.cron_secret:
+        raise HTTPException(status_code=403, detail="Invalid or missing cron secret")
+
+    sent, skipped = 0, 0
+    for user in db.query(models.User).all():
+        alerts = _alerts_for_user(db, user.id)
+        if not alerts:
+            skipped += 1
+            continue
+        if send_email(user.email, "Your budget alerts", _digest_body(alerts)):
+            sent += 1
+        else:
+            skipped += 1
+    return {"users_emailed": sent, "users_skipped": skipped}

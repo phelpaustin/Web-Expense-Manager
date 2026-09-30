@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
 
+    # Shared secret required (as the X-Cron-Secret header) to call
+    # POST /api/alerts/send-digest — meant to be triggered by an external
+    # scheduler (e.g. a GitHub Actions cron), not a logged-in user. Empty
+    # disables the endpoint entirely.
+    cron_secret: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

@@ -10,6 +10,7 @@ from app.api.expenses import fetch_expenses
 from app.db.database import get_db
 from app.db import models
 from app.logic import bills as bills_logic
+from app.logic import receipt_ocr
 
 router = APIRouter()
 
@@ -89,11 +90,17 @@ async def upload_pending(
     if len(data) > _MAX_RECEIPT_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
 
+    # Autofill whatever the caller left blank by best-effort parsing the receipt
+    # itself (see app/logic/receipt_ocr.py — degrades gracefully if unavailable).
+    parsed = None
+    if not shop.strip() or amount <= 0:
+        parsed = receipt_ocr.extract_fields(data, content_type)
+
     b = models.PendingBill(
         user_id=user.id,
-        date=datetime.date.today(),
-        shop=(shop.strip() or (file.filename or "Uploaded bill")),
-        amount=amount or 0.0,
+        date=(parsed and parsed["date"]) or datetime.date.today(),
+        shop=(shop.strip() or (parsed and parsed["shop"]) or (file.filename or "Uploaded bill")),
+        amount=amount or (parsed and parsed["amount"]) or 0.0,
         note="",
         status="pending",
     )

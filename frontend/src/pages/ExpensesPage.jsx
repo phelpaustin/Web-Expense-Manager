@@ -460,7 +460,7 @@ export default function ExpensesPage({
         <td className="right">{e.quantity}</td>
         <td>{e.unit}</td>
         <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
-          {money(e.amount)}
+          {money(e.amount, e.currency)}
         </td>
         <td className="right nowrap">
           {canEditExpense(e) && (

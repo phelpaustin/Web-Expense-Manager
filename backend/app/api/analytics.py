@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
-from app.api.expenses import fetch_expenses
+from app.api.expenses import fetch_expenses, fetch_expenses_in_base_currency
 from app.logic import analytics as analytics_logic
 from app.logic import price_tracker
 
@@ -18,7 +18,7 @@ def analytics_trends(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses(db, user.id, scope, space_ids)
+    expenses = fetch_expenses_in_base_currency(db, user.id, scope, space_ids)
     monthly = analytics_logic.monthly_totals(expenses)
     return {
         "monthly": monthly,
@@ -35,7 +35,7 @@ def analytics_categories(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return analytics_logic.category_breakdown(fetch_expenses(db, user.id, scope, space_ids))
+    return analytics_logic.category_breakdown(fetch_expenses_in_base_currency(db, user.id, scope, space_ids))
 
 
 @router.get("/analytics/price-trends")

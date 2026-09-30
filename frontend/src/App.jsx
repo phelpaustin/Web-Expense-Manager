@@ -1,65 +1,6 @@
-import { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import {
-  fetchExpenses,
-  fetchSummary,
-  fetchTrends,
-  fetchCategories,
-  fetchBudgetStatus,
-  createExpense,
-  createExpensesBulk,
-  updateExpense,
-  deleteExpense,
-  setBudget,
-  deleteBudget,
-  fetchMetrics,
-  fetchBudgetConfig,
-  fetchPeriodStatus,
-  fetchAlerts,
-  setBudgetConfig,
-  fetchIncome,
-  fetchIncomeSummary,
-  createIncome,
-  deleteIncome,
-  fetchRecurring,
-  createRecurring,
-  updateRecurring,
-  deleteRecurring,
-  backfillRecurring,
-  applyRecurring,
-  applyDueRecurring,
-  fetchPendingBills,
-  createPendingBill,
-  deletePendingBill,
-  itemisePendingBill,
-  uploadReceipt,
-  uploadBill,
-  bulkUploadPendingBills,
-  dismissDuplicate,
-  viewReceipt,
-  deleteReceipt,
-  fetchLedger,
-  createManualBill,
-  deleteManualBill,
-  fetchOptions,
-  importExpenses,
-  exportExpenses,
-  deleteAccount,
-  fetchMe,
-  getToken,
-  logout,
-  fetchTrips,
-  createTrip,
-  updateTrip,
-  deleteTrip,
-  fetchGroups,
-  createGroup,
-  deleteGroup,
-  leaveGroup,
-} from './api/client.js'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
-import { setDisplayCurrency } from './format.js'
 import DashboardPage from './pages/DashboardPage.jsx'
 import ExpensesPage from './pages/ExpensesPage.jsx'
 import IncomePage from './pages/IncomePage.jsx'
@@ -70,586 +11,32 @@ import TripsPage from './pages/TripsPage.jsx'
 import PriceTrackerPage from './pages/PriceTrackerPage.jsx'
 import GroupsPage from './pages/GroupsPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
+import { useAppData } from './hooks/useAppData.js'
+import { useAuth } from './hooks/useAuth.js'
+import { useExpenseHandlers } from './hooks/useExpenseHandlers.js'
+import { useIncomeHandlers } from './hooks/useIncomeHandlers.js'
+import { useRecurringHandlers } from './hooks/useRecurringHandlers.js'
+import { useBillsHandlers } from './hooks/useBillsHandlers.js'
+import { useTripHandlers } from './hooks/useTripHandlers.js'
+import { useGroupHandlers } from './hooks/useGroupHandlers.js'
+import { useBudgetHandlers } from './hooks/useBudgetHandlers.js'
 
-const EMPTY_FORM = { date: '', category: '', subcategory: '', description: '', amount: '', quantity: '1', unit: 'Count', shop: '', brand: '', currency: 'SEK', trip_id: '', group_id: '' }
-const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
-const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
-const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
-const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [], base_currency: 'SEK' }
-
+// This component only wires fetched data + handlers (from the hooks below)
+// into routes/pages — each page still receives all its data/handlers as
+// plain props, unchanged. See src/hooks/ for the actual state and logic,
+// split by domain (expenses/income/recurring/bills/trips/groups/budgets).
 export default function App() {
-  const [user, setUser] = useState(null)
-  const [authChecked, setAuthChecked] = useState(false)
-  const [summary, setSummary] = useState(null)
-  const [trends, setTrends] = useState(null)
-  const [categories, setCategories] = useState([])
-  const [budgets, setBudgets] = useState([])
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState(EMPTY_FORM)
-  const [income, setIncome] = useState([])
-  const [incomeSummary, setIncomeSummary] = useState(null)
-  const [incomeForm, setIncomeForm] = useState(EMPTY_INCOME)
-  const [savingIncome, setSavingIncome] = useState(false)
-  const [recurring, setRecurring] = useState([])
-  const [recurringForm, setRecurringForm] = useState(EMPTY_RECURRING)
-  const [savingRecurring, setSavingRecurring] = useState(false)
-  const [pendingBills, setPendingBills] = useState([])
-  const [bulkImportNotice, setBulkImportNotice] = useState(null)
-  const [pendingForm, setPendingForm] = useState(EMPTY_BILL)
-  const [ledger, setLedger] = useState([])
-  const [manualForm, setManualForm] = useState(EMPTY_BILL)
-  const [options, setOptions] = useState(EMPTY_OPTIONS)
-  const [importCurrency, setImportCurrency] = useState('')
-  const [metrics, setMetrics] = useState(null)
-  const [periodStatus, setPeriodStatus] = useState(null)
-  const [budgetConfig, setBudgetConfigState] = useState({ period: 'Monthly', rollover: false })
-  const [alerts, setAlerts] = useState([])
-  const [trips, setTrips] = useState([])
-  const [groups, setGroups] = useState([])
-  const [dashboardScope, setDashboardScopeState] = useState('all')
-  const [dashboardSpaceIds, setDashboardSpaceIdsState] = useState([])
+  const data = useAppData()
+  const auth = useAuth(data.loadAll, data.resetData, data.setError)
+  const expense = useExpenseHandlers(data.loadAll, data.setError)
+  const income = useIncomeHandlers(data.loadAll, data.setError)
+  const recurring = useRecurringHandlers(data.loadAll, data.setError)
+  const bills = useBillsHandlers(data.loadAll, data.setError, data.pendingBills)
+  const tripHandlers = useTripHandlers(data.loadAll, data.setError)
+  const groupHandlers = useGroupHandlers(data.loadAll, data.setError)
+  const budgetHandlers = useBudgetHandlers(data.loadAll, data.setError)
 
-  function loadAll() {
-    return Promise.all([
-      fetchSummary(dashboardScope, dashboardSpaceIds),
-      fetchTrends(dashboardScope, dashboardSpaceIds),
-      fetchCategories(dashboardScope, dashboardSpaceIds),
-      fetchBudgetStatus(dashboardScope, dashboardSpaceIds),
-      fetchIncome(),
-      fetchIncomeSummary(),
-      fetchRecurring(),
-      fetchPendingBills(),
-      fetchLedger(),
-      fetchOptions(),
-      fetchMetrics(dashboardScope, dashboardSpaceIds),
-      fetchBudgetConfig(),
-      fetchPeriodStatus(dashboardScope, dashboardSpaceIds),
-      fetchAlerts(),
-      fetchTrips(),
-      fetchGroups(),
-    ])
-      .then(([sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt, trps, grps]) => {
-        setSummary(sum)
-        setTrends(tr)
-        setCategories(cat)
-        setBudgets(bud)
-        setIncome(inc)
-        setIncomeSummary(incSum)
-        setRecurring(rec)
-        setPendingBills(pend)
-        setLedger(led)
-        setOptions(opts)
-        setDisplayCurrency(opts.base_currency)
-        setMetrics(met)
-        setBudgetConfigState(bcfg)
-        setPeriodStatus(pstat)
-        setAlerts(alrt)
-        setTrips(trps)
-        setGroups(grps)
-        setError(null)
-      })
-      .catch((err) => setError(err.message))
-  }
-
-  // Re-fetch just the dashboard-relevant data scoped to "all", "personal", or one space.
-  function handleSetDashboardScope(scope) {
-    setDashboardScopeState(scope)
-    setDashboardSpaceIdsState([])
-    return Promise.all([
-      fetchSummary(scope),
-      fetchTrends(scope),
-      fetchCategories(scope),
-      fetchBudgetStatus(scope),
-      fetchMetrics(scope),
-      fetchPeriodStatus(scope),
-    ])
-      .then(([sum, tr, cat, bud, met, pstat]) => {
-        setSummary(sum)
-        setTrends(tr)
-        setCategories(cat)
-        setBudgets(bud)
-        setMetrics(met)
-        setPeriodStatus(pstat)
-        setError(null)
-      })
-      .catch((err) => setError(err.message))
-  }
-
-  // Re-fetch scoped to a combined view across several chosen Expense Spaces.
-  function handleSetDashboardSpaceIds(spaceIds) {
-    setDashboardSpaceIdsState(spaceIds)
-    return Promise.all([
-      fetchSummary(null, spaceIds),
-      fetchTrends(null, spaceIds),
-      fetchCategories(null, spaceIds),
-      fetchBudgetStatus(null, spaceIds),
-      fetchMetrics(null, spaceIds),
-      fetchPeriodStatus(null, spaceIds),
-    ])
-      .then(([sum, tr, cat, bud, met, pstat]) => {
-        setSummary(sum)
-        setTrends(tr)
-        setCategories(cat)
-        setBudgets(bud)
-        setMetrics(met)
-        setPeriodStatus(pstat)
-        setError(null)
-      })
-      .catch((err) => setError(err.message))
-  }
-
-  // On mount, if a token exists, verify it and load the user's data.
-  useEffect(() => {
-    if (!getToken()) {
-      setAuthChecked(true)
-      setLoading(false)
-      return
-    }
-    fetchMe()
-      .then((me) => {
-        setUser(me)
-        return loadAll()
-      })
-      .catch(() => {
-        logout()
-      })
-      .finally(() => {
-        setAuthChecked(true)
-        setLoading(false)
-      })
-  }, [])
-
-  function handleAuthed() {
-    setLoading(true)
-    fetchMe()
-      .then((me) => {
-        setUser(me)
-        return loadAll()
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }
-
-  function handleLogout() {
-    logout()
-    setUser(null)
-    setSummary(null)
-    setTrends(null)
-    setCategories([])
-    setBudgets([])
-    setIncome([])
-    setIncomeSummary(null)
-    setRecurring([])
-    setPendingBills([])
-    setLedger([])
-    setOptions(EMPTY_OPTIONS)
-    setMetrics(null)
-    setPeriodStatus(null)
-  }
-
-  async function handleAdd(e) {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      await createExpense({
-        date: form.date,
-        category: form.category,
-        subcategory: form.subcategory,
-        description: form.description,
-        amount: parseFloat(form.amount),
-        quantity: parseFloat(form.quantity) || 1,
-        unit: form.unit || 'Count',
-        shop: form.shop,
-        brand: form.brand,
-        currency: form.currency || 'SEK',
-        trip_id: form.trip_id ? parseInt(form.trip_id, 10) : null,
-        group_id: form.group_id ? parseInt(form.group_id, 10) : null,
-      })
-      setForm(EMPTY_FORM)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleDelete(id) {
-    try {
-      await deleteExpense(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleImport(file) {
-    const result = await importExpenses(file, importCurrency)
-    await loadAll()
-    return result
-  }
-
-  async function handleAddRow(payload) {
-    await createExpense(payload)
-    await loadAll()
-  }
-
-  async function handleAddBill(items) {
-    await createExpensesBulk(items)
-    await loadAll()
-  }
-
-  async function handleAddTrip(trip) {
-    try {
-      await createTrip(trip)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleUpdateTrip(id, trip) {
-    try {
-      await updateTrip(id, trip)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDeleteTrip(id) {
-    try {
-      await deleteTrip(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleCreateGroup(name, spaceType) {
-    try {
-      await createGroup(name, spaceType)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDeleteGroup(id) {
-    try {
-      await deleteGroup(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleLeaveGroup(id) {
-    try {
-      await leaveGroup(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  function handleExport(format) {
-    return exportExpenses(format).catch((err) => setError(err.message))
-  }
-
-  async function handleDeleteAccount(password) {
-    await deleteAccount(password)
-    handleLogout()
-  }
-
-  function startEdit(expense) {
-    setEditingId(expense.id)
-    setEditForm({
-      date: expense.date,
-      category: expense.category,
-      subcategory: expense.subcategory || '',
-      description: expense.description,
-      amount: String(expense.amount),
-      quantity: String(expense.quantity ?? 1),
-      unit: expense.unit || 'Count',
-      shop: expense.shop || '',
-      group_id: expense.group_id ? String(expense.group_id) : '',
-    })
-  }
-
-  function cancelEdit() {
-    setEditingId(null)
-    setEditForm(EMPTY_FORM)
-  }
-
-  async function saveEdit(id) {
-    try {
-      await updateExpense(id, {
-        date: editForm.date,
-        category: editForm.category,
-        subcategory: editForm.subcategory,
-        description: editForm.description,
-        amount: parseFloat(editForm.amount),
-        quantity: parseFloat(editForm.quantity) || 1,
-        unit: editForm.unit || 'Count',
-        shop: editForm.shop,
-        group_id: editForm.group_id ? parseInt(editForm.group_id, 10) : null,
-      })
-      cancelEdit()
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleSetBudget(category, amount) {
-    const value = parseFloat(amount)
-    if (!value || value <= 0) return
-    try {
-      await setBudget(category, value)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDeleteBudget(category) {
-    try {
-      await deleteBudget(category)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleSetBudgetConfig(period, rollover) {
-    try {
-      await setBudgetConfig(period, rollover)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleAddIncome(e) {
-    e.preventDefault()
-    setSavingIncome(true)
-    try {
-      await createIncome({
-        date: incomeForm.date,
-        amount: parseFloat(incomeForm.amount),
-        source: incomeForm.source,
-        note: incomeForm.note,
-      })
-      setIncomeForm(EMPTY_INCOME)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSavingIncome(false)
-    }
-  }
-
-  async function handleDeleteIncome(id) {
-    try {
-      await deleteIncome(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleAddRecurring(e) {
-    e.preventDefault()
-    setSavingRecurring(true)
-    try {
-      await createRecurring({
-        item: recurringForm.item,
-        category: recurringForm.category,
-        amount: parseFloat(recurringForm.amount),
-        frequency: recurringForm.frequency,
-        auto_post: recurringForm.auto_post,
-      })
-      setRecurringForm(EMPTY_RECURRING)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSavingRecurring(false)
-    }
-  }
-
-  async function handleApplyRecurring(id) {
-    try {
-      await applyRecurring(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleApplyDue() {
-    try {
-      await applyDueRecurring()
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDeleteRecurring(id) {
-    try {
-      await deleteRecurring(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleUpdateRecurring(id, changes) {
-    try {
-      await updateRecurring(id, changes)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleBackfillRecurring(id, entry) {
-    try {
-      await backfillRecurring(id, entry)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleAddPending(e) {
-    e.preventDefault()
-    try {
-      await createPendingBill({
-        date: pendingForm.date,
-        shop: pendingForm.shop,
-        amount: parseFloat(pendingForm.amount),
-        note: pendingForm.note,
-      })
-      setPendingForm(EMPTY_BILL)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleItemise(id) {
-    try {
-      const bill = pendingBills.find((b) => b.id === id)
-      let amount
-      if (!bill || !bill.amount) {
-        const entered = window.prompt('Amount for this bill?', '')
-        if (entered === null) return
-        const parsed = parseFloat(entered)
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-          setError('Please enter a valid amount to itemise this bill.')
-          return
-        }
-        amount = parsed
-      }
-      await itemisePendingBill(id, amount)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDeletePending(id) {
-    try {
-      await deletePendingBill(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleUploadReceipt(id, file) {
-    try {
-      await uploadReceipt(id, file)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleUploadBill(file) {
-    try {
-      await uploadBill(file)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleBulkUploadBills(file) {
-    try {
-      const result = await bulkUploadPendingBills(file)
-      setBulkImportNotice(result)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDismissDuplicate(id) {
-    try {
-      await dismissDuplicate(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  function handleViewReceipt(id) {
-    viewReceipt(id).catch((err) => setError(err.message))
-  }
-
-  async function handleDeleteReceipt(id) {
-    try {
-      await deleteReceipt(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleAddManual(e) {
-    e.preventDefault()
-    try {
-      await createManualBill({
-        date: manualForm.date,
-        shop: manualForm.shop,
-        amount: parseFloat(manualForm.amount),
-        note: manualForm.note,
-      })
-      setManualForm(EMPTY_BILL)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function handleDeleteManual(id) {
-    try {
-      await deleteManualBill(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  if (!authChecked) {
+  if (!auth.authChecked) {
     return (
       <div className="container">
         <p>Loading…</p>
@@ -657,7 +44,7 @@ export default function App() {
     )
   }
 
-  if (!user) {
+  if (!auth.user) {
     return (
       <Routes>
         <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -665,7 +52,7 @@ export default function App() {
           path="*"
           element={
             <div className="container">
-              <AuthScreen onAuthed={handleAuthed} />
+              <AuthScreen onAuthed={auth.handleAuthed} />
             </div>
           }
         />
@@ -676,28 +63,32 @@ export default function App() {
   return (
     <Routes>
       <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route element={<Layout user={user} onLogout={handleLogout} error={error} loading={loading} alerts={alerts} />}>
+      <Route
+        element={
+          <Layout user={auth.user} onLogout={auth.handleLogout} error={data.error} loading={auth.loading} alerts={data.alerts} />
+        }
+      >
         <Route
           index
           element={
             <DashboardPage
-              summary={summary}
-              incomeSummary={incomeSummary}
-              budgets={budgets}
-              trends={trends}
-              categories={categories}
-              onSetBudget={handleSetBudget}
-              onDeleteBudget={handleDeleteBudget}
-              metrics={metrics}
-              periodStatus={periodStatus}
-              budgetConfig={budgetConfig}
-              onSetBudgetConfig={handleSetBudgetConfig}
-              groups={groups}
-              trips={trips}
-              dashboardScope={dashboardScope}
-              onSetDashboardScope={handleSetDashboardScope}
-              dashboardSpaceIds={dashboardSpaceIds}
-              onSetDashboardSpaceIds={handleSetDashboardSpaceIds}
+              summary={data.summary}
+              incomeSummary={data.incomeSummary}
+              budgets={data.budgets}
+              trends={data.trends}
+              categories={data.categories}
+              onSetBudget={budgetHandlers.handleSetBudget}
+              onDeleteBudget={budgetHandlers.handleDeleteBudget}
+              metrics={data.metrics}
+              periodStatus={data.periodStatus}
+              budgetConfig={data.budgetConfig}
+              onSetBudgetConfig={budgetHandlers.handleSetBudgetConfig}
+              groups={data.groups}
+              trips={data.trips}
+              dashboardScope={data.dashboardScope}
+              onSetDashboardScope={data.handleSetDashboardScope}
+              dashboardSpaceIds={data.dashboardSpaceIds}
+              onSetDashboardSpaceIds={data.handleSetDashboardSpaceIds}
             />
           }
         />
@@ -705,27 +96,27 @@ export default function App() {
           path="expenses"
           element={
             <ExpensesPage
-              form={form}
-              setForm={setForm}
-              saving={saving}
-              onAdd={handleAdd}
-              onAddBill={handleAddBill}
-              editingId={editingId}
-              editForm={editForm}
-              setEditForm={setEditForm}
-              startEdit={startEdit}
-              cancelEdit={cancelEdit}
-              saveEdit={saveEdit}
-              onDelete={handleDelete}
-              options={options}
-              onImport={handleImport}
-              onExport={handleExport}
-              importCurrency={importCurrency}
-              setImportCurrency={setImportCurrency}
-              onAddRow={handleAddRow}
-              trips={trips}
-              groups={groups}
-              onError={setError}
+              form={expense.form}
+              setForm={expense.setForm}
+              saving={expense.saving}
+              onAdd={expense.handleAdd}
+              onAddBill={expense.handleAddBill}
+              editingId={expense.editingId}
+              editForm={expense.editForm}
+              setEditForm={expense.setEditForm}
+              startEdit={expense.startEdit}
+              cancelEdit={expense.cancelEdit}
+              saveEdit={expense.saveEdit}
+              onDelete={expense.handleDelete}
+              options={data.options}
+              onImport={expense.handleImport}
+              onExport={expense.handleExport}
+              importCurrency={expense.importCurrency}
+              setImportCurrency={expense.setImportCurrency}
+              onAddRow={expense.handleAddRow}
+              trips={data.trips}
+              groups={data.groups}
+              onError={data.setError}
             />
           }
         />
@@ -733,13 +124,13 @@ export default function App() {
           path="income"
           element={
             <IncomePage
-              income={income}
-              incomeSummary={incomeSummary}
-              incomeForm={incomeForm}
-              setIncomeForm={setIncomeForm}
-              savingIncome={savingIncome}
-              onAddIncome={handleAddIncome}
-              onDeleteIncome={handleDeleteIncome}
+              income={data.income}
+              incomeSummary={data.incomeSummary}
+              incomeForm={income.incomeForm}
+              setIncomeForm={income.setIncomeForm}
+              savingIncome={income.savingIncome}
+              onAddIncome={income.handleAddIncome}
+              onDeleteIncome={income.handleDeleteIncome}
             />
           }
         />
@@ -747,16 +138,16 @@ export default function App() {
           path="recurring"
           element={
             <RecurringPage
-              recurring={recurring}
-              recurringForm={recurringForm}
-              setRecurringForm={setRecurringForm}
-              savingRecurring={savingRecurring}
-              onAdd={handleAddRecurring}
-              onApply={handleApplyRecurring}
-              onApplyDue={handleApplyDue}
-              onDelete={handleDeleteRecurring}
-              onUpdate={handleUpdateRecurring}
-              onBackfill={handleBackfillRecurring}
+              recurring={data.recurring}
+              recurringForm={recurring.recurringForm}
+              setRecurringForm={recurring.setRecurringForm}
+              savingRecurring={recurring.savingRecurring}
+              onAdd={recurring.handleAddRecurring}
+              onApply={recurring.handleApplyRecurring}
+              onApplyDue={recurring.handleApplyDue}
+              onDelete={recurring.handleDeleteRecurring}
+              onUpdate={recurring.handleUpdateRecurring}
+              onBackfill={recurring.handleBackfillRecurring}
             />
           }
         />
@@ -764,25 +155,25 @@ export default function App() {
           path="bills"
           element={
             <BillsPage
-              pendingBills={pendingBills}
-              pendingForm={pendingForm}
-              setPendingForm={setPendingForm}
-              onAddPending={handleAddPending}
-              onItemise={handleItemise}
-              onDeletePending={handleDeletePending}
-              onUploadReceipt={handleUploadReceipt}
-              onUploadBill={handleUploadBill}
-              onBulkUploadBills={handleBulkUploadBills}
-              bulkImportNotice={bulkImportNotice}
-              onDismissBulkNotice={() => setBulkImportNotice(null)}
-              onDismissDuplicate={handleDismissDuplicate}
-              onViewReceipt={handleViewReceipt}
-              onDeleteReceipt={handleDeleteReceipt}
-              ledger={ledger}
-              manualForm={manualForm}
-              setManualForm={setManualForm}
-              onAddManual={handleAddManual}
-              onDeleteManual={handleDeleteManual}
+              pendingBills={data.pendingBills}
+              pendingForm={bills.pendingForm}
+              setPendingForm={bills.setPendingForm}
+              onAddPending={bills.handleAddPending}
+              onItemise={bills.handleItemise}
+              onDeletePending={bills.handleDeletePending}
+              onUploadReceipt={bills.handleUploadReceipt}
+              onUploadBill={bills.handleUploadBill}
+              onBulkUploadBills={bills.handleBulkUploadBills}
+              bulkImportNotice={bills.bulkImportNotice}
+              onDismissBulkNotice={() => bills.setBulkImportNotice(null)}
+              onDismissDuplicate={bills.handleDismissDuplicate}
+              onViewReceipt={bills.handleViewReceipt}
+              onDeleteReceipt={bills.handleDeleteReceipt}
+              ledger={data.ledger}
+              manualForm={bills.manualForm}
+              setManualForm={bills.setManualForm}
+              onAddManual={bills.handleAddManual}
+              onDeleteManual={bills.handleDeleteManual}
             />
           }
         />
@@ -790,11 +181,11 @@ export default function App() {
           path="settings"
           element={
             <SettingsPage
-              user={user}
-              options={options}
-              onOptionsUpdated={setOptions}
-              onError={setError}
-              onDeleteAccount={handleDeleteAccount}
+              user={auth.user}
+              options={data.options}
+              onOptionsUpdated={data.setOptions}
+              onError={data.setError}
+              onDeleteAccount={auth.handleDeleteAccount}
             />
           }
         />
@@ -802,27 +193,27 @@ export default function App() {
           path="trips"
           element={
             <TripsPage
-              trips={trips}
-              groups={groups}
-              onAddTrip={handleAddTrip}
-              onUpdateTrip={handleUpdateTrip}
-              onDeleteTrip={handleDeleteTrip}
-              onRefresh={loadAll}
-              onError={setError}
+              trips={data.trips}
+              groups={data.groups}
+              onAddTrip={tripHandlers.handleAddTrip}
+              onUpdateTrip={tripHandlers.handleUpdateTrip}
+              onDeleteTrip={tripHandlers.handleDeleteTrip}
+              onRefresh={data.loadAll}
+              onError={data.setError}
             />
           }
         />
-        <Route path="prices" element={<PriceTrackerPage onError={setError} />} />
+        <Route path="prices" element={<PriceTrackerPage onError={data.setError} />} />
         <Route
           path="groups"
           element={
             <GroupsPage
-              groups={groups}
-              onCreateGroup={handleCreateGroup}
-              onDeleteGroup={handleDeleteGroup}
-              onLeaveGroup={handleLeaveGroup}
-              onRefresh={loadAll}
-              onError={setError}
+              groups={data.groups}
+              onCreateGroup={groupHandlers.handleCreateGroup}
+              onDeleteGroup={groupHandlers.handleDeleteGroup}
+              onLeaveGroup={groupHandlers.handleLeaveGroup}
+              onRefresh={data.loadAll}
+              onError={data.setError}
             />
           }
         />
