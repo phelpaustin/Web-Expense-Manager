@@ -387,9 +387,9 @@ def expenses_summary(
 ):
     expenses = fetch_expenses(db, user.id, scope, space_ids)
     total = sum(e["amount"] for e in expenses)
-    by_category: dict[str, float] = {}
+    by_category: dict[str, Decimal] = {}
     for e in expenses:
-        by_category[e["category"]] = round(by_category.get(e["category"], 0.0) + e["amount"], 2)
+        by_category[e["category"]] = round(by_category.get(e["category"], Decimal("0")) + e["amount"], 2)
     return {"total": round(total, 2), "count": len(expenses), "by_category": by_category}
 
 
