@@ -243,7 +243,7 @@ def trip_settlement(
     user: models.User = Depends(get_current_user),
 ):
     """Who paid what vs. an equal split, and the minimal set of payments to settle up."""
-    _trip_or_404(db, trip_id)
+    trip = _trip_or_404(db, trip_id)
     _member_or_403(db, trip_id, user.id)
 
     member_rows = db.query(models.GroupMember).filter(models.GroupMember.group_id == trip_id).all()

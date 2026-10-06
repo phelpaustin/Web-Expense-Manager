@@ -59,7 +59,8 @@ def forecast_next_month(monthly: list[dict]) -> float | None:
     """One-step Holt-Winters forecast (was the ExponentialSmoothing block)."""
     if not HAS_STATS or len(monthly) < 2:
         return None
-    series = pd.Series([m["total"] for m in monthly])
+    # Totals are Decimal (Numeric columns); statsmodels needs a float series.
+    series = pd.Series([float(m["total"]) for m in monthly], dtype="float64")
     try:
         fit = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
         return quantize_money(fit.forecast(1).iloc[0])

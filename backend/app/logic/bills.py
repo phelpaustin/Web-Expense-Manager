@@ -151,10 +151,14 @@ def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]
         try:
             date_val = pd.to_datetime(raw[date_col]).date()
             shop_val = str(raw[shop_col]).strip()
+            # Blank cells arrive as NaN, which stays truthy after quantize(),
+            # so reject them before converting.
+            if pd.isna(raw[amount_col]):
+                raise ValueError("missing or zero amount")
             amount_val = abs(quantize_money(raw[amount_col]))
             if not shop_val or shop_val.lower() == "nan":
                 raise ValueError("missing shop name")
-            if not amount_val:
+            if not amount_val.is_finite() or not amount_val:
                 raise ValueError("missing or zero amount")
         except Exception as exc:  # noqa: BLE001 – any parse issue just skips the row
             skipped.append({"row": i, "reason": str(exc)})
