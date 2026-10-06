@@ -73,7 +73,6 @@ export default function App() {
           element={
             <DashboardPage
               summary={data.summary}
-              incomeSummary={data.incomeSummary}
               budgets={data.budgets}
               trends={data.trends}
               categories={data.categories}

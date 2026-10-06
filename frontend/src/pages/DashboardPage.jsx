@@ -7,7 +7,6 @@ const CHOOSE_SPACES = '__choose__'
 
 export default function DashboardPage({
   summary,
-  incomeSummary,
   budgets,
   trends,
   categories,
@@ -134,12 +133,10 @@ export default function DashboardPage({
             <span className="card-label">Categories</span>
             <span className="card-value">{Object.keys(summary.by_category).length}</span>
           </div>
-          {incomeSummary && (
+          {metrics && (
             <div className="card">
               <span className="card-label">Net this month</span>
-              <span className="card-value">
-                {money(incomeSummary.this_month - summary.total)}
-              </span>
+              <span className="card-value card-value--money">{money(metrics.monthly_savings)}</span>
             </div>
           )}
         </section>
@@ -150,10 +147,6 @@ export default function DashboardPage({
           <div className="card">
             <span className="card-label">Savings rate</span>
             <span className="card-value">{metrics.savings_rate}%</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Monthly savings</span>
-            <span className="card-value">{money(metrics.monthly_savings)}</span>
           </div>
           <div className="card">
             <span className="card-label">Projected spend</span>
