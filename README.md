@@ -1,76 +1,61 @@
-# Expense Webpage
+# Expense Manager
 
-A non-Streamlit rewrite of the Expense Tracker Dashboard.
+A personal and shared expense manager built with React, Vite, FastAPI, and SQLAlchemy.
 
-- **backend/** — FastAPI (Python). Exposes your expense logic as a REST API.
-- **frontend/** — React + Vite. The actual webpage users see.
+## Features
 
-The old Streamlit app in `Expense-Tracker-Dashboard/` stays in maintenance mode
-and is used as a reference. Logic modules from it are ported into
-`backend/app/logic/` one feature at a time.
+- Record, edit, search, filter, paginate, import, and export expenses. CSV and Excel imports support up to 10 MB and 10,000 rows; duplicate rows are skipped.
+- View spending trends, category breakdowns, forecasts, price history, cash flow, and financial metrics.
+- Set category and overall budgets, choose weekly, monthly, or annual tracking, and optionally carry unused or overspent amounts between periods.
+- Track income, recurring expenses, pending bills, manual bills, and receipts. Receipt upload supports PDF, JPEG, and PNG files up to 10 MB; field extraction is best-effort.
+- Organize shared expenses in Expense Spaces with owner, admin, editor, and viewer roles. Members can invite people by email.
+- Track trips as separate shared spaces, with trip budgets, currencies, expenses, and equal-share settlement summaries.
+- Use password sign-in with email verification and password reset, or optionally enable Google sign-in.
 
-## Mental model
+## Project layout
 
-```
-React (frontend)  --HTTP-->  FastAPI (backend)  --imports-->  logic modules
-                                    |
-                                    v
-                                 database (SQLAlchemy)
-```
-
-## Project structure
-
-```
-Expense_webpage/
-├── render.yaml            # backend deploy config (Render Blueprint)
-├── backend/               # FastAPI + SQLAlchemy
-│   ├── main.py            # app entry, CORS, startup seeding
-│   ├── app/
-│   │   ├── api/           # HTTP routes (auth, expenses, budgets, analytics)
-│   │   ├── core/          # config + security (JWT, password hashing)
-│   │   ├── db/            # engine, models, seed
-│   │   └── logic/         # ported Streamlit-free logic modules
-│   └── requirements.txt
-└── frontend/              # React + Vite
-    └── src/
-        ├── App.jsx        # dashboard (gated behind auth)
-        ├── AuthScreen.jsx # login / register
-        ├── api/client.js  # backend calls + token handling
-        └── styles/
+```text
+backend/
+  main.py                 FastAPI application and startup
+  app/api/                API routes
+  app/core/               Configuration, authentication, email, uploads, FX
+  app/db/                 SQLAlchemy models, database access, and seeding
+  app/logic/              Expense, budget, analytics, and other business logic
+  alembic/                Database migrations
+frontend/
+  src/pages/              React pages
+  src/hooks/              Data and mutation hooks
+  src/api/client.js       API client
+render.yaml               Render backend blueprint
 ```
 
-## Prerequisites
+## Run locally
 
-- **Python 3.10+** and **Node.js 18+** (`node --version`, `python3 --version`).
-- **virtualenv** — used because some systems ship Python without the `venv`
-  module. Install with `pip install --user virtualenv` if missing.
-- Git.
+Requirements: Python 3.10 or newer and Node.js 18 or newer.
 
-## Getting started
-
-Clone the repo (or open the existing folder), then set up each half.
-
-```bash
-git clone https://github.com/YOU/expense-webpage.git
-cd expense-webpage
-```
-
-### Backend setup
+### Backend
 
 ```bash
 cd backend
-virtualenv .venv                 # or: python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env             # optional; sensible defaults work locally
+cp .env.example .env
 uvicorn main:app --reload --port 8000
 ```
 
-- On first run it creates a local `expense.db` SQLite file and seeds sample
-  data plus a demo user — no database setup required.
-- API docs: http://localhost:8000/docs
+SQLite is the default database. On startup, Alembic applies migrations. A fresh local database is seeded with sample expenses and the demo account:
 
-### Frontend setup
+- Email: `demo@example.com`
+- Password: `demo1234`
+
+The demo account is for local development. Production databases are not seeded with it unless `DEMO_PASSWORD` is explicitly configured.
+
+The API health check is at <http://localhost:8000/api/health>; interactive API documentation is at <http://localhost:8000/docs>.
+
+### Frontend
+
+In a second terminal:
 
 ```bash
 cd frontend
@@ -78,105 +63,85 @@ npm install
 npm run dev
 ```
 
-- Open http://localhost:5173.
-- Vite proxies `/api/*` to the backend on port 8000, so no config is needed
-  locally. (For production, set `VITE_API_URL` — see Deployment.)
+Open <http://localhost:5173>. During development, Vite proxies `/api` requests to `http://localhost:8000`. To point the frontend at another API, set `VITE_API_URL` in `frontend/.env` (for example, `VITE_API_URL=https://expense-backend.onrender.com`).
 
-### First login
+## Authentication and email
 
-Use the seeded demo account, or register your own:
+New password-based accounts must verify their email address before signing in. The verification link lets the user choose a name and password. If no email provider is configured locally, the verification and password-reset message is logged by the backend; open its link in the browser.
 
-- **Email:** `demo@example.com`
-- **Password:** `demo1234`
+Passwords must be at least 12 characters and fit bcrypt's 72-byte limit. Existing accounts remain verified through the email-verification migration. Google sign-in can be enabled by setting the same OAuth client ID in backend `GOOGLE_CLIENT_ID` and frontend `VITE_GOOGLE_CLIENT_ID`.
 
-## Status
+Password reset links expire after 30 minutes. Access tokens expire after seven days; logging out, changing the password, or resetting it revokes existing sessions.
 
-Done: SQLAlchemy database, JWT authentication with per-user data isolation,
-expense CRUD, budget CRUD, trends/forecast and category analytics.
+For local email delivery, configure either Resend or SMTP in `backend/.env`:
 
-Ported logic modules so far: `analytics.py`, `budget_manager.py` (partial).
-Remaining Streamlit modules (income, recurring, bills, AI insights, OCR, etc.)
-follow the same pattern: strip Streamlit → `app/logic/` → `app/api/` → React.
+```dotenv
+FRONTEND_URL=http://localhost:5173
+RESEND_API_KEY=re_your_api_key
+EMAIL_FROM=no-reply@yourdomain.com
+```
+
+Alternatively configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM`. For production, set `FRONTEND_URL` to the deployed frontend origin, without a trailing slash, so verification and reset links return to the right site.
+
+## Expense Spaces and trips
+
+An Expense Space is a shared expense area, such as a household, business, rental, or custom space. Membership is independent for each space. Owners can manage the space and members; admins can invite members; editors can add expenses and edit their own; viewers can read the space.
+
+Trips are their own Expense Spaces. A trip can optionally be filed under a non-trip Expense Space, while its membership remains separate. Inviting someone to a trip does not give them access to its parent space. Trip expenses can use different currencies; summaries and settlement are shown in the trip currency when rates are available.
+
+## Budgets, currencies, and recurring expenses
+
+Budgets are stored as monthly amounts. The selected weekly, monthly, or annual view allocates that amount to the current period; rollover can carry the net of prior budgets and spending forward. Dashboard alerts can be viewed in-app and optionally sent as a daily email digest.
+
+Expense amounts retain their entered currency. Analytics, budgets, and metrics convert expenses into the user's display currency using the latest available Frankfurter rates. These are current rates, so converted historical totals can change as rates change. Some valid currency codes may not have a rate available; conversion-dependent views require a rate for every included currency.
+
+Recurring templates support daily, weekly, bi-weekly, monthly, quarterly, and yearly schedules. Calendar-based schedules preserve their original date, including month-end schedules. Users can apply an individual template, apply all due templates, or backfill past occurrences. The Auto-post option is saved on the template, but automatic background posting is not currently scheduled; use the apply controls in the Recurring page.
+
+## Bills and receipts
+
+Pending bills can be entered manually, imported from CSV or Excel bank statements, or created from an uploaded receipt. Bulk-import rows matching an existing expense or bill are marked as possible duplicates for review. Receipts can be PDFs, JPEGs, or PNGs. PDF text extraction works without an OCR system package; image OCR also requires the Tesseract system binary and may not be available on the default Render runtime.
 
 ## Database
 
-The backend uses **SQLAlchemy**, so the same code runs on SQLite locally and
-Postgres in production.
+SQLAlchemy supports SQLite for local development and PostgreSQL for deployment. Alembic migrations run when the backend starts. Monetary database columns use fixed-precision numeric types.
 
-- **Local (default):** a `expense.db` SQLite file is created automatically on
-  first run and seeded with sample data. No setup needed.
-- **Supabase / Postgres:** create a project at supabase.com, then in
-  `backend/.env` set:
+To use PostgreSQL locally, set `DATABASE_URL` in `backend/.env`, for example:
 
-  ```
-  DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT.supabase.co:5432/postgres
-  ```
+```dotenv
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT.supabase.co:5432/postgres
+```
 
-  Restart the backend — tables are created and seeded automatically. Nothing
-  else changes.
+Use the connection string supplied by your database provider. Do not commit `.env` files or production credentials.
 
-Tables: `expenses`, `budgets` (see `backend/app/db/models.py`).
+## Account deletion
 
-## Authentication
+Deleting an account removes its personal expenses, budgets, income, recurring templates, bills, receipts, options, and legacy trip records. Expenses in shared spaces are retained as financial history with the creator reference cleared; the UI labels those records **Deleted user**. Owned spaces transfer to an existing member when possible, or remain as ownerless historical containers. Deletion is performed in one database transaction.
 
-Every data endpoint requires a logged-in user, and each user only sees their
-own expenses and budgets (JWT bearer tokens).
+## Deploy
 
-New passwords must contain at least 12 characters. The local demo account is
-an exception and uses `demo1234`.
+The repository includes a Render Blueprint for the FastAPI backend. The frontend can be deployed to Vercel with its root directory set to `frontend`.
 
-- **Register or log in** on the first screen. The token is stored in the
-  browser and sent on every request.
-- New password-based accounts must verify their email and choose a password
-  from the email link before signing in. Space invitations are claimed only
-  after verification. Existing accounts remain active, and Google sign-in uses
-  Google's verified email claim.
-- **Demo account** (seeded automatically): `demo@example.com` / `demo1234`.
-- In production, set a strong `SECRET_KEY` in `backend/.env`
-  (e.g. `openssl rand -hex 32`). The default is for local dev only.
+Configure these production values:
 
-Configure `RESEND_API_KEY` or SMTP settings and set `FRONTEND_URL` to the
-deployed frontend URL so verification and password-reset links can be delivered
-to the right site. Local development can use the email message logged by the
-backend when no email provider is configured.
+| Setting | Where | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Render | PostgreSQL connection string |
+| `SECRET_KEY` | Render | Strong, private signing key; Render Blueprint generates one |
+| `CORS_ORIGINS` | Render | Exact deployed frontend origin, such as `https://your-app.vercel.app` |
+| `FRONTEND_URL` | Render | Deployed frontend origin used in email links |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Render | Email delivery through Resend; SMTP settings can be used instead |
+| `VITE_API_URL` | Vercel | Backend origin, such as `https://expense-backend.onrender.com` |
 
-Auth endpoints: `POST /api/auth/register`, `POST /api/auth/verify-email`,
-`POST /api/auth/resend-verification`, `POST /api/auth/login`, and
-`GET /api/auth/me`.
+Do not use the development `SECRET_KEY` value from `.env.example` in production. Generate a private key with `openssl rand -hex 32` if setting it manually. Set `FRONTEND_URL` without a trailing slash. Password sign-up requires working email delivery in production.
 
-### Account deletion policy
+Optional settings:
 
-Deleting an account removes personal expenses, budgets, income, recurring
-templates, bills, receipts, options, and legacy trip records. Expenses in a
-shared Expense Space are retained as financial history, but their creator
-reference is cleared and the UI displays **Deleted user**. Spaces owned by the
-deleted account are transferred to an existing member when possible; an empty
-space remains as an ownerless historical container. The complete deletion is
-performed in one database transaction and rolls back if any step fails.
+- `GOOGLE_CLIENT_ID` on Render and `VITE_GOOGLE_CLIENT_ID` on Vercel enable Google sign-in.
+- `DEMO_PASSWORD` creates a production demo account; leave it unset for normal deployments.
+- `CRON_SECRET` enables the protected `POST /api/alerts/send-digest` endpoint.
 
-## Deployment
+To schedule the alert digest using the included GitHub Actions workflow, add repository secrets `ALERT_DIGEST_URL` (the full endpoint URL) and `CRON_SECRET` (matching the Render environment value). The workflow runs daily at 07:00 UTC and can also be started manually.
 
-Managed, free-tier stack (no server to maintain):
+## API overview
 
-| Piece | Host |
-|-------|------|
-| Database | Supabase (Postgres) |
-| Backend (FastAPI) | Render — uses `render.yaml` |
-| Frontend (React) | Vercel — set Root Directory to `frontend` |
-| Domain / DNS | Cloudflare (optional) |
-
-Required environment variables in production:
-
-- **Backend (Render):**
-  - `DATABASE_URL` — Supabase connection string.
-  - `SECRET_KEY` — strong random value (`openssl rand -hex 32`).
-  - `CORS_ORIGINS` — the frontend URL, e.g. `https://your-app.vercel.app`.
-  - `FRONTEND_URL` — the frontend URL used in verification and password-reset links.
-  - `RESEND_API_KEY` and `EMAIL_FROM` (or SMTP settings) — required to deliver
-    verification and password-reset emails.
-- **Frontend (Vercel):**
-  - `VITE_API_URL` — the backend URL, e.g. `https://expense-backend.onrender.com`.
-
-Deploy flow: push to GitHub → Render deploys the backend from `render.yaml` →
-Vercel deploys the frontend → set `CORS_ORIGINS` to the Vercel URL. After the
-first setup, every `git push` auto-redeploys both.
+All application data routes require a bearer token. Authentication routes cover registration, email verification, login, Google sign-in, password reset/change, logout, and account deletion. Feature routes cover expenses, budgets, analytics, income, recurring templates, bills and receipts, settings, alerts, trips, and Expense Spaces. See `/docs` on a running backend for the complete request and response schemas.
