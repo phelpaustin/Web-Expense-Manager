@@ -1115,6 +1115,71 @@ button {
   font-weight: 600;
 }
 
+.budget-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.budget-panel-header h2 {
+  margin: 0;
+}
+
+.budget-setup-copy {
+  margin: -0.5rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.budget-create-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.budget-create-field {
+  display: grid;
+  flex: 1 1 160px;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.budget-create-field input,
+.budget-create-field select {
+  width: 100%;
+}
+
+.budget-create-form button {
+  min-height: 2.55rem;
+  padding: 0.55rem 1.1rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--grad);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 10px 20px -12px rgba(109, 123, 255, 0.7);
+}
+
+.budget-create-form button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.budget-form-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
 .budget-name {
   font-size: 0.9rem;
 }

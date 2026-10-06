@@ -4,6 +4,7 @@ import { money } from '../format.js'
 import { SpendingTrendChart, CashFlowChart, CategoryDonut } from '../components/Charts.jsx'
 
 const CHOOSE_SPACES = '__choose__'
+const TOTAL_BUDGET_KEY = '__total_monthly__'
 
 export default function DashboardPage({
   summary,
@@ -25,8 +26,57 @@ export default function DashboardPage({
 }) {
   const [choosingSpaces, setChoosingSpaces] = useState(false)
   const [pendingSelection, setPendingSelection] = useState(dashboardSpaceIds || [])
+  const [budgetFormOpen, setBudgetFormOpen] = useState(false)
+  const [budgetType, setBudgetType] = useState('total')
+  const [newBudgetCategory, setNewBudgetCategory] = useState('')
+  const [newBudgetAmount, setNewBudgetAmount] = useState('')
+  const [savingBudget, setSavingBudget] = useState(false)
+  const [budgetFormError, setBudgetFormError] = useState('')
   const multiActive = dashboardSpaceIds && dashboardSpaceIds.length > 0
   const allSpaces = (groups || []).concat(trips || [])
+  const hasTotalBudget = Boolean(periodStatus)
+  const showBudgetForm = budgets.length === 0 || budgetFormOpen
+
+  async function handleAddBudget(event) {
+    event.preventDefault()
+    setBudgetFormError('')
+
+    const selectedBudgetType = hasTotalBudget ? 'category' : budgetType
+    const category = selectedBudgetType === 'total' ? TOTAL_BUDGET_KEY : newBudgetCategory.trim()
+    const amount = Number(newBudgetAmount)
+    if (selectedBudgetType === 'category' && !category) {
+      setBudgetFormError('Enter a category name.')
+      return
+    }
+    if (selectedBudgetType === 'category' && category.toLowerCase() === 'total') {
+      setBudgetFormError('“Total” is reserved for the overall budget.')
+      return
+    }
+    if (selectedBudgetType === 'category' && budgets.some((budget) => budget.category.toLowerCase() === category.toLowerCase())) {
+      setBudgetFormError('A budget already exists for that category. Edit its amount in the list above.')
+      return
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBudgetFormError('Enter an amount greater than zero.')
+      return
+    }
+
+    setSavingBudget(true)
+    try {
+      const saved = await onSetBudget(category, amount)
+      if (!saved) {
+        setBudgetFormError('Could not save the budget. Please try again.')
+        return
+      }
+      setNewBudgetCategory('')
+      setNewBudgetAmount('')
+      setBudgetFormOpen(false)
+    } catch {
+      setBudgetFormError('Could not save the budget. Please try again.')
+    } finally {
+      setSavingBudget(false)
+    }
+  }
 
   function spaceLabel(id) {
     if (id === 'personal') return 'Personal expenses'
@@ -209,11 +259,29 @@ export default function DashboardPage({
         </section>
       )}
 
-      {budgets.length > 0 && (
-        <section className="panel">
-          <h2>🎯 Budget status</h2>
+      <section className="panel">
+          <div className="budget-panel-header">
+            <h2>🎯 Budget status</h2>
+            {budgets.length > 0 && (
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  setBudgetFormError('')
+                  setBudgetFormOpen((open) => !open)
+                }}
+                aria-expanded={showBudgetForm}
+              >
+                {showBudgetForm ? 'Cancel' : 'Add budget'}
+              </button>
+            )}
+          </div>
+          {budgets.length === 0 && (
+            <p className="budget-setup-copy">Set an overall limit or create your first category budget.</p>
+          )}
           {budgets.map((b) => {
-            const key = b.category === 'Total' ? '__total_monthly__' : b.category
+            const isComputedTotal = b.category === 'Total' && !hasTotalBudget
+            const key = b.category === 'Total' ? TOTAL_BUDGET_KEY : b.category
             return (
               <div key={b.category} className={b.category === 'Total' ? 'budget-row total' : 'budget-row'}>
                 <span className="budget-name">{b.category}</span>
@@ -230,29 +298,80 @@ export default function DashboardPage({
                   {b.pct}%
                 </span>
                 <span className="budget-amt">{money(b.spent)} spent</span>
-                <input
-                  className="budget-input"
-                  type="number"
-                  step="1"
-                  min="1"
-                  defaultValue={b.budget}
-                  title="Budget amount — edit and press Enter"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur()
-                  }}
-                  onBlur={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (v && v !== b.budget) onSetBudget(key, v)
-                  }}
-                />
-                <button className="delete-btn" onClick={() => onDeleteBudget(key)} title="Delete budget">
-                  ✕
-                </button>
+                {isComputedTotal ? (
+                  <span className="budget-amt">{money(b.budget)} total</span>
+                ) : (
+                  <input
+                    className="budget-input"
+                    type="number"
+                    step="1"
+                    min="1"
+                    defaultValue={b.budget}
+                    title="Budget amount — edit and press Enter"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                    }}
+                    onBlur={(e) => {
+                      const v = parseFloat(e.target.value)
+                      if (v && v !== b.budget) onSetBudget(key, v)
+                    }}
+                  />
+                )}
+                {!isComputedTotal && (
+                  <button className="delete-btn" onClick={() => onDeleteBudget(key)} title="Delete budget">
+                    ✕
+                  </button>
+                )}
               </div>
             )
           })}
-        </section>
-      )}
+          {showBudgetForm && (
+            <form className="budget-create-form" onSubmit={handleAddBudget}>
+              <label className="budget-create-field">
+                Budget type
+                <select
+                  value={hasTotalBudget ? 'category' : budgetType}
+                  onChange={(event) => {
+                    setBudgetType(event.target.value)
+                    setBudgetFormError('')
+                  }}
+                >
+                  {!hasTotalBudget && <option value="total">Overall budget</option>}
+                  <option value="category">Category budget</option>
+                </select>
+              </label>
+              {(hasTotalBudget || budgetType === 'category') && (
+                <label className="budget-create-field">
+                  Category
+                  <input
+                    type="text"
+                    value={newBudgetCategory}
+                    onChange={(event) => setNewBudgetCategory(event.target.value)}
+                    placeholder="e.g. Groceries"
+                    maxLength={100}
+                    required
+                  />
+                </label>
+              )}
+              <label className="budget-create-field">
+                Budget amount
+                <input
+                  type="number"
+                  value={newBudgetAmount}
+                  onChange={(event) => setNewBudgetAmount(event.target.value)}
+                  min="0.01"
+                  step="0.01"
+                  placeholder="0.00"
+                  required
+                />
+              </label>
+              <button type="submit" disabled={savingBudget}>
+                {savingBudget ? 'Saving…' : 'Save budget'}
+              </button>
+              {budgetFormError && <p className="budget-form-error" role="alert">{budgetFormError}</p>}
+            </form>
+          )}
+      </section>
 
       {trends && (
         <section className="panel">
