@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
@@ -41,6 +44,13 @@ def _digest_body(alerts: list[dict]) -> str:
     return "Your budget alerts:\n\n" + "\n".join(lines)
 
 
+def _digest_signature(alerts: list[dict]) -> str:
+    """Fingerprint active alert identities and severities, not changing amounts."""
+    active = sorted((str(alert.get("id", "")), str(alert.get("severity", ""))) for alert in alerts)
+    payload = json.dumps(active, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 @router.post("/alerts/send-digest")
 def send_alert_digest(
     db: Session = Depends(get_db),
@@ -57,9 +67,18 @@ def send_alert_digest(
     for user in db.query(models.User).all():
         alerts = _alerts_for_user(db, user.id)
         if not alerts:
+            if user.alert_digest_signature is not None:
+                user.alert_digest_signature = None
+                db.commit()
+            skipped += 1
+            continue
+        signature = _digest_signature(alerts)
+        if signature == user.alert_digest_signature:
             skipped += 1
             continue
         if send_email(user.email, "Your budget alerts", _digest_body(alerts)):
+            user.alert_digest_signature = signature
+            db.commit()
             sent += 1
         else:
             skipped += 1

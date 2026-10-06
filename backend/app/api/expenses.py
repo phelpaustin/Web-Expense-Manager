@@ -101,7 +101,7 @@ class ExpenseBulkCreate(BaseModel):
 
 def _price_per_unit(amount: Decimal, quantity: float) -> Decimal:
     divisor = max(as_decimal(quantity), Decimal("0.01"))
-    return (amount / divisor).quantize(Decimal("0.01"))
+    return (amount / divisor).quantize(Decimal("0.0001"))
 
 
 def _visible_expenses_query(db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None):

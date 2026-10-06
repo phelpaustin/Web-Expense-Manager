@@ -1,8 +1,9 @@
 import secrets
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -16,6 +17,7 @@ from app.core.security import (
     decode_email_verification_token,
     decode_reset_token,
     hash_password,
+    validate_bcrypt_password,
     verify_password,
 )
 from app.db.database import get_db
@@ -23,6 +25,7 @@ from app.db import models
 
 router = APIRouter()
 PASSWORD_MIN_LENGTH = 12
+PasswordInput = Annotated[str, BeforeValidator(validate_bcrypt_password)]
 
 
 class RegisterIn(BaseModel):
@@ -52,8 +55,8 @@ class GoogleIn(BaseModel):
 
 
 class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
+    current_password: PasswordInput
+    new_password: PasswordInput = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class ForgotPasswordIn(BaseModel):
@@ -63,16 +66,16 @@ class ForgotPasswordIn(BaseModel):
 class VerifyEmailIn(BaseModel):
     token: str
     name: str = ""
-    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
+    new_password: PasswordInput = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class ResetPasswordIn(BaseModel):
     token: str
-    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
+    new_password: PasswordInput = Field(min_length=PASSWORD_MIN_LENGTH)
 
 
 class DeleteAccountIn(BaseModel):
-    password: str
+    password: PasswordInput
 
 
 def _claim_group_invites(db: Session, user: models.User) -> None:

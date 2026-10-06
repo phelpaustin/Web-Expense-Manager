@@ -6,16 +6,30 @@ import jwt
 from app.core.config import settings
 
 _ALGORITHM = "HS256"
+BCRYPT_MAX_PASSWORD_BYTES = 72
+
+
+def validate_bcrypt_password(password: str) -> str:
+    """Reject passwords bcrypt would reject or silently truncate."""
+    try:
+        encoded = password.encode("utf-8")
+    except (AttributeError, UnicodeEncodeError) as exc:
+        raise ValueError("Password must be valid UTF-8") from exc
+    if len(encoded) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError("Password must not exceed 72 UTF-8 bytes")
+    return password
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    validate_bcrypt_password(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
     try:
-        return bcrypt.checkpw(password.encode(), hashed.encode())
-    except ValueError:
+        validate_bcrypt_password(password)
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode())
+    except (ValueError, AttributeError, UnicodeEncodeError):
         return False
 
 

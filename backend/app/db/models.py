@@ -16,6 +16,7 @@ class User(Base):
     # explicitly start unverified and must verify before receiving a session.
     email_verified = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     email_verification_version = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    alert_digest_signature = Column(String(64), nullable=True)
 
 
 class Expense(Base):
@@ -199,4 +200,3 @@ class GroupInvite(Base):
     email = Column(String, nullable=False, index=True)
     invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     role = Column(String, nullable=False, default="editor")
-
