@@ -87,6 +87,7 @@ class RecurringTemplate(Base):
     note = Column(String, nullable=False, default="")
     auto_post = Column(Boolean, nullable=False, default=False)
     last_applied = Column(Date, nullable=True)
+    schedule_anchor = Column(Date, nullable=True)
 
 
 class PendingBill(Base):
@@ -198,5 +199,4 @@ class GroupInvite(Base):
     email = Column(String, nullable=False, index=True)
     invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     role = Column(String, nullable=False, default="editor")
-
 

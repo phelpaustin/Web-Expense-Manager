@@ -13,6 +13,8 @@ from app.api.deps import get_current_user, get_user_group_ids, is_group_member, 
 from app.api.options import ensure_options, get_or_create_options
 from app.core import fx
 from app.core.currency import normalize_currency
+from app.core.file_upload import read_upload_limited
+from app.core.import_limits import MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS
 from app.core.money import as_decimal, quantize_money
 from app.db.database import get_db
 from app.db import models
@@ -391,12 +393,18 @@ def expenses_summary(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses(db, user.id, scope, space_ids)
+    expenses = fetch_expenses_in_base_currency(db, user.id, scope, space_ids)
+    base_currency = get_or_create_options(db, user.id).base_currency or "SEK"
     total = sum(e["amount"] for e in expenses)
     by_category: dict[str, Decimal] = {}
     for e in expenses:
         by_category[e["category"]] = round(by_category.get(e["category"], Decimal("0")) + e["amount"], 2)
-    return {"total": round(total, 2), "count": len(expenses), "by_category": by_category}
+    return {
+        "total": round(total, 2),
+        "count": len(expenses),
+        "by_category": by_category,
+        "currency": base_currency,
+    }
 
 
 @router.get("/expenses/categorize/suggest")
@@ -455,15 +463,19 @@ async def import_expenses(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    raw = await file.read()
     name = (file.filename or "").lower()
+    if not name.endswith((".csv", ".xlsx")):
+        raise HTTPException(status_code=400, detail="Only .csv or .xlsx files are allowed")
+    raw = await read_upload_limited(file, MAX_IMPORT_FILE_BYTES)
     try:
-        if name.endswith((".xlsx", ".xls")):
-            df = pd.read_excel(io.BytesIO(raw))
+        if name.endswith(".xlsx"):
+            df = pd.read_excel(io.BytesIO(raw), nrows=MAX_IMPORT_ROWS + 1)
         else:
-            df = pd.read_csv(io.BytesIO(raw))
+            df = pd.read_csv(io.BytesIO(raw), nrows=MAX_IMPORT_ROWS + 1)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not parse file: {exc}")
+    if len(df.index) > MAX_IMPORT_ROWS:
+        raise HTTPException(status_code=400, detail=f"File has more than {MAX_IMPORT_ROWS:,} data rows")
 
     header_lookup = {str(c).strip().lower(): c for c in df.columns}
 
@@ -487,9 +499,16 @@ async def import_expenses(
     brand_c = col_for("brand")
     cur_c = col_for("currency")
 
-    # Dedup against existing expenses (date, category, description, amount).
+    # Currency is part of expense identity: equal numeric amounts in distinct
+    # currencies are not duplicates.
     existing = {
-        (str(e["date"]), (e["category"] or "").strip().lower(), (e["description"] or "").strip().lower(), quantize_money(e["amount"]))
+        (
+            str(e["date"]),
+            (e["category"] or "").strip().lower(),
+            (e["description"] or "").strip().lower(),
+            quantize_money(e["amount"]),
+            normalize_currency(e.get("currency") or "SEK"),
+        )
         for e in fetch_expenses(db, user.id)
     }
 
@@ -568,7 +587,7 @@ async def import_expenses(
                 record_skip(row, f"Unsupported currency code: {currency}", line)
                 continue
 
-            key = (str(when), category.lower(), description.lower(), amount)
+            key = (str(when), category.lower(), description.lower(), amount, currency)
             if key in existing:
                 record_skip(row, "Duplicate of an existing expense", line)
                 continue

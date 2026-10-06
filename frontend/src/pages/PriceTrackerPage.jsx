@@ -40,10 +40,10 @@ export default function PriceTrackerPage({ onError }) {
     <>
       <h1 className="page-title">📈 Price tracker</h1>
       <p className="subtitle">
-        See how prices for items you've bought more than once have changed over time, and compare shops. Prices are
-        only compared across purchases of the same item recorded in the same unit and category — a toothpaste bought
-        "1 Count" is tracked separately from one logged in "kg" or "litre", or filed under a different category, since
-        mixing either would compare unrelated numbers.
+        See how prices for items you've bought more than once have changed over time, and compare shops. Amounts are
+        converted to your base currency. Prices are only compared across purchases of the same item recorded in the
+        same unit and category — a toothpaste bought "1 Count" is tracked separately from one logged in "kg" or
+        "litre", or filed under a different category, since mixing either would compare unrelated numbers.
       </p>
 
       {loading ? (

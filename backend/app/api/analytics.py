@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
-from app.api.expenses import fetch_expenses, fetch_expenses_in_base_currency
+from app.api.expenses import fetch_expenses_in_base_currency
 from app.logic import analytics as analytics_logic
 from app.logic import price_tracker
 
@@ -43,7 +43,7 @@ def analytics_price_trends(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.price_trends(fetch_expenses(db, user.id))
+    return price_tracker.price_trends(fetch_expenses_in_base_currency(db, user.id))
 
 
 @router.get("/analytics/price-trends/shops")
@@ -54,7 +54,9 @@ def analytics_price_shop_comparison(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.shop_comparison(fetch_expenses(db, user.id), item, unit, category)
+    return price_tracker.shop_comparison(
+        fetch_expenses_in_base_currency(db, user.id), item, unit, category
+    )
 
 
 @router.get("/analytics/price-trends/history")
@@ -65,4 +67,6 @@ def analytics_price_history(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.price_history(fetch_expenses(db, user.id), item, unit, category)
+    return price_tracker.price_history(
+        fetch_expenses_in_base_currency(db, user.id), item, unit, category
+    )

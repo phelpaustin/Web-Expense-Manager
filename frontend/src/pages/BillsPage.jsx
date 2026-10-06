@@ -44,7 +44,7 @@ export default function BillsPage({
             📊 Bulk import from bank statement
             <input
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.csv"
               onChange={(e) => {
                 const f = e.target.files[0]
                 if (f) onBulkUploadBills(f)
@@ -231,7 +231,7 @@ export default function BillsPage({
                   <td>
                     <span className={`source-badge source-${r.source.toLowerCase()}`}>{r.source}</span>
                   </td>
-                  <td className="right">{money(r.amount)}</td>
+                  <td className="right">{money(r.amount, r.currency)}</td>
                   <td className="right nowrap">
                     {r.source === 'Manual' && (
                       <button className="delete-btn" onClick={() => onDeleteManual(r.id)} title="Delete manual entry">

@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, is_group_member, require_role_at_least
 from app.api.groups import cascade_delete_group
+from app.core import fx
 from app.core.currency import normalize_currency
 from app.db.database import get_db
 from app.db import models
+from app.logic import currency as currency_logic
 from app.logic import trips as trips_logic
 
 router = APIRouter()
@@ -84,6 +86,13 @@ def _validate_parent(db: Session, user_id: int, parent_group_id: int | None) -> 
     parent = db.get(models.Group, parent_group_id)
     if parent is None or parent.space_type == "trip" or not is_group_member(db, parent_group_id, user_id):
         raise HTTPException(status_code=400, detail="Invalid parent Expense Space")
+
+
+def _convert_trip_expenses(expenses: list[dict], currency: str) -> list[dict]:
+    try:
+        return currency_logic.convert_expenses(expenses, currency or "SEK", fx.get_rate)
+    except currency_logic.CurrencyConversionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def _serialize_trip(db: Session, trip: models.Group, member: models.GroupMember) -> dict:
@@ -191,8 +200,11 @@ def trip_summary(
     trip = _trip_or_404(db, trip_id)
     _member_or_403(db, trip_id, user.id)
     expenses = db.query(models.Expense).filter(models.Expense.group_id == trip.id).all()
-    expense_dicts = [{"category": e.category, "amount": e.amount} for e in expenses]
-    trip_dict = {"id": trip.id, "budget": trip.budget}
+    expense_dicts = _convert_trip_expenses(
+        [{"category": e.category, "amount": e.amount, "currency": e.currency} for e in expenses],
+        trip.currency or "SEK",
+    )
+    trip_dict = {"id": trip.id, "budget": trip.budget, "currency": trip.currency or "SEK"}
     return trips_logic.trip_summary(trip_dict, expense_dicts)
 
 
@@ -241,10 +253,13 @@ def trip_settlement(
         members.append({"user_id": m.user_id, "name": u.name if u else "", "email": u.email if u else ""})
 
     expenses = (
-        db.query(models.Expense.user_id, models.Expense.amount)
+        db.query(models.Expense.user_id, models.Expense.amount, models.Expense.currency)
         .filter(models.Expense.group_id == trip_id)
         .all()
     )
-    expense_dicts = [{"user_id": e.user_id, "amount": e.amount} for e in expenses]
+    expense_dicts = _convert_trip_expenses(
+        [{"user_id": e.user_id, "amount": e.amount, "currency": e.currency} for e in expenses],
+        trip.currency or "SEK",
+    )
 
-    return trips_logic.trip_settlement(members, expense_dicts)
+    return trips_logic.trip_settlement(members, expense_dicts, trip.currency or "SEK")

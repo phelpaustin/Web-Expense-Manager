@@ -63,7 +63,7 @@ def _serialize(t: models.RecurringTemplate, today: datetime.date) -> dict:
         "note": t.note,
         "auto_post": t.auto_post,
         "last_applied": t.last_applied.isoformat() if t.last_applied else None,
-        "due": rec.is_due(t.last_applied, t.frequency, today),
+        "due": rec.is_due(t.last_applied, t.frequency, today, t.schedule_anchor),
     }
 
 
@@ -122,8 +122,13 @@ def update_recurring(
     user: models.User = Depends(get_current_user),
 ):
     t = _get_owned_or_404(db, template_id, user.id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    previous_frequency = t.frequency
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(t, field, value)
+    if "frequency" in updates and updates["frequency"] != previous_frequency:
+        # A changed interval begins from the last scheduled application.
+        t.schedule_anchor = t.last_applied
     db.commit()
     db.refresh(t)
     return _serialize(t, datetime.date.today())
@@ -151,6 +156,7 @@ def apply_recurring(
     t = _get_owned_or_404(db, template_id, user.id)
     _post_expense(db, user.id, t, today)
     t.last_applied = today
+    t.schedule_anchor = today
     db.commit()
     return {"applied": 1, "item": t.item}
 
@@ -176,6 +182,8 @@ def backfill_recurring(
     dates = rec.backfill_dates(payload.start_date, end, t.frequency)
     if not dates:
         return {"applied": 0, "item": t.item}
+    if t.schedule_anchor is None:
+        t.schedule_anchor = t.last_applied or payload.start_date
     amount = payload.amount if payload.amount is not None else t.amount
     for when in dates:
         db.add(
@@ -207,12 +215,14 @@ def apply_due_recurring(
     )
     applied: list[str] = []
     for t in templates:
-        dates = rec.due_dates(t.last_applied, t.frequency, today)
+        dates = rec.due_dates(t.last_applied, t.frequency, today, t.schedule_anchor)
         if not dates:
             continue
+        if t.schedule_anchor is None:
+            t.schedule_anchor = t.last_applied or dates[0]
         for when in dates:
             _post_expense(db, user.id, t, when)
             applied.append(t.item)
-        t.last_applied = today
+        t.last_applied = dates[-1]
     db.commit()
     return {"applied": len(applied), "items": applied}

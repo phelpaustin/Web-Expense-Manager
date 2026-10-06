@@ -7,8 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.options import get_or_create_options
 from app.core.file_validation import detect_receipt_content_type
-from app.api.expenses import fetch_expenses
+from app.core.file_upload import read_upload_limited
+from app.core.import_limits import MAX_IMPORT_FILE_BYTES
+from app.api.expenses import fetch_expenses_in_base_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import bills as bills_logic
@@ -16,7 +19,7 @@ from app.logic import receipt_ocr
 
 router = APIRouter()
 
-_MAX_RECEIPT_BYTES = 10 * 1024 * 1024  # 10 MB
+_MAX_RECEIPT_BYTES = MAX_IMPORT_FILE_BYTES
 
 
 class PendingCreate(BaseModel):
@@ -135,11 +138,9 @@ async def bulk_upload_pending(
     duplicates so they can be reviewed and deleted if needed.
     """
     name = file.filename or ""
-    if not name.lower().endswith((".xlsx", ".xls", ".csv")):
-        raise HTTPException(status_code=400, detail="Only .xlsx, .xls or .csv files are allowed")
-    data = await file.read()
-    if len(data) > _MAX_RECEIPT_BYTES:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+    if not name.lower().endswith((".xlsx", ".csv")):
+        raise HTTPException(status_code=400, detail="Only .xlsx or .csv files are allowed")
+    data = await read_upload_limited(file, _MAX_RECEIPT_BYTES)
 
     try:
         rows, skipped = bills_logic.parse_bill_rows(data, name)
@@ -149,7 +150,10 @@ async def bulk_upload_pending(
     if not rows:
         return {"created": 0, "possible_duplicates": 0, "skipped": skipped}
 
-    existing = [(e["date"], e["amount"]) for e in fetch_expenses(db, user.id, scope="personal")]
+    existing = [
+        (e["date"], e["amount"])
+        for e in fetch_expenses_in_base_currency(db, user.id, scope="personal")
+    ]
     existing += [
         (p.date, p.amount)
         for p in db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id).all()
@@ -355,15 +359,16 @@ def get_ledger(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses(db, user.id)
+    expenses = fetch_expenses_in_base_currency(db, user.id)
+    base_currency = get_or_create_options(db, user.id).base_currency or "SEK"
     pending = [
-        {"id": b.id, "date": b.date, "shop": b.shop, "amount": b.amount}
+        {"id": b.id, "date": b.date, "shop": b.shop, "amount": b.amount, "currency": base_currency}
         for b in db.query(models.PendingBill)
         .filter(models.PendingBill.user_id == user.id, models.PendingBill.status == "pending")
         .all()
     ]
     manual = [
-        {"id": m.id, "date": m.date, "shop": m.shop, "amount": m.amount}
+        {"id": m.id, "date": m.date, "shop": m.shop, "amount": m.amount, "currency": base_currency}
         for m in db.query(models.ManualBill).filter(models.ManualBill.user_id == user.id).all()
     ]
-    return bills_logic.build_ledger(expenses, pending, manual)
+    return bills_logic.build_ledger(expenses, pending, manual, base_currency)

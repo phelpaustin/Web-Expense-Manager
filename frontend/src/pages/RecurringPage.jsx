@@ -112,6 +112,10 @@ export default function RecurringPage({
             {savingRecurring ? 'Saving…' : 'Add'}
           </button>
         </form>
+        <p className="muted-note">
+          Monthly, quarterly, and yearly schedules follow the calendar. Month-end dates stay at month-end; other dates
+          return to their original day after shorter months.
+        </p>
 
         {recurring.some((t) => t.due) && (
           <button className="apply-due-btn" onClick={onApplyDue}>

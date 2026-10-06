@@ -16,6 +16,7 @@ def trip_summary(trip: dict, expenses: list[dict]) -> dict:
 
     return {
         "trip_id": trip["id"],
+        "currency": trip.get("currency") or "SEK",
         "total_spent": total_spent,
         "budget": budget,
         "remaining": quantize_money(remaining) if remaining is not None else None,
@@ -24,7 +25,7 @@ def trip_summary(trip: dict, expenses: list[dict]) -> dict:
     }
 
 
-def trip_settlement(members: list[dict], expenses: list[dict]) -> dict:
+def trip_settlement(members: list[dict], expenses: list[dict], currency: str = "SEK") -> dict:
     """Who paid what vs. their equal share, and the minimal set of payments to settle up.
 
     members: [{"user_id", "name", "email"}, ...] — everyone splitting the trip cost.
@@ -75,6 +76,7 @@ def trip_settlement(members: list[dict], expenses: list[dict]) -> dict:
             j += 1
 
     return {
+        "currency": currency or "SEK",
         "total_spent": total_spent,
         "share_per_person": share,
         "per_member": per_member,

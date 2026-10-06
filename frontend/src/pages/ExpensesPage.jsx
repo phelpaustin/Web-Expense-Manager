@@ -133,10 +133,12 @@ export default function ExpensesPage({
     const indexByKey = new Map()
     for (const e of pageExpenses) {
       const shop = (e.shop || '').trim()
-      const key = shop ? `${e.date}::${shop}::${e.group_id ?? 'personal'}` : `single-${e.id}`
+      const key = shop
+        ? `${e.date}::${shop}::${e.group_id ?? 'personal'}::${e.currency || 'SEK'}`
+        : `single-${e.id}`
       let group = indexByKey.get(key)
       if (!group) {
-        group = { key, date: e.date, shop, group_id: e.group_id, items: [] }
+        group = { key, date: e.date, shop, group_id: e.group_id, currency: e.currency || 'SEK', items: [] }
         indexByKey.set(key, group)
         groups.push(group)
       }
@@ -233,6 +235,7 @@ export default function ExpensesPage({
         description: form.description,
         brand: form.brand,
         amount: parseFloat(form.amount),
+        currency: form.currency || 'SEK',
         quantity: parseFloat(form.quantity) || 1,
         unit: form.unit || 'Count',
       },
@@ -250,8 +253,8 @@ export default function ExpensesPage({
       const direction = billMismatch > 0 ? 'more than' : 'less than'
       if (
         !window.confirm(
-          `Your items add up to ${money(billTotal)}, ${direction} the receipt total of ${money(receiptTotalNum)} ` +
-            `(off by ${money(Math.abs(billMismatch))}). Submit anyway?`,
+          `Your items add up to ${money(billTotal, form.currency)}, ${direction} the receipt total of ${money(receiptTotalNum, form.currency)} ` +
+            `(off by ${money(Math.abs(billMismatch), form.currency)}). Submit anyway?`,
         )
       ) {
         return
@@ -271,7 +274,7 @@ export default function ExpensesPage({
             unit: it.unit,
             shop: form.shop,
             brand: it.brand,
-            currency: form.currency || 'SEK',
+            currency: it.currency || form.currency || 'SEK',
             group_id: form.group_id ? parseInt(form.group_id, 10) : null,
           })),
         ),
@@ -490,7 +493,7 @@ export default function ExpensesPage({
         <form className="add-form" onSubmit={handleImportSubmit}>
           <input
             type="file"
-            accept=".csv,.xlsx,.xls"
+            accept=".csv,.xlsx"
             onChange={(e) => setFile(e.target.files[0] || null)}
           />
           <select
@@ -678,6 +681,7 @@ export default function ExpensesPage({
             placeholder="Cur"
             className="unit-input"
             value={form.currency}
+            disabled={billMode && billItems.length > 0}
             onChange={(e) => setForm({ ...form, currency: e.target.value })}
           />
           <input
@@ -734,7 +738,7 @@ export default function ExpensesPage({
                         <td>{it.description}</td>
                         <td className="right">{it.quantity}</td>
                         <td>{it.unit}</td>
-                        <td className="right">{money(it.amount)}</td>
+                        <td className="right">{money(it.amount, it.currency)}</td>
                         <td className="right nowrap">
                           <button className="delete-btn" onClick={() => removeBillItem(i)} title="Remove">
                             ✕
@@ -746,7 +750,7 @@ export default function ExpensesPage({
                 </table>
                 <div className="bill-total-row">
                   <strong>
-                    Bill total so far: {money(billTotal)} ({billItems.length} item{billItems.length === 1 ? '' : 's'})
+                    Bill total so far: {money(billTotal, form.currency)} ({billItems.length} item{billItems.length === 1 ? '' : 's'})
                   </strong>
                   <label className="receipt-total-input">
                     Receipt total
@@ -764,12 +768,12 @@ export default function ExpensesPage({
                   <p className={billMismatch === 0 ? 'ok-note' : 'auth-error'}>
                     {billMismatch === 0
                       ? '✓ Matches the receipt total.'
-                      : `⚠️ Items add up to ${money(billTotal)}, ${billMismatch > 0 ? 'more than' : 'less than'} the receipt total ` +
-                        `of ${money(receiptTotalNum)} (off by ${money(Math.abs(billMismatch))}).`}
+                      : `⚠️ Items add up to ${money(billTotal, form.currency)}, ${billMismatch > 0 ? 'more than' : 'less than'} the receipt total ` +
+                        `of ${money(receiptTotalNum, form.currency)} (off by ${money(Math.abs(billMismatch), form.currency)}).`}
                   </p>
                 )}
                 <button type="button" onClick={handleSubmitBill} disabled={submittingBill}>
-                  {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal)})`}
+                  {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal, form.currency)})`}
                 </button>
               </>
             )}
@@ -900,7 +904,7 @@ export default function ExpensesPage({
                         <td colSpan={10}>
                           {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {group.shop || 'No shop'} · {group.items.length}{' '}
                           item{group.items.length === 1 ? '' : 's'} · Bill total:{' '}
-                          {money(group.items.reduce((sum, e) => sum + e.amount, 0))}
+                          {money(group.items.reduce((sum, e) => sum + e.amount, 0), group.currency)}
                         </td>
                       </tr>
                       {isExpanded && group.items.map((e) => renderExpenseRow(e))}

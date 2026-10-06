@@ -40,6 +40,11 @@ def convert_expenses(
         out["original_amount"] = e["amount"]
         out["original_currency"] = currency
         out["amount"] = (Decimal(str(e["amount"])) * rate).quantize(Decimal("0.01"))
+        if e.get("price_per_unit") is not None:
+            out["original_price_per_unit"] = e["price_per_unit"]
+            out["price_per_unit"] = (
+                Decimal(str(e["price_per_unit"])) * rate
+            ).quantize(Decimal("0.0001"))
         out["currency"] = base_currency
         converted.append(out)
     return converted

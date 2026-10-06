@@ -233,7 +233,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                   </h2>
                   <p className="subtitle">
                     {t.start_date || '—'} to {t.end_date || '—'}
-                    {t.budget ? ` · Budget ${money(t.budget)}` : ''} · {t.member_count} member
+                    {t.budget ? ` · Budget ${money(t.budget, t.currency)}` : ''} · {t.member_count} member
                     {t.member_count === 1 ? '' : 's'} · <span className={`role-badge role-${t.role}`}>{t.role}</span>
                   </p>
                 </div>
@@ -264,11 +264,11 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                     <>
                       <div className="trip-summary-row">
                         <span>
-                          Spent: <strong>{money(detail.summary.total_spent)}</strong>
+                          Spent: <strong>{money(detail.summary.total_spent, detail.summary.currency)}</strong>
                         </span>
                         {detail.summary.budget && (
                           <span>
-                            Remaining: <strong>{money(detail.summary.remaining)}</strong>
+                            Remaining: <strong>{money(detail.summary.remaining, detail.summary.currency)}</strong>
                           </span>
                         )}
                         <span>{detail.summary.expense_count} expense(s)</span>
@@ -277,7 +277,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                         <ul className="trip-category-list">
                           {Object.entries(detail.summary.by_category).map(([cat, amt]) => (
                             <li key={cat}>
-                              {cat}: {money(amt)}
+                              {cat}: {money(amt, detail.summary.currency)}
                             </li>
                           ))}
                         </ul>
@@ -300,7 +300,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                                 <td>{e.category}</td>
                                 <td>{e.shop}</td>
                                 <td>{e.description}</td>
-                                <td className="right">{money(e.amount)}</td>
+                                <td className="right">{money(e.amount, e.currency)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -311,8 +311,8 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                         <>
                           <h3>💰 Settlement</h3>
                           <p className="subtitle">
-                            Split equally · {money(detail.settlement.share_per_person)} per person of{' '}
-                            {money(detail.settlement.total_spent)} total.
+                            Split equally · {money(detail.settlement.share_per_person, detail.settlement.currency)} per person of{' '}
+                            {money(detail.settlement.total_spent, detail.settlement.currency)} total.
                           </p>
                           <table className="table">
                             <thead>
@@ -327,14 +327,14 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                               {detail.settlement.per_member.map((m) => (
                                 <tr key={m.user_id}>
                                   <td>{m.name}</td>
-                                  <td className="right">{money(m.paid)}</td>
-                                  <td className="right">{money(m.share)}</td>
+                                  <td className="right">{money(m.paid, detail.settlement.currency)}</td>
+                                  <td className="right">{money(m.share, detail.settlement.currency)}</td>
                                   <td
                                     className="right"
                                     style={{ color: m.balance > 0 ? 'var(--ok)' : m.balance < 0 ? 'var(--danger)' : undefined }}
                                   >
                                     {m.balance > 0 ? '+' : ''}
-                                    {money(m.balance)}
+                                    {money(m.balance, detail.settlement.currency)}
                                   </td>
                                 </tr>
                               ))}
@@ -344,7 +344,8 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                             <ul className="settlement-list">
                               {detail.settlement.transactions.map((tx, i) => (
                                 <li key={i}>
-                                  <strong>{tx.from_name}</strong> owes <strong>{tx.to_name}</strong> {money(tx.amount)}
+                                  <strong>{tx.from_name}</strong> owes <strong>{tx.to_name}</strong>{' '}
+                                  {money(tx.amount, detail.settlement.currency)}
                                 </li>
                               ))}
                             </ul>
