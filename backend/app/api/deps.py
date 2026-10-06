@@ -23,7 +23,7 @@ def get_current_user(
         raise credentials_exc
     subject, token_session_version = decoded
     user = db.get(models.User, int(subject))
-    if user is None or token_session_version != user.session_version:
+    if user is None or token_session_version != user.session_version or not user.email_verified:
         raise credentials_exc
     return user
 

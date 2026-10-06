@@ -122,15 +122,26 @@ Tables: `expenses`, `budgets` (see `backend/app/db/models.py`).
 Every data endpoint requires a logged-in user, and each user only sees their
 own expenses and budgets (JWT bearer tokens).
 
-Passwords must contain at least 12 characters.
+New passwords must contain at least 12 characters. The local demo account is
+an exception and uses `demo1234`.
 
 - **Register or log in** on the first screen. The token is stored in the
   browser and sent on every request.
+- New password-based accounts must verify their email and choose a password
+  from the email link before signing in. Space invitations are claimed only
+  after verification. Existing accounts remain active, and Google sign-in uses
+  Google's verified email claim.
 - **Demo account** (seeded automatically): `demo@example.com` / `demo1234`.
 - In production, set a strong `SECRET_KEY` in `backend/.env`
   (e.g. `openssl rand -hex 32`). The default is for local dev only.
 
-Auth endpoints: `POST /api/auth/register`, `POST /api/auth/login`,
+Configure `RESEND_API_KEY` or SMTP settings and set `FRONTEND_URL` to the
+deployed frontend URL so verification and password-reset links can be delivered
+to the right site. Local development can use the email message logged by the
+backend when no email provider is configured.
+
+Auth endpoints: `POST /api/auth/register`, `POST /api/auth/verify-email`,
+`POST /api/auth/resend-verification`, `POST /api/auth/login`, and
 `GET /api/auth/me`.
 
 ### Account deletion policy
@@ -160,6 +171,9 @@ Required environment variables in production:
   - `DATABASE_URL` — Supabase connection string.
   - `SECRET_KEY` — strong random value (`openssl rand -hex 32`).
   - `CORS_ORIGINS` — the frontend URL, e.g. `https://your-app.vercel.app`.
+  - `FRONTEND_URL` — the frontend URL used in verification and password-reset links.
+  - `RESEND_API_KEY` and `EMAIL_FROM` (or SMTP settings) — required to deliver
+    verification and password-reset emails.
 - **Frontend (Vercel):**
   - `VITE_API_URL` — the backend URL, e.g. `https://expense-backend.onrender.com`.
 

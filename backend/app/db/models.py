@@ -12,6 +12,10 @@ class User(Base):
     name = Column(String, nullable=False, default="")
     password_reset_version = Column(Integer, nullable=False, default=0, server_default=text("0"))
     session_version = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    # Existing accounts remain trusted during the migration; password sign-ups
+    # explicitly start unverified and must verify before receiving a session.
+    email_verified = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    email_verification_version = Column(Integer, nullable=False, default=0, server_default=text("0"))
 
 
 class Expense(Base):
@@ -194,6 +198,5 @@ class GroupInvite(Base):
     email = Column(String, nullable=False, index=True)
     invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     role = Column(String, nullable=False, default="editor")
-
 
 

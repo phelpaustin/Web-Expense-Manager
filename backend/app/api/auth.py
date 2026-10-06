@@ -11,7 +11,9 @@ from app.core.email import send_email
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_access_token,
+    create_email_verification_token,
     create_reset_token,
+    decode_email_verification_token,
     decode_reset_token,
     hash_password,
     verify_password,
@@ -25,13 +27,16 @@ PASSWORD_MIN_LENGTH = 12
 
 class RegisterIn(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=PASSWORD_MIN_LENGTH)
-    name: str = ""
 
 
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class RegistrationOut(BaseModel):
+    verification_required: bool = True
+    message: str
 
 
 class UserOut(BaseModel):
@@ -55,6 +60,12 @@ class ForgotPasswordIn(BaseModel):
     email: EmailStr
 
 
+class VerifyEmailIn(BaseModel):
+    token: str
+    name: str = ""
+    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
+
+
 class ResetPasswordIn(BaseModel):
     token: str
     new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
@@ -74,11 +85,24 @@ def _claim_group_invites(db: Session, user: models.User) -> None:
             .first()
         )
         if not already_member:
-            db.add(models.GroupMember(group_id=invite.group_id, user_id=user.id, role=invite.role or "editor"))
+            role = invite.role if invite.role in ("admin", "editor", "viewer") else "editor"
+            db.add(models.GroupMember(group_id=invite.group_id, user_id=user.id, role=role))
         db.delete(invite)
 
 
-@router.post("/auth/register", response_model=TokenOut, status_code=201)
+def _send_verification_email(user: models.User) -> bool:
+    token = create_email_verification_token(str(user.id), user.email_verification_version)
+    link = f"{settings.frontend_url.rstrip('/')}/verify-email?token={token}"
+    return send_email(
+        user.email,
+        "Verify your Expense Dashboard email",
+        "Please verify that this email address belongs to you.\n\n"
+        f"Open this link and confirm verification within 24 hours:\n{link}\n\n"
+        "If you did not create this account, you can ignore this message.",
+    )
+
+
+@router.post("/auth/register", response_model=RegistrationOut, status_code=201)
 @limiter.limit("10/hour")
 def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
     exists = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -86,20 +110,23 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
         raise HTTPException(status_code=409, detail="Email already registered")
     user = models.User(
         email=payload.email,
-        hashed_password=hash_password(payload.password),
-        name=payload.name.strip(),
+        # Never bind a password chosen before the address is verified. The
+        # mailbox owner chooses the credential when completing verification.
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
+        name="",
+        email_verified=False,
     )
     try:
         db.add(user)
         db.flush()
-        _claim_group_invites(db, user)
         db.commit()
     except Exception:
         db.rollback()
         raise
     db.refresh(user)
 
-    return TokenOut(access_token=create_access_token(str(user.id), user.session_version))
+    _send_verification_email(user)
+    return RegistrationOut(message="Account created. Check your email for a verification link before signing in.")
 
 
 @router.post("/auth/login", response_model=TokenOut)
@@ -108,6 +135,8 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
     user = db.query(models.User).filter(models.User.email == form.username).first()
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+    if not user.email_verified:
+        raise HTTPException(status_code=403, detail="Please verify your email before signing in")
     return TokenOut(access_token=create_access_token(str(user.id), user.session_version))
 
 
@@ -142,6 +171,7 @@ def google_login(payload: GoogleIn, db: Session = Depends(get_db)):
             name=info.get("name", ""),
             # Random password — this account signs in via Google.
             hashed_password=hash_password(secrets.token_urlsafe(32)),
+            email_verified=True,
         )
         try:
             db.add(user)
@@ -152,6 +182,18 @@ def google_login(payload: GoogleIn, db: Session = Depends(get_db)):
             db.rollback()
             raise
         db.refresh(user)
+    elif not user.email_verified:
+        # Google's verified email is proof of ownership for an existing local
+        # account too; use it to complete verification and claim pending invites.
+        try:
+            user.email_verified = True
+            user.email_verification_version += 1
+            user.name = user.name or info.get("name", "")
+            _claim_group_invites(db, user)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
     return TokenOut(access_token=create_access_token(str(user.id), user.session_version))
 
 
@@ -198,6 +240,74 @@ def forgot_password(request: Request, payload: ForgotPasswordIn, db: Session = D
     return {"message": "If that email is registered, a reset link has been sent."}
 
 
+@router.post("/auth/resend-verification")
+@limiter.limit("5/hour")
+def resend_verification(request: Request, payload: ForgotPasswordIn, db: Session = Depends(get_db)):
+    """Resend a verification link without revealing whether the account exists."""
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if user is not None and not user.email_verified:
+        user.email_verification_version += 1
+        db.commit()
+        _send_verification_email(user)
+    return {"message": "If that account needs verification, a new link has been sent."}
+
+
+@router.post("/auth/verify-email")
+@limiter.limit("20/hour")
+def verify_email(request: Request, payload: VerifyEmailIn, db: Session = Depends(get_db)):
+    decoded = decode_email_verification_token(payload.token)
+    if decoded is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+    subject, token_version = decoded
+    try:
+        user_id = int(subject)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link") from exc
+
+    user = db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+    if user.email_verified:
+        return {"verified": True}
+    if token_version != user.email_verification_version:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+
+    try:
+        updated = (
+            db.query(models.User)
+            .filter(
+                models.User.id == user_id,
+                models.User.email_verified.is_(False),
+                models.User.email_verification_version == token_version,
+            )
+            .update(
+                {
+                    models.User.email_verified: True,
+                    models.User.email_verification_version: models.User.email_verification_version + 1,
+                    models.User.hashed_password: hash_password(payload.new_password),
+                    models.User.name: payload.name.strip(),
+                    models.User.session_version: models.User.session_version + 1,
+                },
+                synchronize_session=False,
+            )
+        )
+        if updated != 1:
+            db.rollback()
+            current = db.get(models.User, user_id)
+            if current is not None and current.email_verified:
+                return {"verified": True}
+            raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+        user = db.get(models.User, user_id)
+        _claim_group_invites(db, user)
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    return {"verified": True}
+
+
 @router.post("/auth/reset-password")
 @limiter.limit("10/hour")
 def reset_password(request: Request, payload: ResetPasswordIn, db: Session = Depends(get_db)):
@@ -223,6 +333,8 @@ def reset_password(request: Request, payload: ResetPasswordIn, db: Session = Dep
                 models.User.hashed_password: hash_password(payload.new_password),
                 models.User.password_reset_version: models.User.password_reset_version + 1,
                 models.User.session_version: models.User.session_version + 1,
+                models.User.email_verified: True,
+                models.User.email_verification_version: models.User.email_verification_version + 1,
             },
             synchronize_session=False,
         )
@@ -230,7 +342,13 @@ def reset_password(request: Request, payload: ResetPasswordIn, db: Session = Dep
     if updated != 1:
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid or expired reset link")
-    db.commit()
+    try:
+        user.email_verified = True
+        _claim_group_invites(db, user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"reset": True}
 
 

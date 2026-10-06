@@ -66,3 +66,29 @@ def decode_reset_token(token: str) -> tuple[str, int] | None:
     if not isinstance(subject, str) or not isinstance(version, int) or isinstance(version, bool):
         return None
     return subject, version
+
+
+def create_email_verification_token(subject: str, verification_version: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "purpose": "verify_email",
+        "email_verification_version": verification_version,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=_ALGORITHM)
+
+
+def decode_email_verification_token(token: str) -> tuple[str, int] | None:
+    """Return the subject and verification version for a valid token, else None."""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    if payload.get("purpose") != "verify_email":
+        return None
+    subject = payload.get("sub")
+    version = payload.get("email_verification_version")
+    if not isinstance(subject, str) or not isinstance(version, int) or isinstance(version, bool):
+        return None
+    return subject, version

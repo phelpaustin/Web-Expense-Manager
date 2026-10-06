@@ -63,17 +63,26 @@ export async function login(email, password) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   })
-  if (!res.ok) throw new Error('Incorrect email or password')
+  if (!res.ok) {
+    let message = 'Incorrect email or password'
+    try {
+      const data = await res.json()
+      if (typeof data.detail === 'string') message = data.detail
+    } catch {
+      // Keep the generic message for non-JSON responses.
+    }
+    throw new Error(message)
+  }
   const data = await res.json()
   setToken(data.access_token)
   return data
 }
 
-export async function register(email, password, name) {
+export async function register(email) {
   const res = await fetch(`${API_BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({ email }),
   })
   if (!res.ok) {
     let message = 'Registration failed'
@@ -85,9 +94,23 @@ export async function register(email, password, name) {
     }
     throw new Error(message)
   }
-  const data = await res.json()
-  setToken(data.access_token)
-  return data
+  return res.json()
+}
+
+export function resendVerification(email) {
+  return request('/api/auth/resend-verification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function verifyEmail(token, name, new_password) {
+  return request('/api/auth/verify-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, name, new_password }),
+  })
 }
 
 export async function googleLogin(credential) {

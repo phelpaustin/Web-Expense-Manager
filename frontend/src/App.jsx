@@ -11,6 +11,7 @@ import TripsPage from './pages/TripsPage.jsx'
 import PriceTrackerPage from './pages/PriceTrackerPage.jsx'
 import GroupsPage from './pages/GroupsPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
+import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
 import { useAppData } from './hooks/useAppData.js'
 import { useAuth } from './hooks/useAuth.js'
 import { useExpenseHandlers } from './hooks/useExpenseHandlers.js'
@@ -48,6 +49,7 @@ export default function App() {
     return (
       <Routes>
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route
           path="*"
           element={
@@ -63,6 +65,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route
         element={
           <Layout user={auth.user} onLogout={auth.handleLogout} error={data.error} loading={auth.loading} alerts={data.alerts} />

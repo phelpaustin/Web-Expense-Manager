@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { login, register, forgotPassword, googleLogin } from './api/client.js'
+import { login, register, forgotPassword, googleLogin, resendVerification } from './api/client.js'
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 export default function AuthScreen({ onAuthed }) {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'forgot'
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [verificationEmail, setVerificationEmail] = useState('')
+  const [resendBusy, setResendBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const googleBtnRef = useRef(null)
 
@@ -64,16 +65,38 @@ export default function AuthScreen({ onAuthed }) {
         await login(email, password)
         onAuthed()
       } else if (mode === 'register') {
-        await register(email, password, name)
-        onAuthed()
+        const res = await register(email)
+        setVerificationEmail(email)
+        setPassword('')
+        setNotice(res.message || 'Check your email for a verification link before signing in.')
       } else {
         const res = await forgotPassword(email)
         setNotice(res.message || 'If that email is registered, a reset link has been sent.')
       }
     } catch (err) {
       setError(err.message)
+      if (mode === 'login' && err.message.toLowerCase().includes('verify your email')) {
+        setVerificationEmail(email)
+      }
+      if (mode === 'register' && err.message.toLowerCase().includes('email already registered')) {
+        setVerificationEmail(email)
+      }
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!verificationEmail) return
+    setError(null)
+    setResendBusy(true)
+    try {
+      const res = await resendVerification(verificationEmail)
+      setNotice(res.message || 'If that account needs verification, a new link has been sent.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setResendBusy(false)
     }
   }
 
@@ -87,14 +110,6 @@ export default function AuthScreen({ onAuthed }) {
         <p className="subtitle">{title}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
-          {mode === 'register' && (
-            <input
-              type="text"
-              placeholder="Full name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          )}
           <input
             type="email"
             placeholder="Email"
@@ -102,15 +117,17 @@ export default function AuthScreen({ onAuthed }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          {mode !== 'forgot' && (
+          {mode === 'login' && (
             <input
               type="password"
-              placeholder="Password (min 12 characters)"
+              placeholder="Password"
               required
-              minLength={12}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          )}
+          {mode === 'register' && (
+            <p className="subtitle">We’ll email you a link. You’ll choose your name and password there.</p>
           )}
           {error && <div className="auth-error">{error}</div>}
           {notice && <div className="ok-note">{notice}</div>}
@@ -124,6 +141,14 @@ export default function AuthScreen({ onAuthed }) {
                   : 'Send reset link'}
           </button>
         </form>
+
+        {verificationEmail && mode !== 'forgot' && (
+          <p className="auth-toggle">
+            <button type="button" className="link" onClick={handleResendVerification} disabled={resendBusy}>
+              {resendBusy ? 'Sending…' : 'Resend verification email'}
+            </button>
+          </p>
+        )}
 
         {GOOGLE_CLIENT_ID && mode !== 'forgot' && (
           <>
