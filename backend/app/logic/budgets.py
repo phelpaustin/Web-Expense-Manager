@@ -130,14 +130,38 @@ def current_period_range(period: str, when: date | None = None):
         label = f"Week of {start:%b %d}"
     elif period == "Annual":
         start = date(when.year, 1, 1)
-        end = date(when.year, 12, 31)
-        label = str(when.year)
+        end = (
+            date(when.year, 12, 31)
+            if when.month == 12
+            else date(when.year, when.month + 1, 1) - timedelta(days=1)
+        )
+        label = f"YTD through {when:%B %Y}"
     else:  # Monthly
         start = when.replace(day=1)
         end = (date(when.year, 12, 31) if when.month == 12
                else date(when.year, when.month + 1, 1) - timedelta(days=1))
         label = f"{when:%B %Y}"
     return start, end, label, (end - start).days + 1
+
+
+def allocated_period_budget(monthly_budget, period: str, when: date | None = None) -> Decimal:
+    """Convert a monthly allocation to the selected period's budget."""
+    when = when or date.today()
+    monthly_budget = quantize_money(monthly_budget)
+    if period == "Weekly":
+        month_start = when.replace(day=1)
+        month_end = (
+            date(when.year, 12, 31)
+            if when.month == 12
+            else date(when.year, when.month + 1, 1) - timedelta(days=1)
+        )
+        first_week = month_start - timedelta(days=month_start.weekday())
+        last_week = month_end - timedelta(days=month_end.weekday())
+        weeks_in_month = ((last_week - first_week).days // 7) + 1
+        return quantize_money(monthly_budget / Decimal(weeks_in_month))
+    if period == "Annual":
+        return quantize_money(monthly_budget * Decimal(when.month))
+    return monthly_budget
 
 
 def spending_in_range(expenses: list[dict], start: date, end: date) -> Decimal:
@@ -165,24 +189,29 @@ def rollover_available(expenses, budget, period, current_start, lookback=24) -> 
         if prev_end < earliest:
             break
         p_start, p_end, _lbl, _tot = current_period_range(period, prev_end)
-        carry += budget - spending_in_range(expenses, p_start, p_end)
+        budget_date = p_end if period == "Annual" else p_start
+        period_budget = allocated_period_budget(budget, period, budget_date)
+        carry += period_budget - spending_in_range(expenses, p_start, p_end)
         cursor = p_start
     return quantize_money(carry)
 
 
-def period_budget_status(expenses: list[dict], budget: Decimal, period: str, rollover: bool) -> dict | None:
+def period_budget_status(
+    expenses: list[dict], budget: Decimal, period: str, rollover: bool, when: date | None = None
+) -> dict | None:
     """Current-period budget status honouring period + rollover."""
     if not budget:
         return None
     period = period if period in BUDGET_PERIODS else "Monthly"
-    start, end, label, total_days = current_period_range(period)
+    today = when or date.today()
+    start, end, label, total_days = current_period_range(period, today)
     spent = spending_in_range(expenses, start, end)
-    budget = quantize_money(budget)
-    roll = rollover_available(expenses, budget, period, start) if rollover else quantize_money(0)
+    monthly_budget = quantize_money(budget)
+    budget = allocated_period_budget(monthly_budget, period, today)
+    roll = rollover_available(expenses, monthly_budget, period, start) if rollover else quantize_money(0)
     effective = budget + roll
     remaining = effective - spent
     pct = (spent / effective * 100) if effective > 0 else 0.0
-    today = date.today()
     days_elapsed = max((min(today, end) - start).days + 1, 1)
     projected = (spent / days_elapsed) * total_days
     return {

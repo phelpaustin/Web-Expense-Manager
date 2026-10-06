@@ -45,12 +45,17 @@ def _predictive_alert(period_status: dict | None) -> dict | None:
     if effective <= 0 or projected <= effective or period_status["pct"] >= 100:
         return None
     over_by = projected - effective
+    period_label = {
+        "Weekly": "this week",
+        "Monthly": "this month",
+        "Annual": "by the end of this month",
+    }.get(period_status["period"], "this period")
     return {
         "id": "predictive:period",
         "severity": "warning",
         "category": "Total",
         "message": (
-            f"On pace to spend {projected:.2f} this {period_status['period'].lower()} "
+            f"On pace to spend {projected:.2f} {period_label} "
             f"— {over_by:.2f} over your {effective:.2f} budget"
         ),
     }
