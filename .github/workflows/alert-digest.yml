@@ -17,6 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call send-digest endpoint
+        env:
+          ALERT_DIGEST_URL: ${{ secrets.ALERT_DIGEST_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sf -X POST "${{ secrets.ALERT_DIGEST_URL }}" \
-            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+          : "${ALERT_DIGEST_URL:?Missing GitHub Actions secret ALERT_DIGEST_URL}"
+          : "${CRON_SECRET:?Missing GitHub Actions secret CRON_SECRET}"
+          curl --fail-with-body --silent --show-error --request POST "$ALERT_DIGEST_URL" \
+            --header "X-Cron-Secret: $CRON_SECRET"
