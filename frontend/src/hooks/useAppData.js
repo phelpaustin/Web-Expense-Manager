@@ -45,93 +45,75 @@ export function useAppData() {
   const [dashboardScope, setDashboardScopeState] = useState('all')
   const [dashboardSpaceIds, setDashboardSpaceIdsState] = useState([])
 
-  function loadAll() {
-    return Promise.all([
-      fetchSummary(dashboardScope, dashboardSpaceIds),
-      fetchTrends(dashboardScope, dashboardSpaceIds),
-      fetchCategories(dashboardScope, dashboardSpaceIds),
-      fetchBudgetStatus(dashboardScope, dashboardSpaceIds),
-      fetchIncome(),
-      fetchIncomeSummary(),
-      fetchRecurring(),
-      fetchPendingBills(),
-      fetchLedger(),
-      fetchOptions(),
-      fetchMetrics(dashboardScope, dashboardSpaceIds),
-      fetchBudgetConfig(),
-      fetchPeriodStatus(dashboardScope, dashboardSpaceIds),
-      fetchAlerts(),
-      fetchTrips(),
-      fetchGroups(),
-    ])
-      .then(([sum, tr, cat, bud, inc, incSum, rec, pend, led, opts, met, bcfg, pstat, alrt, trps, grps]) => {
-        setSummary(sum)
-        setTrends(tr)
-        setCategories(cat)
-        setBudgets(bud)
-        setIncome(inc)
-        setIncomeSummary(incSum)
-        setRecurring(rec)
-        setPendingBills(pend)
-        setLedger(led)
-        setOptions(opts)
-        setDisplayCurrency(opts.base_currency)
-        setMetrics(met)
-        setBudgetConfigState(bcfg)
-        setPeriodStatus(pstat)
-        setAlerts(alrt)
-        setTrips(trps)
-        setGroups(grps)
-        setError(null)
+  // Runs each loader independently. One failing endpoint (e.g. an FX problem
+  // affecting only the converted dashboards) must not blank pages that don't
+  // depend on it, so successful results are applied and failures are reported.
+  function applySettled(tasks) {
+    return Promise.allSettled(tasks.map((t) => t.load())).then((results) => {
+      const failures = []
+      results.forEach((res, i) => {
+        if (res.status === 'fulfilled') tasks[i].apply(res.value)
+        else failures.push(res.reason?.message || 'Request failed')
       })
-      .catch((err) => setError(err.message))
+      // De-duplicate so 8 identical 503s show one message.
+      setError(failures.length ? [...new Set(failures)].join(' · ') : null)
+    })
+  }
+
+  function loadAll() {
+    const scope = dashboardScope
+    const ids = dashboardSpaceIds
+    return applySettled([
+      { load: () => fetchSummary(scope, ids), apply: setSummary },
+      { load: () => fetchTrends(scope, ids), apply: setTrends },
+      { load: () => fetchCategories(scope, ids), apply: setCategories },
+      { load: () => fetchBudgetStatus(scope, ids), apply: setBudgets },
+      { load: () => fetchIncome(), apply: setIncome },
+      { load: () => fetchIncomeSummary(), apply: setIncomeSummary },
+      { load: () => fetchRecurring(), apply: setRecurring },
+      { load: () => fetchPendingBills(), apply: setPendingBills },
+      { load: () => fetchLedger(), apply: setLedger },
+      {
+        load: () => fetchOptions(),
+        apply: (opts) => {
+          setOptions(opts)
+          setDisplayCurrency(opts.base_currency)
+        },
+      },
+      { load: () => fetchMetrics(scope, ids), apply: setMetrics },
+      { load: () => fetchBudgetConfig(), apply: setBudgetConfigState },
+      { load: () => fetchPeriodStatus(scope, ids), apply: setPeriodStatus },
+      { load: () => fetchAlerts(), apply: setAlerts },
+      { load: () => fetchTrips(), apply: setTrips },
+      { load: () => fetchGroups(), apply: setGroups },
+    ])
   }
 
   // Re-fetch just the dashboard-relevant data scoped to "all", "personal", or one space.
   function handleSetDashboardScope(scope) {
     setDashboardScopeState(scope)
     setDashboardSpaceIdsState([])
-    return Promise.all([
-      fetchSummary(scope),
-      fetchTrends(scope),
-      fetchCategories(scope),
-      fetchBudgetStatus(scope),
-      fetchMetrics(scope),
-      fetchPeriodStatus(scope),
+    return applySettled([
+      { load: () => fetchSummary(scope), apply: setSummary },
+      { load: () => fetchTrends(scope), apply: setTrends },
+      { load: () => fetchCategories(scope), apply: setCategories },
+      { load: () => fetchBudgetStatus(scope), apply: setBudgets },
+      { load: () => fetchMetrics(scope), apply: setMetrics },
+      { load: () => fetchPeriodStatus(scope), apply: setPeriodStatus },
     ])
-      .then(([sum, tr, cat, bud, met, pstat]) => {
-        setSummary(sum)
-        setTrends(tr)
-        setCategories(cat)
-        setBudgets(bud)
-        setMetrics(met)
-        setPeriodStatus(pstat)
-        setError(null)
-      })
-      .catch((err) => setError(err.message))
   }
 
   // Re-fetch scoped to a combined view across several chosen Expense Spaces.
   function handleSetDashboardSpaceIds(spaceIds) {
     setDashboardSpaceIdsState(spaceIds)
-    return Promise.all([
-      fetchSummary(null, spaceIds),
-      fetchTrends(null, spaceIds),
-      fetchCategories(null, spaceIds),
-      fetchBudgetStatus(null, spaceIds),
-      fetchMetrics(null, spaceIds),
-      fetchPeriodStatus(null, spaceIds),
+    return applySettled([
+      { load: () => fetchSummary(null, spaceIds), apply: setSummary },
+      { load: () => fetchTrends(null, spaceIds), apply: setTrends },
+      { load: () => fetchCategories(null, spaceIds), apply: setCategories },
+      { load: () => fetchBudgetStatus(null, spaceIds), apply: setBudgets },
+      { load: () => fetchMetrics(null, spaceIds), apply: setMetrics },
+      { load: () => fetchPeriodStatus(null, spaceIds), apply: setPeriodStatus },
     ])
-      .then(([sum, tr, cat, bud, met, pstat]) => {
-        setSummary(sum)
-        setTrends(tr)
-        setCategories(cat)
-        setBudgets(bud)
-        setMetrics(met)
-        setPeriodStatus(pstat)
-        setError(null)
-      })
-      .catch((err) => setError(err.message))
   }
 
   // Clears every fetched data slice on logout (mirrors the pre-split behaviour —

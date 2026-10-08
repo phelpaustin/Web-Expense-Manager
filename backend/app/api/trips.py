@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, is_group_member, require_role_at_least
 from app.api.groups import cascade_delete_group
 from app.core import fx
-from app.core.currency import normalize_currency
+from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import currency as currency_logic
@@ -32,7 +32,7 @@ class TripCreate(BaseModel):
     @field_validator("currency")
     @classmethod
     def _valid_currency(cls, value: str) -> str:
-        return normalize_currency(value)
+        return normalize_convertible_currency(value)
 
 
 class TripUpdate(BaseModel):
@@ -48,7 +48,7 @@ class TripUpdate(BaseModel):
     @field_validator("currency")
     @classmethod
     def _valid_currency(cls, value: str | None) -> str | None:
-        return normalize_currency(value) if value is not None else None
+        return normalize_convertible_currency(value) if value is not None else None
 
 
 def _trip_or_404(db: Session, trip_id: int) -> models.Group:

@@ -28,6 +28,23 @@ export async function logout() {
   }
 }
 
+// FastAPI returns `detail` as a string for HTTPException but as a list of
+// {loc, msg} objects for 422 validation errors; turn either into readable text.
+function errorMessage(data, fallback) {
+  const detail = data && data.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail) && detail.length) {
+    return detail
+      .map((d) => {
+        const field = Array.isArray(d.loc) ? d.loc.filter((p) => p !== 'body').join('.') : ''
+        const msg = String(d.msg || '').replace(/^Value error, /, '')
+        return field ? `${field}: ${msg}` : msg
+      })
+      .join('; ')
+  }
+  return fallback
+}
+
 // Central fetch wrapper: attaches the auth header and normalizes errors.
 async function request(path, options = {}) {
   const token = getToken()
@@ -44,7 +61,7 @@ async function request(path, options = {}) {
     let message = 'Request failed'
     try {
       const data = await res.json()
-      if (typeof data.detail === 'string') message = data.detail
+      message = errorMessage(data, message)
     } catch {
       // ignore non-JSON error bodies
     }

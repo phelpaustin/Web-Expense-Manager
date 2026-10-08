@@ -13,6 +13,7 @@ from app.api.deps import get_current_user, get_user_group_ids, is_group_member, 
 from app.api.options import ensure_options, get_or_create_options
 from app.core import fx
 from app.core.currency import normalize_currency
+from app.core.fx import normalize_convertible_currency
 from app.core.file_upload import read_upload_limited
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS
 from app.core.money import as_decimal, quantize_money
@@ -73,7 +74,7 @@ class ExpenseCreate(BaseModel):
     @field_validator("currency")
     @classmethod
     def _valid_currency(cls, value: str) -> str:
-        return normalize_currency(value)
+        return normalize_convertible_currency(value)
 
 
 class ExpenseUpdate(BaseModel):
@@ -92,7 +93,7 @@ class ExpenseUpdate(BaseModel):
     @field_validator("currency")
     @classmethod
     def _valid_currency(cls, value: str | None) -> str | None:
-        return normalize_currency(value) if value is not None else None
+        return normalize_convertible_currency(value) if value is not None else None
 
 
 class ExpenseBulkCreate(BaseModel):
@@ -193,19 +194,33 @@ def fetch_expenses(
     ]
 
 
+def fetch_expenses_in_base_currency_ex(
+    db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
+) -> tuple[list[dict], int]:
+    """Rows converted into the user's base_currency, plus how many were skipped.
+
+    Expenses whose currency has no exchange rate are left out of the aggregate
+    (and counted) rather than failing the whole request, so one bad row can't
+    take every dashboard endpoint down for the user or a shared space.
+    """
+    expenses = fetch_expenses(db, user_id, scope, space_ids)
+    base_currency = get_or_create_options(db, user_id).base_currency or "SEK"
+    try:
+        return currency_logic.convert_expenses_partial(expenses, base_currency, fx.get_rate)
+    except currency_logic.CurrencyConversionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 def fetch_expenses_in_base_currency(
     db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
 ) -> list[dict]:
     """Same rows as fetch_expenses, but every amount converted into the user's
     base_currency — analytics/budgets/metrics/alerts need one common unit to
     aggregate across currencies (see app/logic/currency.py + app/core/fx.py).
+    Unconvertible rows are skipped; use fetch_expenses_in_base_currency_ex to
+    also learn how many.
     """
-    expenses = fetch_expenses(db, user_id, scope, space_ids)
-    base_currency = get_or_create_options(db, user_id).base_currency or "SEK"
-    try:
-        return currency_logic.convert_expenses(expenses, base_currency, fx.get_rate)
-    except currency_logic.CurrencyConversionUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return fetch_expenses_in_base_currency_ex(db, user_id, scope, space_ids)[0]
 
 
 def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Expense:
@@ -393,7 +408,7 @@ def expenses_summary(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses_in_base_currency(db, user.id, scope, space_ids)
+    expenses, unconverted = fetch_expenses_in_base_currency_ex(db, user.id, scope, space_ids)
     base_currency = get_or_create_options(db, user.id).base_currency or "SEK"
     total = sum(e["amount"] for e in expenses)
     by_category: dict[str, Decimal] = {}
@@ -404,6 +419,8 @@ def expenses_summary(
         "count": len(expenses),
         "by_category": by_category,
         "currency": base_currency,
+        # Expenses left out of the totals because their currency can't be converted.
+        "unconverted_count": unconverted,
     }
 
 
@@ -459,7 +476,7 @@ async def import_expenses(
     override = currency_override.strip()
     if override:
         try:
-            override = normalize_currency(override)
+            override = normalize_convertible_currency(override)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -582,7 +599,7 @@ async def import_expenses(
             if override:
                 currency = override
             try:
-                currency = normalize_currency(currency)
+                currency = normalize_convertible_currency(currency)
             except ValueError:
                 record_skip(row, f"Unsupported currency code: {currency}", line)
                 continue

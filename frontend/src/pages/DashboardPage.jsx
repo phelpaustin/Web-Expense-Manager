@@ -169,6 +169,13 @@ export default function DashboardPage({
         </section>
       )}
 
+      {summary && summary.unconverted_count > 0 && (
+        <div className="auth-error" role="alert">
+          {summary.unconverted_count} expense{summary.unconverted_count === 1 ? '' : 's'} in a currency without
+          an exchange rate {summary.unconverted_count === 1 ? 'is' : 'are'} left out of these totals. Delete{' '}
+          {summary.unconverted_count === 1 ? 'it' : 'them'} on the Expenses page and re-add with a supported currency.
+        </div>
+      )}
       {summary && (
         <section className="cards">
           <div className="card">

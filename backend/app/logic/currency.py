@@ -48,3 +48,32 @@ def convert_expenses(
         out["currency"] = base_currency
         converted.append(out)
     return converted
+
+
+def convert_expenses_partial(
+    expenses: list[dict], base_currency: str, get_rate: Callable[[str, str], Decimal | None]
+) -> tuple[list[dict], int]:
+    """Convert what can be converted; skip rows whose currency has no rate.
+
+    Returns (converted_rows, skipped_count). Unlike convert_expenses, a single
+    unconvertible expense never prevents the rest from being aggregated.
+    An invalid *base* currency is still an error: nothing can be converted.
+    """
+    try:
+        base_currency = normalize_currency(base_currency or "SEK")
+    except ValueError as exc:
+        raise CurrencyConversionUnavailable(str(exc)) from exc
+
+    convertible: list[dict] = []
+    skipped = 0
+    for e in expenses:
+        try:
+            currency = normalize_currency(e.get("currency") or base_currency)
+        except ValueError:
+            skipped += 1
+            continue
+        if get_rate(currency, base_currency) is None:
+            skipped += 1
+            continue
+        convertible.append(e)
+    return convert_expenses(convertible, base_currency, get_rate), skipped

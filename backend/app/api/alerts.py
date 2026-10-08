@@ -1,5 +1,7 @@
 import hashlib
+import hmac
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
@@ -17,6 +19,7 @@ from app.logic import budgets as budgets_logic
 from app.logic.budgets import TOTAL_BUDGET_KEY
 
 router = APIRouter()
+log = logging.getLogger("alerts")
 
 
 def _alerts_for_user(db: Session, user_id: int) -> list[dict]:
@@ -60,26 +63,35 @@ def send_alert_digest(
     by an external scheduler (e.g. a daily GitHub Actions cron), not the frontend —
     protected by a shared secret instead of a user login.
     """
-    if not settings.cron_secret or x_cron_secret != settings.cron_secret:
+    if not settings.cron_secret or not hmac.compare_digest(
+        x_cron_secret.encode(), settings.cron_secret.encode()
+    ):
         raise HTTPException(status_code=403, detail="Invalid or missing cron secret")
 
-    sent, skipped = 0, 0
+    sent, skipped, failed = 0, 0, 0
     for user in db.query(models.User).all():
-        alerts = _alerts_for_user(db, user.id)
-        if not alerts:
-            if user.alert_digest_signature is not None:
-                user.alert_digest_signature = None
+        # One user's problem (bad data, FX outage, email error) must not stop
+        # the digest for everyone else.
+        try:
+            alerts = _alerts_for_user(db, user.id)
+            if not alerts:
+                if user.alert_digest_signature is not None:
+                    user.alert_digest_signature = None
+                    db.commit()
+                skipped += 1
+                continue
+            signature = _digest_signature(alerts)
+            if signature == user.alert_digest_signature:
+                skipped += 1
+                continue
+            if send_email(user.email, "Your budget alerts", _digest_body(alerts)):
+                user.alert_digest_signature = signature
                 db.commit()
-            skipped += 1
-            continue
-        signature = _digest_signature(alerts)
-        if signature == user.alert_digest_signature:
-            skipped += 1
-            continue
-        if send_email(user.email, "Your budget alerts", _digest_body(alerts)):
-            user.alert_digest_signature = signature
-            db.commit()
-            sent += 1
-        else:
-            skipped += 1
-    return {"users_emailed": sent, "users_skipped": skipped}
+                sent += 1
+            else:
+                skipped += 1
+        except Exception:  # noqa: BLE001 — isolate per-user failures
+            db.rollback()
+            failed += 1
+            log.exception("Alert digest failed for user id=%s", user.id)
+    return {"users_emailed": sent, "users_skipped": skipped, "users_failed": failed}

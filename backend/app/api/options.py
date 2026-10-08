@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.core.currency import normalize_currency
+from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.db import models
 
@@ -142,7 +142,7 @@ class CurrencyIn(BaseModel):
     @field_validator("currency")
     @classmethod
     def _valid_currency(cls, value: str) -> str:
-        return normalize_currency(value)
+        return normalize_convertible_currency(value)
 
 
 @router.get("/options")
