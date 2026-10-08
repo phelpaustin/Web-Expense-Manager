@@ -1,3 +1,4 @@
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { money } from '../format.js'
 import { suggestCategory, autoCategorize, fetchExpenses } from '../api/client.js'
@@ -29,6 +30,10 @@ export default function ExpensesPage({
   groups,
   onError,
 }) {
+  // What an empty currency choice resolves to on the server: the chosen space's currency, else base.
+  const defaultCurrency =
+    groups.find((g) => String(g.id) === String(form.group_id))?.currency || options.base_currency || 'SEK'
+  const effectiveCurrency = form.currency || defaultCurrency
   const [billMode, setBillMode] = useState(false)
   const [billItems, setBillItems] = useState([])
   const [submittingBill, setSubmittingBill] = useState(false)
@@ -235,7 +240,7 @@ export default function ExpensesPage({
         description: form.description,
         brand: form.brand,
         amount: parseFloat(form.amount),
-        currency: form.currency || 'SEK',
+        currency: effectiveCurrency,
         quantity: parseFloat(form.quantity) || 1,
         unit: form.unit || 'Count',
       },
@@ -253,8 +258,8 @@ export default function ExpensesPage({
       const direction = billMismatch > 0 ? 'more than' : 'less than'
       if (
         !window.confirm(
-          `Your items add up to ${money(billTotal, form.currency)}, ${direction} the receipt total of ${money(receiptTotalNum, form.currency)} ` +
-            `(off by ${money(Math.abs(billMismatch), form.currency)}). Submit anyway?`,
+          `Your items add up to ${money(billTotal, effectiveCurrency)}, ${direction} the receipt total of ${money(receiptTotalNum, effectiveCurrency)} ` +
+            `(off by ${money(Math.abs(billMismatch), effectiveCurrency)}). Submit anyway?`,
         )
       ) {
         return
@@ -274,7 +279,7 @@ export default function ExpensesPage({
             unit: it.unit,
             shop: form.shop,
             brand: it.brand,
-            currency: it.currency || form.currency || 'SEK',
+            currency: it.currency || effectiveCurrency,
             group_id: form.group_id ? parseInt(form.group_id, 10) : null,
           })),
         ),
@@ -333,7 +338,7 @@ export default function ExpensesPage({
           unit: r.unit || 'Count',
           shop: r.shop,
           brand: r.brand,
-          currency: r.currency || 'SEK',
+          currency: r.currency || undefined,
         }),
       )
       setSkipped((prev) => prev.filter((_, idx) => idx !== i))
@@ -431,6 +436,12 @@ export default function ExpensesPage({
               className="amount-input"
               value={editForm.amount}
               onChange={(ev) => setEditForm({ ...editForm, amount: ev.target.value })}
+            />
+            <CurrencySelect
+              value={editForm.currency}
+              onChange={(c) => setEditForm({ ...editForm, currency: c })}
+              currencies={options.currencies}
+              allowDefault={false}
             />
           </td>
           <td className="right nowrap">
@@ -676,13 +687,12 @@ export default function ExpensesPage({
             value={form.unit}
             onChange={(e) => setForm({ ...form, unit: e.target.value })}
           />
-          <input
-            type="text"
-            placeholder="Cur"
-            className="unit-input"
+          <CurrencySelect
             value={form.currency}
+            onChange={(c) => setForm({ ...form, currency: c })}
+            currencies={options.currencies}
+            defaultCurrency={defaultCurrency}
             disabled={billMode && billItems.length > 0}
-            onChange={(e) => setForm({ ...form, currency: e.target.value })}
           />
           <input
             type="number"
@@ -750,7 +760,7 @@ export default function ExpensesPage({
                 </table>
                 <div className="bill-total-row">
                   <strong>
-                    Bill total so far: {money(billTotal, form.currency)} ({billItems.length} item{billItems.length === 1 ? '' : 's'})
+                    Bill total so far: {money(billTotal, effectiveCurrency)} ({billItems.length} item{billItems.length === 1 ? '' : 's'})
                   </strong>
                   <label className="receipt-total-input">
                     Receipt total
@@ -768,12 +778,12 @@ export default function ExpensesPage({
                   <p className={billMismatch === 0 ? 'ok-note' : 'auth-error'}>
                     {billMismatch === 0
                       ? '✓ Matches the receipt total.'
-                      : `⚠️ Items add up to ${money(billTotal, form.currency)}, ${billMismatch > 0 ? 'more than' : 'less than'} the receipt total ` +
-                        `of ${money(receiptTotalNum, form.currency)} (off by ${money(Math.abs(billMismatch), form.currency)}).`}
+                      : `⚠️ Items add up to ${money(billTotal, effectiveCurrency)}, ${billMismatch > 0 ? 'more than' : 'less than'} the receipt total ` +
+                        `of ${money(receiptTotalNum, effectiveCurrency)} (off by ${money(Math.abs(billMismatch), effectiveCurrency)}).`}
                   </p>
                 )}
                 <button type="button" onClick={handleSubmitBill} disabled={submittingBill}>
-                  {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal, form.currency)})`}
+                  {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal, effectiveCurrency)})`}
                 </button>
               </>
             )}

@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.api.options import get_or_create_options
+from app.core import fx
+from app.core.money import quantize_money
 from app.db.database import get_db
 from app.db import models
 from app.api.expenses import fetch_expenses_in_base_currency
@@ -26,8 +28,25 @@ class BudgetConfig(BaseModel):
 
 
 def fetch_budgets(db: Session, user_id: int) -> dict:
+    """Budgets as {category: amount} in the user's base currency.
+
+    Each budget is stored in the currency it was set in; those in another
+    currency are converted at the latest rate, so changing the base currency
+    never silently reinterprets an amount. A budget that can't be converted
+    right now is left out rather than shown with a wrong number.
+    """
+    base = get_or_create_options(db, user_id).base_currency or "SEK"
     rows = db.query(models.Budget).filter(models.Budget.user_id == user_id).all()
-    return {b.category: b.amount for b in rows}
+    result = {}
+    for b in rows:
+        amount = b.amount
+        if b.currency != base:
+            rate = fx.get_rate(b.currency, base)
+            if rate is None:
+                continue
+            amount = quantize_money(amount * rate)
+        result[b.category] = amount
+    return result
 
 
 @router.get("/budgets")
@@ -50,11 +69,14 @@ def set_budget(
         .filter(models.Budget.user_id == user.id, models.Budget.category == payload.category)
         .first()
     )
+    # The amount the user typed is in the currency the budgets are shown in (base).
+    base = get_or_create_options(db, user.id).base_currency or "SEK"
     if budget is None:
-        budget = models.Budget(user_id=user.id, category=payload.category, amount=payload.amount)
+        budget = models.Budget(user_id=user.id, category=payload.category, amount=payload.amount, currency=base)
         db.add(budget)
     else:
         budget.amount = payload.amount
+        budget.currency = base
     db.commit()
     return fetch_budgets(db, user.id)
 

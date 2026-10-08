@@ -3,11 +3,12 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.api.options import get_or_create_options
+from app.api.options import convert_rows_to_base, default_currency_for, get_or_create_options
+from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
 from app.core.file_upload import read_upload_limited
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
@@ -22,11 +23,18 @@ router = APIRouter()
 _MAX_RECEIPT_BYTES = MAX_IMPORT_FILE_BYTES
 
 
+def _valid_currency(value: str | None) -> str | None:
+    return normalize_convertible_currency(value) if value is not None else None
+
+
 class PendingCreate(BaseModel):
     date: datetime.date
     shop: str = Field(min_length=1)
     amount: Decimal = Field(gt=0)
     note: str = ""
+    currency: str | None = None  # None = the user's base currency
+
+    check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
 
 
 def _pending_or_404(db: Session, bill_id: int, user_id: int) -> models.PendingBill:
@@ -42,6 +50,7 @@ def _serialize_pending(b: models.PendingBill, has_receipt: bool) -> dict:
         "date": b.date.isoformat(),
         "shop": b.shop,
         "amount": b.amount,
+        "currency": b.currency,
         "note": b.note,
         "status": b.status,
         "has_receipt": has_receipt,
@@ -72,7 +81,9 @@ def create_pending(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    b = models.PendingBill(user_id=user.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["currency"] = data["currency"] or default_currency_for(db, user.id)
+    b = models.PendingBill(user_id=user.id, **data)
     db.add(b)
     db.commit()
     db.refresh(b)
@@ -107,6 +118,7 @@ async def upload_pending(
         date=(parsed and parsed["date"]) or datetime.date.today(),
         shop=(shop.strip() or (parsed and parsed["shop"]) or (file.filename or "Uploaded bill")),
         amount=amount or (parsed and parsed["amount"]) or Decimal("0"),
+        currency=default_currency_for(db, user.id),
         note="",
         status="pending",
     )
@@ -154,12 +166,14 @@ async def bulk_upload_pending(
         (e["date"], e["amount"])
         for e in fetch_expenses_in_base_currency(db, user.id, scope="personal")
     ]
-    existing += [
-        (p.date, p.amount)
+    pending_rows = [
+        {"date": p.date, "amount": p.amount, "currency": p.currency}
         for p in db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id).all()
     ]
+    existing += [(p["date"], p["amount"]) for p in convert_rows_to_base(db, user.id, pending_rows)[0]]
     bills_logic.flag_duplicates(rows, existing)
 
+    base_currency = default_currency_for(db, user.id)
     duplicates = 0
     for row in rows:
         db.add(
@@ -168,6 +182,7 @@ async def bulk_upload_pending(
                 date=row["date"],
                 shop=row["shop"],
                 amount=row["amount"],
+                currency=base_currency,
                 note="Bulk import",
                 status="pending",
                 possible_duplicate=row["possible_duplicate"],
@@ -224,6 +239,8 @@ def itemise_pending(
             category=category or "Bills",
             description=b.shop,
             amount=final_amount,
+            currency=b.currency,
+            price_per_unit=final_amount,
         )
     )
     db.query(models.Receipt).filter(models.Receipt.pending_bill_id == b.id).delete()
@@ -305,6 +322,7 @@ class ManualOut(BaseModel):
     shop: str
     amount: Decimal
     note: str
+    currency: str
 
 
 class ManualCreate(BaseModel):
@@ -312,6 +330,9 @@ class ManualCreate(BaseModel):
     shop: str = Field(min_length=1)
     amount: Decimal = Field(gt=0)
     note: str = ""
+    currency: str | None = None  # None = the user's base currency
+
+    check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
 
 
 @router.get("/bills-ledger/manual", response_model=list[ManualOut])
@@ -333,7 +354,9 @@ def create_manual(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    m = models.ManualBill(user_id=user.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["currency"] = data["currency"] or default_currency_for(db, user.id)
+    m = models.ManualBill(user_id=user.id, **data)
     db.add(m)
     db.commit()
     db.refresh(m)
@@ -361,14 +384,22 @@ def get_ledger(
 ):
     expenses = fetch_expenses_in_base_currency(db, user.id)
     base_currency = get_or_create_options(db, user.id).base_currency or "SEK"
-    pending = [
-        {"id": b.id, "date": b.date, "shop": b.shop, "amount": b.amount, "currency": base_currency}
-        for b in db.query(models.PendingBill)
-        .filter(models.PendingBill.user_id == user.id, models.PendingBill.status == "pending")
-        .all()
-    ]
-    manual = [
-        {"id": m.id, "date": m.date, "shop": m.shop, "amount": m.amount, "currency": base_currency}
-        for m in db.query(models.ManualBill).filter(models.ManualBill.user_id == user.id).all()
-    ]
+    pending = convert_rows_to_base(
+        db,
+        user.id,
+        [
+            {"id": b.id, "date": b.date, "shop": b.shop, "amount": b.amount, "currency": b.currency}
+            for b in db.query(models.PendingBill)
+            .filter(models.PendingBill.user_id == user.id, models.PendingBill.status == "pending")
+            .all()
+        ],
+    )[0]
+    manual = convert_rows_to_base(
+        db,
+        user.id,
+        [
+            {"id": m.id, "date": m.date, "shop": m.shop, "amount": m.amount, "currency": m.currency}
+            for m in db.query(models.ManualBill).filter(models.ManualBill.user_id == user.id).all()
+        ],
+    )[0]
     return bills_logic.build_ledger(expenses, pending, manual, base_currency)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -7,6 +7,8 @@ from app.api.deps import (
     is_group_member,
     require_role_at_least,
 )
+from app.api.options import default_currency_for
+from app.core.fx import normalize_convertible_currency
 from app.core.rate_limit import limiter
 from app.db.database import get_db
 from app.db import models
@@ -23,14 +25,26 @@ SPACE_TYPE_LABELS = {
 }
 
 
+def _validate_optional_currency(value: str | None) -> str | None:
+    return normalize_convertible_currency(value) if value is not None else None
+
+
 class GroupCreate(BaseModel):
     name: str = Field(min_length=1)
     space_type: str = "custom"
+    # Default currency for new expenses in this space; None = the creator's base currency.
+    currency: str | None = None
+
+    check_currency = field_validator("currency")(lambda cls, v: _validate_optional_currency(v))
 
 
 class GroupUpdate(BaseModel):
     name: str = Field(min_length=1)
     space_type: str | None = None
+    # Only changes the default for *new* expenses; existing expenses keep their own currency.
+    currency: str | None = None
+
+    check_currency = field_validator("currency")(lambda cls, v: _validate_optional_currency(v))
 
 
 class InviteIn(BaseModel):
@@ -79,6 +93,7 @@ def _serialize_group(db: Session, group: models.Group, member: models.GroupMembe
         "name": member.local_name or group.name,
         "space_type": group.space_type,
         "space_type_label": SPACE_TYPE_LABELS.get(group.space_type, "Custom"),
+        "currency": group.currency or "SEK",
         "parent_group_id": group.parent_group_id,
         "local_name": member.local_name,
         "local_parent_group_id": member.local_parent_group_id,
@@ -110,7 +125,12 @@ def create_group(
     space_type = payload.space_type if payload.space_type in SPACE_TYPES else "custom"
     if space_type == "trip":
         raise HTTPException(status_code=400, detail="Create trips from the Trips page instead")
-    group = models.Group(owner_id=user.id, name=payload.name.strip(), space_type=space_type)
+    group = models.Group(
+        owner_id=user.id,
+        name=payload.name.strip(),
+        space_type=space_type,
+        currency=payload.currency or default_currency_for(db, user.id),
+    )
     db.add(group)
     db.flush()
     member = models.GroupMember(group_id=group.id, user_id=user.id, role="owner")
@@ -130,6 +150,8 @@ def rename_group(
     group = _group_or_404(db, group_id)
     member = _require_owner(db, group_id, user.id)
     group.name = payload.name.strip()
+    if payload.currency:
+        group.currency = payload.currency
     if payload.space_type and payload.space_type in SPACE_TYPES and payload.space_type != "trip":
         group.space_type = payload.space_type
     db.commit()

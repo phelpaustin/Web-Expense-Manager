@@ -11,7 +11,7 @@ const EMPTY_FORM = {
   unit: 'Count',
   shop: '',
   brand: '',
-  currency: 'SEK',
+  currency: '', // '' = let the server default it (space currency, else base currency)
   trip_id: '',
   group_id: '',
 }
@@ -37,7 +37,7 @@ export function useExpenseHandlers(loadAll, setError) {
         unit: form.unit || 'Count',
         shop: form.shop,
         brand: form.brand,
-        currency: form.currency || 'SEK',
+        currency: form.currency || undefined,
         trip_id: form.trip_id ? parseInt(form.trip_id, 10) : null,
         group_id: form.group_id ? parseInt(form.group_id, 10) : null,
       })
@@ -90,6 +90,7 @@ export function useExpenseHandlers(loadAll, setError) {
       quantity: String(expense.quantity ?? 1),
       unit: expense.unit || 'Count',
       shop: expense.shop || '',
+      currency: expense.currency || '',
       group_id: expense.group_id ? String(expense.group_id) : '',
     })
   }
@@ -110,6 +111,7 @@ export function useExpenseHandlers(loadAll, setError) {
         quantity: parseFloat(editForm.quantity) || 1,
         unit: editForm.unit || 'Count',
         shop: editForm.shop,
+        currency: editForm.currency || undefined,
         group_id: editForm.group_id ? parseInt(editForm.group_id, 10) : null,
       })
       cancelEdit()

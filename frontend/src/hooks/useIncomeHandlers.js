@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createIncome, deleteIncome } from '../api/client.js'
 
-const EMPTY_INCOME = { date: '', source: '', note: '', amount: '' }
+const EMPTY_INCOME = { date: '', source: '', note: '', amount: '', currency: '' }
 
 export function useIncomeHandlers(loadAll, setError) {
   const [incomeForm, setIncomeForm] = useState(EMPTY_INCOME)
@@ -16,6 +16,7 @@ export function useIncomeHandlers(loadAll, setError) {
         amount: parseFloat(incomeForm.amount),
         source: incomeForm.source,
         note: incomeForm.note,
+        currency: incomeForm.currency || undefined,
       })
       setIncomeForm(EMPTY_INCOME)
       await loadAll()

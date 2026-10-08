@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Integer, JSON, LargeBinary, Numeric, String, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, JSON, LargeBinary, Numeric, String, UniqueConstraint, text
 
 from app.db.database import Base
 
@@ -61,6 +61,9 @@ class Budget(Base):
     # Category name; the overall budget uses the "__total_monthly__" sentinel.
     category = Column(String, nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
+    # No Python/DB default on purpose: every writer must say which currency the
+    # amount is in (a silent "SEK" default is what caused mislabelled data).
+    currency = Column(String, nullable=False)
 
     __table_args__ = (UniqueConstraint("user_id", "category", name="uq_user_category"),)
 
@@ -74,6 +77,7 @@ class Income(Base):
     amount = Column(Numeric(12, 2), nullable=False)
     source = Column(String, nullable=False, default="Income")
     note = Column(String, nullable=False, default="")
+    currency = Column(String, nullable=False)
 
 
 class RecurringTemplate(Base):
@@ -89,6 +93,7 @@ class RecurringTemplate(Base):
     auto_post = Column(Boolean, nullable=False, default=False)
     last_applied = Column(Date, nullable=True)
     schedule_anchor = Column(Date, nullable=True)
+    currency = Column(String, nullable=False)
 
 
 class PendingBill(Base):
@@ -104,6 +109,7 @@ class PendingBill(Base):
     status = Column(String, nullable=False, default="pending")
     # Set on bulk import when (date, amount) matches an existing expense/pending bill.
     possible_duplicate = Column(Boolean, nullable=False, default=False)
+    currency = Column(String, nullable=False)
 
 
 class ManualBill(Base):
@@ -115,6 +121,7 @@ class ManualBill(Base):
     shop = Column(String, nullable=False, default="")
     amount = Column(Numeric(12, 2), nullable=False)
     note = Column(String, nullable=False, default="")
+    currency = Column(String, nullable=False)
 
 
 class Receipt(Base):
@@ -200,3 +207,20 @@ class GroupInvite(Base):
     email = Column(String, nullable=False, index=True)
     invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     role = Column(String, nullable=False, default="editor")
+
+
+class FxRate(Base):
+    """Cached historical exchange rate: units of `currency` per 1 EUR on `rate_date`.
+
+    Only final (immutable) rates are stored, one row per calendar day (weekends
+    and holidays carry the previous business day's rate). Cross rates are
+    derived from two EUR rows, so the table stays small.
+    """
+    __tablename__ = "fx_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rate_date = Column(Date, nullable=False)
+    currency = Column(String(3), nullable=False)
+    rate = Column(Numeric(20, 8), nullable=False)
+
+    __table_args__ = (UniqueConstraint("rate_date", "currency", name="uq_fx_date_currency"),)

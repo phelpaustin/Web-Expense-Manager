@@ -39,6 +39,9 @@ def _fake_get_rate(src, dst, *_args):
 def fake_fx(monkeypatch):
     monkeypatch.setattr(fx, "get_rate", _fake_get_rate)
     monkeypatch.setattr(fx, "supported_currencies", lambda: SUPPORTED)
+    # Never hit the real provider from tests; fx tests exercise the real
+    # implementation against a fake `_fetch_series` instead.
+    monkeypatch.setattr(fx, "ensure_rates", lambda pairs: None)
 
 
 @pytest.fixture(scope="session")

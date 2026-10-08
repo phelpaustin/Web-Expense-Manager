@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.options import default_currency_for
+from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import recurring as rec
@@ -22,6 +24,8 @@ class RecurringCreate(BaseModel):
     frequency: str = "Monthly"
     note: str = ""
     auto_post: bool = False
+    # Currency of `amount` (and of the expenses it posts); None = the user's base currency.
+    currency: str | None = None
 
     @field_validator("frequency")
     @classmethod
@@ -29,6 +33,11 @@ class RecurringCreate(BaseModel):
         if v not in rec.FREQUENCIES:
             raise ValueError(f"frequency must be one of {FREQUENCIES}")
         return v
+
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, v: str | None) -> str | None:
+        return normalize_convertible_currency(v) if v is not None else None
 
 
 class RecurringBackfill(BaseModel):
@@ -44,6 +53,7 @@ class RecurringUpdate(BaseModel):
     frequency: str | None = None
     note: str | None = None
     auto_post: bool | None = None
+    currency: str | None = None
 
     @field_validator("frequency")
     @classmethod
@@ -52,6 +62,11 @@ class RecurringUpdate(BaseModel):
             raise ValueError(f"frequency must be one of {FREQUENCIES}")
         return v
 
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, v: str | None) -> str | None:
+        return normalize_convertible_currency(v) if v is not None else None
+
 
 def _serialize(t: models.RecurringTemplate, today: datetime.date) -> dict:
     return {
@@ -59,6 +74,7 @@ def _serialize(t: models.RecurringTemplate, today: datetime.date) -> dict:
         "item": t.item,
         "category": t.category,
         "amount": t.amount,
+        "currency": t.currency,
         "frequency": t.frequency,
         "note": t.note,
         "auto_post": t.auto_post,
@@ -82,6 +98,8 @@ def _post_expense(db: Session, user_id: int, template: models.RecurringTemplate,
             category=template.category or "Recurring",
             description=template.item,
             amount=template.amount,
+            currency=template.currency,
+            price_per_unit=template.amount,
         )
     )
 
@@ -107,7 +125,9 @@ def create_recurring(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    t = models.RecurringTemplate(user_id=user.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["currency"] = data["currency"] or default_currency_for(db, user.id)
+    t = models.RecurringTemplate(user_id=user.id, **data)
     db.add(t)
     db.commit()
     db.refresh(t)
@@ -124,6 +144,8 @@ def update_recurring(
     t = _get_owned_or_404(db, template_id, user.id)
     previous_frequency = t.frequency
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("currency") is None:
+        updates.pop("currency", None)  # currency is required; an explicit null means "unchanged"
     for field, value in updates.items():
         setattr(t, field, value)
     if "frequency" in updates and updates["frequency"] != previous_frequency:
@@ -193,6 +215,8 @@ def backfill_recurring(
                 category=t.category or "Recurring",
                 description=t.item,
                 amount=amount,
+                currency=t.currency,
+                price_per_unit=amount,
             )
         )
     if t.last_applied is None or dates[-1] > t.last_applied:

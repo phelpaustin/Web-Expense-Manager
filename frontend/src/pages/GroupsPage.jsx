@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import {
   fetchGroupMembers,
   inviteToGroup,
   removeGroupMember,
   cancelGroupInvite,
   renameGroup,
+  setGroupCurrency,
   changeMemberRole,
 } from '../api/client.js'
 
@@ -26,9 +28,10 @@ function spaceTypeIcon(spaceType) {
   return SPACE_TYPES.find((t) => t.value === spaceType)?.icon || '📁'
 }
 
-export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLeaveGroup, onRefresh, onError }) {
+export default function GroupsPage({ groups, currencies = [], baseCurrency, onCreateGroup, onDeleteGroup, onLeaveGroup, onRefresh, onError }) {
   const [name, setName] = useState('')
   const [spaceType, setSpaceType] = useState('custom')
+  const [currency, setCurrency] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [members, setMembers] = useState([])
   const [inviteEmail, setInviteEmail] = useState('')
@@ -38,9 +41,10 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
   async function handleCreate(e) {
     e.preventDefault()
     if (!name.trim()) return
-    await onCreateGroup(name.trim(), spaceType)
+    await onCreateGroup(name.trim(), spaceType, currency)
     setName('')
     setSpaceType('custom')
+    setCurrency('')
   }
 
   async function loadMembers(groupId) {
@@ -105,6 +109,16 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
     }
   }
 
+  async function handleCurrencyChange(group, newCurrency) {
+    if (!newCurrency || newCurrency === group.currency) return
+    try {
+      await setGroupCurrency(group.id, group.name, newCurrency)
+      await onRefresh()
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
   async function handleRename(group) {
     const newName = window.prompt('Rename group', group.name)
     if (!newName || !newName.trim() || newName.trim() === group.name) return
@@ -133,6 +147,13 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+          <CurrencySelect
+            value={currency}
+            onChange={setCurrency}
+            currencies={currencies}
+            defaultCurrency={baseCurrency}
+            title="Default currency for new expenses in this space"
+          />
           <select value={spaceType} onChange={(e) => setSpaceType(e.target.value)} title="Space type">
             {SPACE_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -156,13 +177,20 @@ export default function GroupsPage({ groups, onCreateGroup, onDeleteGroup, onLea
                     {spaceTypeIcon(g.space_type)} {g.name}
                   </h2>
                   <p className="subtitle">
-                    {g.space_type_label} · {g.member_count} member{g.member_count === 1 ? '' : 's'} ·{' '}
+                    {g.space_type_label} · {g.currency} · {g.member_count} member{g.member_count === 1 ? '' : 's'} ·{' '}
                     <span className={`role-badge role-${g.role}`}>{g.role}</span>
                   </p>
                 </div>
                 <div className="trip-card-actions" onClick={(e) => e.stopPropagation()}>
                   {g.role === 'owner' ? (
                     <>
+                      <CurrencySelect
+                        value={g.currency}
+                        onChange={(c) => handleCurrencyChange(g, c)}
+                        currencies={currencies}
+                        allowDefault={false}
+                        title="Default currency for new expenses (existing expenses keep their own)"
+                      />
                       <button className="ghost-btn" onClick={() => handleRename(g)}>
                         Rename
                       </button>

@@ -133,6 +133,8 @@ export default function App() {
               savingIncome={income.savingIncome}
               onAddIncome={income.handleAddIncome}
               onDeleteIncome={income.handleDeleteIncome}
+              currencies={data.options.currencies}
+              baseCurrency={data.options.base_currency}
             />
           }
         />
@@ -150,6 +152,8 @@ export default function App() {
               onDelete={recurring.handleDeleteRecurring}
               onUpdate={recurring.handleUpdateRecurring}
               onBackfill={recurring.handleBackfillRecurring}
+              currencies={data.options.currencies}
+              baseCurrency={data.options.base_currency}
             />
           }
         />
@@ -211,6 +215,8 @@ export default function App() {
           element={
             <GroupsPage
               groups={data.groups}
+              currencies={data.options.currencies}
+              baseCurrency={data.options.base_currency}
               onCreateGroup={groupHandlers.handleCreateGroup}
               onDeleteGroup={groupHandlers.handleDeleteGroup}
               onLeaveGroup={groupHandlers.handleLeaveGroup}

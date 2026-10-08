@@ -2,10 +2,12 @@ import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.options import convert_rows_to_base, default_currency_for
+from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import income as income_logic
@@ -21,6 +23,11 @@ class IncomeOut(BaseModel):
     amount: Decimal
     source: str
     note: str
+    currency: str
+
+
+def _valid_currency(value: str | None) -> str | None:
+    return normalize_convertible_currency(value) if value is not None else None
 
 
 class IncomeCreate(BaseModel):
@@ -28,6 +35,9 @@ class IncomeCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     source: str = Field(min_length=1)
     note: str = ""
+    currency: str | None = None  # None = the user's base currency
+
+    check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
 
 
 class IncomeUpdate(BaseModel):
@@ -35,6 +45,9 @@ class IncomeUpdate(BaseModel):
     amount: Decimal | None = Field(default=None, gt=0)
     source: str | None = Field(default=None, min_length=1)
     note: str | None = None
+    currency: str | None = None
+
+    check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
 
 
 def fetch_income(db: Session, user_id: int) -> list[dict]:
@@ -45,9 +58,14 @@ def fetch_income(db: Session, user_id: int) -> list[dict]:
         .all()
     )
     return [
-        {"id": r.id, "date": r.date, "amount": r.amount, "source": r.source, "note": r.note}
+        {"id": r.id, "date": r.date, "amount": r.amount, "source": r.source, "note": r.note, "currency": r.currency}
         for r in rows
     ]
+
+
+def fetch_income_in_base_currency(db: Session, user_id: int) -> list[dict]:
+    """Income rows converted into the user's base currency at each row's date."""
+    return convert_rows_to_base(db, user_id, fetch_income(db, user_id))[0]
 
 
 def _get_owned_or_404(db: Session, income_id: int, user_id: int) -> models.Income:
@@ -76,7 +94,9 @@ def create_income(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    row = models.Income(user_id=user.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["currency"] = data["currency"] or default_currency_for(db, user.id)
+    row = models.Income(user_id=user.id, **data)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -91,7 +111,10 @@ def update_income(
     user: models.User = Depends(get_current_user),
 ):
     row = _get_owned_or_404(db, income_id, user.id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("currency") is None:
+        changes.pop("currency", None)  # currency is required; an explicit null means "unchanged"
+    for field, value in changes.items():
         setattr(row, field, value)
     db.commit()
     db.refresh(row)
@@ -114,4 +137,4 @@ def income_summary(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return income_logic.summary(fetch_income(db, user.id))
+    return income_logic.summary(fetch_income_in_base_currency(db, user.id))

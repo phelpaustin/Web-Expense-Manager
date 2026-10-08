@@ -1,3 +1,4 @@
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import { Fragment, useState } from 'react'
 import { FREQUENCIES } from '../constants.js'
 import { money } from '../format.js'
@@ -15,6 +16,8 @@ export default function RecurringPage({
   onDelete,
   onUpdate,
   onBackfill,
+  currencies = [],
+  baseCurrency,
 }) {
   const [expandedId, setExpandedId] = useState(null)
   const [editForm, setEditForm] = useState(null)
@@ -27,7 +30,7 @@ export default function RecurringPage({
       return
     }
     setExpandedId(t.id)
-    setEditForm({ item: t.item, category: t.category, amount: t.amount, frequency: t.frequency, auto_post: t.auto_post })
+    setEditForm({ item: t.item, category: t.category, amount: t.amount, currency: t.currency, frequency: t.frequency, auto_post: t.auto_post })
     setBackfillForm({ start_date: '', end_date: today(), amount: t.amount })
   }
 
@@ -39,6 +42,7 @@ export default function RecurringPage({
         item: editForm.item,
         category: editForm.category,
         amount: parseFloat(editForm.amount),
+        currency: editForm.currency || undefined,
         frequency: editForm.frequency,
         auto_post: editForm.auto_post,
       })
@@ -89,6 +93,12 @@ export default function RecurringPage({
             required
             value={recurringForm.amount}
             onChange={(e) => setRecurringForm({ ...recurringForm, amount: e.target.value })}
+          />
+          <CurrencySelect
+            value={recurringForm.currency}
+            onChange={(c) => setRecurringForm({ ...recurringForm, currency: c })}
+            currencies={currencies}
+            defaultCurrency={baseCurrency}
           />
           <select
             value={recurringForm.frequency}
@@ -145,7 +155,7 @@ export default function RecurringPage({
                     <td>{t.category}</td>
                     <td>{t.frequency}</td>
                     <td>{t.last_applied || 'Never'}</td>
-                    <td className="right">{money(t.amount)}</td>
+                    <td className="right">{money(t.amount, t.currency)}</td>
                     <td className="right nowrap">
                       <button className="icon-btn" onClick={() => onApply(t.id)} title="Apply now">
                         ➕
@@ -229,6 +239,12 @@ export default function RecurringPage({
                                 required
                                 value={editForm.amount}
                                 onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                              />
+                              <CurrencySelect
+                                value={editForm.currency}
+                                onChange={(c) => setEditForm({ ...editForm, currency: c })}
+                                currencies={currencies}
+                                allowDefault={false}
                               />
                               <select
                                 value={editForm.frequency}

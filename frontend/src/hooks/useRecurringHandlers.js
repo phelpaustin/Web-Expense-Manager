@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createRecurring, updateRecurring, deleteRecurring, backfillRecurring, applyRecurring, applyDueRecurring } from '../api/client.js'
 
-const EMPTY_RECURRING = { item: '', category: '', amount: '', frequency: 'Monthly', auto_post: false }
+const EMPTY_RECURRING = { item: '', category: '', amount: '', currency: '', frequency: 'Monthly', auto_post: false }
 
 export function useRecurringHandlers(loadAll, setError) {
   const [recurringForm, setRecurringForm] = useState(EMPTY_RECURRING)
@@ -15,6 +15,7 @@ export function useRecurringHandlers(loadAll, setError) {
         item: recurringForm.item,
         category: recurringForm.category,
         amount: parseFloat(recurringForm.amount),
+        currency: recurringForm.currency || undefined,
         frequency: recurringForm.frequency,
         auto_post: recurringForm.auto_post,
       })

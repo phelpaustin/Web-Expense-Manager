@@ -10,7 +10,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_group_ids, is_group_member, require_role_at_least
-from app.api.options import ensure_options, get_or_create_options
+from app.api.options import convert_rows_to_base, default_currency_for, ensure_options, get_or_create_options
 from app.core import fx
 from app.core.currency import normalize_currency
 from app.core.fx import normalize_convertible_currency
@@ -68,13 +68,14 @@ class ExpenseCreate(BaseModel):
     unit: str = "Count"
     shop: str = ""
     brand: str = ""
-    currency: str = "SEK"
+    # None = use the default: the space's currency, else the user's base currency.
+    currency: str | None = None
     group_id: int | None = None
 
     @field_validator("currency")
     @classmethod
-    def _valid_currency(cls, value: str) -> str:
-        return normalize_convertible_currency(value)
+    def _valid_currency(cls, value: str | None) -> str | None:
+        return normalize_convertible_currency(value) if value is not None else None
 
 
 class ExpenseUpdate(BaseModel):
@@ -203,12 +204,7 @@ def fetch_expenses_in_base_currency_ex(
     (and counted) rather than failing the whole request, so one bad row can't
     take every dashboard endpoint down for the user or a shared space.
     """
-    expenses = fetch_expenses(db, user_id, scope, space_ids)
-    base_currency = get_or_create_options(db, user_id).base_currency or "SEK"
-    try:
-        return currency_logic.convert_expenses_partial(expenses, base_currency, fx.get_rate)
-    except currency_logic.CurrencyConversionUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return convert_rows_to_base(db, user_id, fetch_expenses(db, user_id, scope, space_ids))
 
 
 def fetch_expenses_in_base_currency(
@@ -335,7 +331,9 @@ def create_expense(
     user: models.User = Depends(get_current_user),
 ):
     _require_group_write_access(db, payload.group_id, user.id)
-    expense = models.Expense(user_id=user.id, **payload.model_dump())
+    data = payload.model_dump()
+    data["currency"] = data["currency"] or default_currency_for(db, user.id, payload.group_id)
+    expense = models.Expense(user_id=user.id, **data)
     expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
     db.add(expense)
     db.commit()
@@ -357,7 +355,9 @@ def create_expenses_bulk(
 
     created: list[models.Expense] = []
     for item in payload.items:
-        expense = models.Expense(user_id=user.id, **item.model_dump())
+        data = item.model_dump()
+        data["currency"] = data["currency"] or default_currency_for(db, user.id, item.group_id)
+        expense = models.Expense(user_id=user.id, **data)
         expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
         db.add(expense)
         created.append(expense)
@@ -473,6 +473,7 @@ async def import_expenses(
     If currency_override is given, it is applied to every row (ignoring any
     Currency column in the file).
     """
+    default_currency = get_or_create_options(db, user.id).base_currency or "SEK"
     override = currency_override.strip()
     if override:
         try:
@@ -595,7 +596,7 @@ async def import_expenses(
             unit = str(_cell(row, unit_c) or "Count").strip() or "Count"
             shop = str(_cell(row, shop_c) or "").strip()
             brand = str(_cell(row, brand_c) or "").strip()
-            currency = str(_cell(row, cur_c) or "SEK").strip() or "SEK"
+            currency = str(_cell(row, cur_c) or default_currency).strip() or default_currency
             if override:
                 currency = override
             try:

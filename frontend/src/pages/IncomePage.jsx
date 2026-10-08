@@ -1,3 +1,4 @@
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import { money } from '../format.js'
 
 export default function IncomePage({
@@ -8,6 +9,8 @@ export default function IncomePage({
   savingIncome,
   onAddIncome,
   onDeleteIncome,
+  currencies = [],
+  baseCurrency,
 }) {
   return (
     <>
@@ -61,6 +64,12 @@ export default function IncomePage({
             value={incomeForm.amount}
             onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })}
           />
+          <CurrencySelect
+            value={incomeForm.currency}
+            onChange={(c) => setIncomeForm({ ...incomeForm, currency: c })}
+            currencies={currencies}
+            defaultCurrency={baseCurrency}
+          />
           <button type="submit" disabled={savingIncome}>
             {savingIncome ? 'Saving…' : 'Add'}
           </button>
@@ -83,7 +92,7 @@ export default function IncomePage({
                   <td>{i.date}</td>
                   <td>{i.source}</td>
                   <td>{i.note}</td>
-                  <td className="right">{money(i.amount)}</td>
+                  <td className="right">{money(i.amount, i.currency)}</td>
                   <td className="right">
                     <button className="delete-btn" onClick={() => onDeleteIncome(i.id)} title="Delete">
                       ✕

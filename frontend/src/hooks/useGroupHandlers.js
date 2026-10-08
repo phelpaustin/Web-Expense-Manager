@@ -1,9 +1,9 @@
 import { createGroup, deleteGroup, leaveGroup } from '../api/client.js'
 
 export function useGroupHandlers(loadAll, setError) {
-  async function handleCreateGroup(name, spaceType) {
+  async function handleCreateGroup(name, spaceType, currency) {
     try {
-      await createGroup(name, spaceType)
+      await createGroup(name, spaceType, currency)
       await loadAll()
     } catch (err) {
       setError(err.message)

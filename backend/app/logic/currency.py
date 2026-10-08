@@ -9,7 +9,7 @@ currency, which is wrong whenever a user has expenses in more than one).
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Callable
+from typing import Callable  # get_rate(from, to, on_date) -> Decimal | None
 
 from app.core.currency import normalize_currency
 
@@ -31,7 +31,7 @@ def convert_expenses(
             currency = normalize_currency(e.get("currency") or base_currency)
         except ValueError as exc:
             raise CurrencyConversionUnavailable(str(exc)) from exc
-        rate = get_rate(currency, base_currency)
+        rate = get_rate(currency, base_currency, e.get("date"))
         if rate is None:
             raise CurrencyConversionUnavailable(
                 f"FX conversion unavailable for {currency} -> {base_currency}"
@@ -72,7 +72,7 @@ def convert_expenses_partial(
         except ValueError:
             skipped += 1
             continue
-        if get_rate(currency, base_currency) is None:
+        if get_rate(currency, base_currency, e.get("date")) is None:
             skipped += 1
             continue
         convertible.append(e)

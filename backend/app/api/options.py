@@ -3,14 +3,16 @@
 Ported from the old dropdown_options.json + ui_components.py behavior. Each
 user gets their own editable taxonomy, seeded with sensible defaults.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core import fx
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.db import models
+from app.logic import currency as currency_logic
 
 router = APIRouter()
 
@@ -68,6 +70,30 @@ def get_or_create_options(db: Session, user_id: int) -> models.UserOptions:
     return opts
 
 
+def default_currency_for(db: Session, user_id: int, group_id: int | None = None) -> str:
+    """Currency a new record should default to: the space's currency when it is
+    filed under one, otherwise the user's personal (base) currency."""
+    if group_id is not None:
+        group = db.get(models.Group, group_id)
+        if group is not None and group.currency:
+            return group.currency
+    return get_or_create_options(db, user_id).base_currency or "SEK"
+
+
+def convert_rows_to_base(db: Session, user_id: int, rows: list[dict]) -> tuple[list[dict], int]:
+    """Convert dict rows (date/amount/currency) into the user's base currency.
+
+    Uses each row's own date for the exchange rate. Rows whose currency can't be
+    converted are left out and counted instead of failing the whole request.
+    """
+    base = get_or_create_options(db, user_id).base_currency or "SEK"
+    fx.ensure_rates_for(rows, base)
+    try:
+        return currency_logic.convert_expenses_partial(rows, base, fx.get_rate)
+    except currency_logic.CurrencyConversionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 def _serialize(opts: models.UserOptions) -> dict:
     return {
         "categories": opts.categories or [],
@@ -75,6 +101,8 @@ def _serialize(opts: models.UserOptions) -> dict:
         "units": opts.units or [],
         "shops": opts.shops or [],
         "base_currency": opts.base_currency or "SEK",
+        # Currencies a record can be entered in (those with an exchange rate).
+        "currencies": sorted(fx.supported_currencies()),
     }
 
 

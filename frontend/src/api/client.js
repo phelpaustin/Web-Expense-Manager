@@ -580,11 +580,21 @@ export function fetchGroups() {
   return request('/api/groups')
 }
 
-export function createGroup(name, spaceType) {
+export function createGroup(name, spaceType, currency) {
   return request('/api/groups', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, space_type: spaceType || 'custom' }),
+    // currency omitted -> the server uses the creator's base currency
+    body: JSON.stringify({ name, space_type: spaceType || 'custom', currency: currency || undefined }),
+  })
+}
+
+// Changes the space's default currency for NEW expenses; existing ones keep their own.
+export function setGroupCurrency(id, name, currency) {
+  return request(`/api/groups/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, currency }),
   })
 }
 

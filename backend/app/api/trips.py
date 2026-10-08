@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, is_group_member, require_role_at_least
 from app.api.groups import cascade_delete_group
+from app.api.options import default_currency_for
 from app.core import fx
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
@@ -25,14 +26,15 @@ class TripCreate(BaseModel):
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
     budget: Decimal | None = Field(default=None, gt=0)
-    currency: str = "SEK"
+    # Reporting currency of the trip; None = the creator's base currency.
+    currency: str | None = None
     status: str = "Planned"
     parent_group_id: int | None = None
 
     @field_validator("currency")
     @classmethod
-    def _valid_currency(cls, value: str) -> str:
-        return normalize_convertible_currency(value)
+    def _valid_currency(cls, value: str | None) -> str | None:
+        return normalize_convertible_currency(value) if value is not None else None
 
 
 class TripUpdate(BaseModel):
@@ -89,6 +91,7 @@ def _validate_parent(db: Session, user_id: int, parent_group_id: int | None) -> 
 
 
 def _convert_trip_expenses(expenses: list[dict], currency: str) -> list[dict]:
+    fx.ensure_rates_for(expenses, currency or "SEK")
     try:
         return currency_logic.convert_expenses(expenses, currency or "SEK", fx.get_rate)
     except currency_logic.CurrencyConversionUnavailable as exc:
@@ -146,7 +149,7 @@ def create_trip(
         start_date=payload.start_date,
         end_date=payload.end_date,
         budget=payload.budget,
-        currency=payload.currency or "SEK",
+        currency=payload.currency or default_currency_for(db, user.id),
         status=status,
     )
     db.add(trip)
@@ -201,7 +204,7 @@ def trip_summary(
     _member_or_403(db, trip_id, user.id)
     expenses = db.query(models.Expense).filter(models.Expense.group_id == trip.id).all()
     expense_dicts = _convert_trip_expenses(
-        [{"category": e.category, "amount": e.amount, "currency": e.currency} for e in expenses],
+        [{"date": e.date, "category": e.category, "amount": e.amount, "currency": e.currency} for e in expenses],
         trip.currency or "SEK",
     )
     trip_dict = {"id": trip.id, "budget": trip.budget, "currency": trip.currency or "SEK"}
@@ -253,12 +256,12 @@ def trip_settlement(
         members.append({"user_id": m.user_id, "name": u.name if u else "", "email": u.email if u else ""})
 
     expenses = (
-        db.query(models.Expense.user_id, models.Expense.amount, models.Expense.currency)
+        db.query(models.Expense.user_id, models.Expense.date, models.Expense.amount, models.Expense.currency)
         .filter(models.Expense.group_id == trip_id)
         .all()
     )
     expense_dicts = _convert_trip_expenses(
-        [{"user_id": e.user_id, "amount": e.amount, "currency": e.currency} for e in expenses],
+        [{"user_id": e.user_id, "date": e.date, "amount": e.amount, "currency": e.currency} for e in expenses],
         trip.currency or "SEK",
     )
 
