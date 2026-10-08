@@ -176,3 +176,82 @@ def test_trip_summary_and_settlement_convert_into_trip_currency(client, make_use
     assert s.status_code == 200
     assert Decimal(str(s.json()["total_spent"])) == Decimal("50")  # fake EUR->USD rate is 0.5
     assert client.get(f"/api/trips/{trip['id']}/settlement", headers=h).status_code == 200
+
+
+# ── concurrency (the dashboard fires many requests at once) ──────────────
+def test_concurrent_requests_fetch_once_and_never_raise(provider, monkeypatch):
+    import threading
+    import time
+
+    # A slow provider forces the callers to genuinely overlap (an instant fake
+    # lets the threads run back to back and hides the race).
+    inner = fx._fetch_series
+
+    def slow(currencies, start, end):
+        time.sleep(0.3)
+        return inner(currencies, start, end)
+
+    monkeypatch.setattr(fx, "_fetch_series", slow)
+
+    barrier = threading.Barrier(8)
+    errors = []
+
+    def worker():
+        try:
+            barrier.wait()
+            REAL_ENSURE({(D(2026, 9, 9), "USD"), (D(2026, 9, 10), "SEK")})
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert errors == []
+    assert len(provider) == 1  # one fetch served all eight callers
+    assert (D(2026, 9, 9), "USD") in _stored()
+
+
+def test_storing_the_same_rates_twice_is_a_noop(provider, caplog):
+    rows = {(D(2026, 9, 9), "USD"): Decimal("1.1"), (D(2026, 9, 10), "USD"): Decimal("1.2")}
+    with caplog.at_level("WARNING", logger="fx"):
+        fx._store(rows)
+        fx._store(rows)  # simulates another worker storing the same days
+        fx._store({**rows, (D(2026, 9, 11), "USD"): Decimal("1.3")})
+    assert not [r for r in caplog.records if "Could not store" in r.getMessage()]
+    assert len(_stored()) == 3
+
+
+# ── today's rate is never final, even once the provider has published it ──
+def test_published_rate_for_today_is_not_persisted(provider, monkeypatch):
+    def publishes_through_today(currencies, start, end):
+        return {c: {d: _rate(c, d) for d in _business_days(start, min(end, TODAY))} for c in currencies}
+
+    monkeypatch.setattr(fx, "_fetch_series", publishes_through_today)
+    yesterday = TODAY - dt.timedelta(days=1)
+    REAL_ENSURE({(TODAY, "USD"), (yesterday, "USD")})
+    assert REAL_GET_RATE("EUR", "USD", TODAY) == _rate("USD", TODAY)  # usable right away
+    stored = _stored()
+    assert (yesterday, "USD") in stored  # earlier days are final
+    assert (TODAY, "USD") not in stored  # today may still change
+
+
+def test_stored_rows_for_today_are_ignored(provider):
+    # An earlier release could have saved today's (provisional) rate permanently.
+    db = SessionLocal()
+    db.add(models.FxRate(rate_date=TODAY, currency="USD", rate=Decimal("9.99")))
+    db.commit()
+    db.close()
+    REAL_ENSURE({(TODAY, "USD")})
+    assert REAL_GET_RATE("EUR", "USD", TODAY) == _rate("USD", D(2026, 10, 7))  # provider's value, not 9.99
+
+
+def test_refreshing_a_window_does_not_restore_known_rates(provider, monkeypatch):
+    stores = []
+    real_store = fx._store
+    monkeypatch.setattr(fx, "_store", lambda rows: stores.append(len(rows)) or real_store(rows))
+    REAL_ENSURE({(D(2026, 9, 9), "USD")})
+    first = stores[-1]
+    assert first > 0
+    fx._PROVISIONAL.clear()
+    REAL_ENSURE({(TODAY, "USD")})  # same window gets re-fetched for today's provisional rate
+    assert all(n == 0 or n < first for n in stores[1:])  # nothing already cached is stored twice

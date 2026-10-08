@@ -3,6 +3,7 @@ import datetime as dt
 from collections import defaultdict
 from decimal import Decimal
 import logging
+import threading
 import time
 
 import requests
@@ -94,6 +95,12 @@ _SEED_DAYS = 7                 # look this far back so weekends/holidays have a 
 _PROVISIONAL_TTL_SECONDS = 60 * 60
 _NO_DATA_TTL_SECONDS = 60 * 60
 _SERIES_BACKOFF_KEY = "__series__"
+# The dashboard fires many requests at once. Without this, each one would fetch
+# and store the same missing rates; with it, the first fetches and the rest wait,
+# then find the rates already cached. Bounded wait so a slow provider can't pile
+# up threads: on timeout the caller just uses the latest-rate fallback.
+_ENSURE_LOCK = threading.Lock()
+_ENSURE_LOCK_TIMEOUT_SECONDS = 20
 
 
 def _utc_today() -> dt.date:
@@ -167,8 +174,10 @@ def _load_stored(needed: set[tuple[dt.date, str]]) -> None:
             )
             .all()
         )
+        today = _utc_today()
         for r in rows:
-            _FINAL[(r.rate_date, r.currency)] = Decimal(str(r.rate))
+            if r.rate_date < today:  # stored rows for today/future may be provisional values
+                _FINAL[(r.rate_date, r.currency)] = Decimal(str(r.rate))
     except Exception:
         log.warning("Could not read stored FX rates", exc_info=True)
     finally:
@@ -176,32 +185,41 @@ def _load_stored(needed: set[tuple[dt.date, str]]) -> None:
 
 
 def _store(rows: dict[tuple[dt.date, str], Decimal]) -> None:
-    """Persist final rates. Best effort: the in-memory cache already has them."""
+    """Persist final rates. Best effort: the in-memory cache already has them.
+
+    Uses INSERT ... ON CONFLICT DO NOTHING so concurrent requests or workers
+    storing the same day never raise a unique-constraint error.
+    """
     if not rows:
         return
+    from sqlalchemy.dialects import postgresql, sqlite
+
     from app.db.database import SessionLocal
     from app.db import models
 
-    currencies = {c for _, c in rows}
-    lo, hi = min(d for d, _ in rows), max(d for d, _ in rows)
+    values = [{"rate_date": d, "currency": c, "rate": rate} for (d, c), rate in rows.items()]
     db = SessionLocal()
     try:
-        existing = {
-            (r.rate_date, r.currency)
-            for r in db.query(models.FxRate.rate_date, models.FxRate.currency).filter(
-                models.FxRate.currency.in_(currencies),
-                models.FxRate.rate_date >= lo,
-                models.FxRate.rate_date <= hi,
+        dialect = db.get_bind().dialect.name
+        if dialect in ("postgresql", "sqlite"):
+            insert = postgresql.insert if dialect == "postgresql" else sqlite.insert
+            stmt = insert(models.FxRate.__table__).values(values).on_conflict_do_nothing(
+                index_elements=["rate_date", "currency"]
             )
-        }
-        db.add_all(
-            models.FxRate(rate_date=d, currency=c, rate=rate)
-            for (d, c), rate in rows.items()
-            if (d, c) not in existing
-        )
+            db.execute(stmt)
+        else:  # other databases: best-effort check-then-insert
+            existing = {
+                (r.rate_date, r.currency)
+                for r in db.query(models.FxRate.rate_date, models.FxRate.currency).filter(
+                    models.FxRate.currency.in_({c for _, c in rows}),
+                    models.FxRate.rate_date >= min(d for d, _ in rows),
+                    models.FxRate.rate_date <= max(d for d, _ in rows),
+                )
+            }
+            db.add_all(models.FxRate(**v) for v in values if (v["rate_date"], v["currency"]) not in existing)
         db.commit()
     except Exception:
-        db.rollback()  # e.g. another worker stored the same rows first
+        db.rollback()
         log.warning("Could not store FX rates", exc_info=True)
     finally:
         db.close()
@@ -216,6 +234,7 @@ def _fill_window(
     """
     final_rows: dict[tuple[dt.date, str], Decimal] = {}
     now = time.time()
+    today = _utc_today()
     for cur in currencies:
         points = series.get(cur)
         if not points:
@@ -231,8 +250,12 @@ def _fill_window(
                 current = points[published[idx]]
                 idx += 1
             if current is not None:
-                if day <= last_published:
-                    final_rows[(day, cur)] = current
+                # Today's rate may still be revised as providers publish, even once it
+                # appears, so only days *before* today are final. Everything else is
+                # provisional: kept in memory briefly and never stored.
+                if day <= last_published and day < today:
+                    if (day, cur) not in _FINAL:  # don't re-store what is already cached
+                        final_rows[(day, cur)] = current
                     _FINAL[(day, cur)] = current
                 else:
                     _PROVISIONAL[(day, cur)] = (now, current)
@@ -263,35 +286,45 @@ def ensure_rates(pairs) -> None:
     if not needed:
         return
 
-    _load_stored(needed)
-    needed = {p for p in needed if _eur_rate(*p) is None}
-    # Skip currencies the provider recently had no data for.
-    needed = {(d, c) for d, c in needed if now - _NO_DATA.get(c, 0.0) >= _NO_DATA_TTL_SECONDS}
-    if not needed:
+    if not _ENSURE_LOCK.acquire(timeout=_ENSURE_LOCK_TIMEOUT_SECONDS):
+        log.warning("Timed out waiting to load FX rates; using latest-rate fallback")
         return
-    failed_at = _last_failure.get(_SERIES_BACKOFF_KEY)
-    if failed_at is not None and now - failed_at < _FAILURE_BACKOFF_SECONDS:
-        return
-
-    # Newest-first windows of _SERIES_CHUNK_DAYS; only windows that contain a needed date.
-    newest = max(d for d, _ in needed)
-    windows: dict[int, set[tuple[dt.date, str]]] = defaultdict(set)
-    for d, c in needed:
-        windows[(newest - d).days // _SERIES_CHUNK_DAYS].add((d, c))
-
-    for n in sorted(windows)[:_MAX_CHUNKS_PER_CALL]:
-        w_end = newest - dt.timedelta(days=n * _SERIES_CHUNK_DAYS)
-        w_start = w_end - dt.timedelta(days=_SERIES_CHUNK_DAYS - 1)
-        currencies = {c for _, c in windows[n]}
-        # Fetch a little past the window so a weekend at its edge sees the next
-        # published business day and is recognised as final rather than provisional.
-        fetch_end = min(w_end + dt.timedelta(days=_SEED_DAYS), today)
-        series = _fetch_series(currencies, w_start - dt.timedelta(days=_SEED_DAYS), fetch_end)
-        if series is None:
-            _last_failure[_SERIES_BACKOFF_KEY] = time.time()
+    try:
+        # Another request may have filled these while we waited for the lock.
+        needed = {p for p in needed if _eur_rate(*p) is None}
+        if not needed:
             return
-        _last_failure.pop(_SERIES_BACKOFF_KEY, None)
-        _store(_fill_window(series, currencies, w_start, w_end))
+        _load_stored(needed)
+        needed = {p for p in needed if _eur_rate(*p) is None}
+        # Skip currencies the provider recently had no data for.
+        needed = {(d, c) for d, c in needed if now - _NO_DATA.get(c, 0.0) >= _NO_DATA_TTL_SECONDS}
+        if not needed:
+            return
+        failed_at = _last_failure.get(_SERIES_BACKOFF_KEY)
+        if failed_at is not None and time.time() - failed_at < _FAILURE_BACKOFF_SECONDS:
+            return
+
+        # Newest-first windows of _SERIES_CHUNK_DAYS; only windows that contain a needed date.
+        newest = max(d for d, _ in needed)
+        windows: dict[int, set[tuple[dt.date, str]]] = defaultdict(set)
+        for d, c in needed:
+            windows[(newest - d).days // _SERIES_CHUNK_DAYS].add((d, c))
+
+        for n in sorted(windows)[:_MAX_CHUNKS_PER_CALL]:
+            w_end = newest - dt.timedelta(days=n * _SERIES_CHUNK_DAYS)
+            w_start = w_end - dt.timedelta(days=_SERIES_CHUNK_DAYS - 1)
+            currencies = {c for _, c in windows[n]}
+            # Fetch a little past the window so a weekend at its edge sees the next
+            # published business day and is recognised as final rather than provisional.
+            fetch_end = min(w_end + dt.timedelta(days=_SEED_DAYS), today)
+            series = _fetch_series(currencies, w_start - dt.timedelta(days=_SEED_DAYS), fetch_end)
+            if series is None:
+                _last_failure[_SERIES_BACKOFF_KEY] = time.time()
+                return
+            _last_failure.pop(_SERIES_BACKOFF_KEY, None)
+            _store(_fill_window(series, currencies, w_start, w_end))
+    finally:
+        _ENSURE_LOCK.release()
 
 
 def ensure_rates_for(rows, base_currency: str) -> None:
