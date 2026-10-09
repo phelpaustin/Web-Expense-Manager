@@ -16,6 +16,7 @@ import io
 import pandas as pd
 
 from app.core.money import quantize_money
+from app.core.parsing import parse_amount, read_csv_bytes
 from app.core.import_limits import MAX_IMPORT_ROWS
 
 SOURCE_EXPENSE = "Expense"
@@ -105,14 +106,26 @@ def build_ledger(
 # ═══════════════════════════════════════════════════════════════
 # BULK IMPORT (bank statement spreadsheet → pending bills)
 # ═══════════════════════════════════════════════════════════════
-_DATE_HEADERS = {"date", "transaction date", "posted date", "posting date", "value date"}
-_SHOP_HEADERS = {"shop", "merchant", "description", "payee", "narrative", "details", "name"}
-_AMOUNT_HEADERS = {"amount", "debit", "withdrawal", "value", "transaction amount"}
+# Header names, in order of preference. These are tuples (not sets) on purpose:
+# when a statement has several candidate columns the choice must be the same on
+# every run, never dependent on hash/iteration order.
+_DATE_HEADERS = (
+    "date", "transaction date", "posting date", "posted date", "booking date", "value date",
+    "datum", "transaktionsdatum", "bokföringsdatum",
+)
+_SHOP_HEADERS = (
+    "shop", "merchant", "description", "payee", "narrative", "details", "name",
+    "text", "beskrivning", "mottagare",
+)
+# A signed "amount" column mixes money out (negative) and money in (positive);
+# a "debit"-style column only ever holds money out.
+_SIGNED_AMOUNT_HEADERS = ("amount", "transaction amount", "belopp", "value")
+_OUTFLOW_AMOUNT_HEADERS = ("debit", "withdrawal", "withdrawals", "paid out", "money out")
 
 
-def _find_column(columns, candidates: set[str]) -> str | None:
+def _find_column(columns, candidates) -> str | None:
     lower = {str(c).strip().lower(): c for c in columns}
-    for cand in candidates:
+    for cand in candidates:  # candidates is ordered: first match wins, deterministically
         if cand in lower:
             return lower[cand]
     return None
@@ -123,13 +136,19 @@ def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]
 
     Returns (rows, skipped): rows are {"date": date, "shop": str, "amount": Decimal}
     (positive, rounded to 2 decimals); skipped is [{"row": <1-based, header excluded>,
-    "reason": str}] for rows that couldn't be parsed.
+    "reason": str}] for rows that couldn't be used.
+
+    Only money going *out* becomes a bill. With a debit/withdrawal column every
+    value is an outflow. With a signed amount column that contains negatives,
+    negatives are outflows and positives (salary, refunds, deposits) are skipped
+    as credits. A signed column with no negatives at all is treated as an
+    expenses-only export, so all its rows are bills.
     """
-    buf = io.BytesIO(data)
-    if (filename or "").lower().endswith(".csv"):
-        df = pd.read_csv(buf, nrows=MAX_IMPORT_ROWS + 1)
-    elif (filename or "").lower().endswith(".xlsx"):
-        df = pd.read_excel(buf, nrows=MAX_IMPORT_ROWS + 1)
+    name = (filename or "").lower()
+    if name.endswith(".csv"):
+        df = read_csv_bytes(data, nrows=MAX_IMPORT_ROWS + 1)
+    elif name.endswith(".xlsx"):
+        df = pd.read_excel(io.BytesIO(data), nrows=MAX_IMPORT_ROWS + 1)
     else:
         raise ValueError("Only .xlsx or .csv files are allowed")
 
@@ -138,32 +157,40 @@ def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]
 
     date_col = _find_column(df.columns, _DATE_HEADERS)
     shop_col = _find_column(df.columns, _SHOP_HEADERS)
-    amount_col = _find_column(df.columns, _AMOUNT_HEADERS)
+    signed_col = _find_column(df.columns, _SIGNED_AMOUNT_HEADERS)
+    outflow_col = _find_column(df.columns, _OUTFLOW_AMOUNT_HEADERS)
+    amount_col = signed_col or outflow_col
     if not date_col or not shop_col or not amount_col:
         raise ValueError(
             "Could not find date/shop/amount columns. Expected headers such as "
             "'Date', 'Shop' (or 'Description'/'Merchant'), and 'Amount'."
         )
+    outflow_only = signed_col is None  # a debit-style column: every value is money out
 
-    rows: list[dict] = []
+    parsed: list[tuple[int, dict]] = []
     skipped: list[dict] = []
     for i, raw in enumerate(df.to_dict("records"), start=2):  # row 1 is the header
         try:
             date_val = pd.to_datetime(raw[date_col]).date()
             shop_val = str(raw[shop_col]).strip()
-            # Blank cells arrive as NaN, which stays truthy after quantize(),
-            # so reject them before converting.
-            if pd.isna(raw[amount_col]):
-                raise ValueError("missing or zero amount")
-            amount_val = abs(quantize_money(raw[amount_col]))
             if not shop_val or shop_val.lower() == "nan":
                 raise ValueError("missing shop name")
-            if not amount_val.is_finite() or not amount_val:
+            amount_val = quantize_money(parse_amount(raw[amount_col]))
+            if not amount_val:
                 raise ValueError("missing or zero amount")
-        except Exception as exc:  # noqa: BLE001 – any parse issue just skips the row
+        except (ValueError, TypeError, ArithmeticError) as exc:
             skipped.append({"row": i, "reason": str(exc)})
             continue
-        rows.append({"date": date_val, "shop": shop_val, "amount": amount_val})
+        parsed.append((i, {"date": date_val, "shop": shop_val, "amount": amount_val}))
+
+    has_negatives = any(r["amount"] < 0 for _, r in parsed)
+    rows: list[dict] = []
+    for i, r in parsed:
+        if not outflow_only and has_negatives and r["amount"] > 0:
+            skipped.append({"row": i, "reason": "Credit / deposit (money in), not an expense"})
+            continue
+        rows.append({**r, "amount": abs(r["amount"])})
+    skipped.sort(key=lambda s: s["row"])
     return rows, skipped
 
 

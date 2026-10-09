@@ -22,7 +22,9 @@ from app.core.currency import normalize_currency
 from app.core.fx import normalize_convertible_currency
 from app.core.file_upload import read_upload_limited
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS
-from app.core.money import as_decimal, quantize_money
+from app.core.parsing import parse_amount, read_csv_bytes
+from app.core.validation import PartialUpdate
+from app.core.money import as_decimal, quantize_money, MAX_MONEY
 from app.db.database import get_db
 from app.db import models
 from app.logic import categorizer
@@ -69,7 +71,7 @@ class ExpenseCreate(BaseModel):
     category: str = Field(min_length=1)
     subcategory: str = ""
     description: str = ""
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(gt=0, le=MAX_MONEY)
     quantity: float = Field(default=1.0, gt=0)
     unit: str = "Count"
     shop: str = ""
@@ -84,12 +86,16 @@ class ExpenseCreate(BaseModel):
         return normalize_convertible_currency(value) if value is not None else None
 
 
-class ExpenseUpdate(BaseModel):
+class ExpenseUpdate(PartialUpdate):
+    # group_id may be null (move the expense back to personal); everything else is NOT NULL.
+    not_nullable = frozenset(
+        {"date", "category", "subcategory", "description", "amount", "quantity", "unit", "shop", "brand", "currency"}
+    )
     date: datetime.date | None = None
     category: str | None = Field(default=None, min_length=1)
     subcategory: str | None = None
     description: str | None = None
-    amount: Decimal | None = Field(default=None, gt=0)
+    amount: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
     quantity: float | None = Field(default=None, gt=0)
     unit: str | None = None
     shop: str | None = None
@@ -495,7 +501,7 @@ async def import_expenses(
         if name.endswith(".xlsx"):
             df = pd.read_excel(io.BytesIO(raw), nrows=MAX_IMPORT_ROWS + 1)
         else:
-            df = pd.read_csv(io.BytesIO(raw), nrows=MAX_IMPORT_ROWS + 1)
+            df = read_csv_bytes(raw, nrows=MAX_IMPORT_ROWS + 1)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not parse file: {exc}")
     if len(df.index) > MAX_IMPORT_ROWS:
@@ -582,8 +588,8 @@ async def import_expenses(
             when = parsed.date()
             category = str(category).strip()
             try:
-                amount = quantize_money(amount_raw)
-            except (TypeError, ValueError):
+                amount = quantize_money(parse_amount(amount_raw))
+            except (TypeError, ValueError, ArithmeticError):
                 record_skip(row, "Amount is not a number", line)
                 continue
             if amount <= 0:
@@ -594,8 +600,8 @@ async def import_expenses(
             subcategory = str(_cell(row, sub_c) or "").strip()
             qty_val = _cell(row, qty_c)
             try:
-                quantity = float(qty_val) if qty_val is not None else 1.0
-            except (TypeError, ValueError):
+                quantity = float(parse_amount(qty_val)) if qty_val is not None else 1.0
+            except (TypeError, ValueError, ArithmeticError):
                 quantity = 1.0
             if quantity <= 0:
                 quantity = 1.0

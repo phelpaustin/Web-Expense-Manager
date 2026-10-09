@@ -151,3 +151,23 @@ To schedule the alert digest using the included GitHub Actions workflow, add rep
 ## API overview
 
 All application data routes require a bearer token. Authentication routes cover registration, email verification, login, Google sign-in, password reset/change, logout, and account deletion. Feature routes cover expenses, budgets, analytics, income, recurring templates, bills and receipts, settings, alerts, trips, and Expense Spaces. See `/docs` on a running backend for the complete request and response schemas.
+
+## Testing
+
+Backend (pytest, uses a throwaway SQLite database and a fake exchange-rate provider, so it needs no network):
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Frontend (vitest + Testing Library):
+
+```bash
+cd frontend
+npm ci
+npm test
+```
+
+GitHub Actions runs both on every push to `main` and on pull requests.

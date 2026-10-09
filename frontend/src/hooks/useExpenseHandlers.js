@@ -16,6 +16,12 @@ const EMPTY_FORM = {
   group_id: '',
 }
 
+// A positive finite number, or null. Guards against sending NaN (which JSON turns into null).
+export function positiveAmount(value) {
+  const n = parseFloat(value)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 export function useExpenseHandlers(loadAll, setError) {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -25,6 +31,11 @@ export function useExpenseHandlers(loadAll, setError) {
 
   async function handleAdd(e) {
     e.preventDefault()
+    const amount = positiveAmount(form.amount)
+    if (amount === null) {
+      setError('Enter an amount greater than zero')
+      return
+    }
     setSaving(true)
     try {
       await createExpense({
@@ -32,7 +43,7 @@ export function useExpenseHandlers(loadAll, setError) {
         category: form.category,
         subcategory: form.subcategory,
         description: form.description,
-        amount: parseFloat(form.amount),
+        amount,
         quantity: parseFloat(form.quantity) || 1,
         unit: form.unit || 'Count',
         shop: form.shop,
@@ -101,13 +112,18 @@ export function useExpenseHandlers(loadAll, setError) {
   }
 
   async function saveEdit(id) {
+    const amount = positiveAmount(editForm.amount)
+    if (amount === null) {
+      setError('Enter an amount greater than zero')
+      return
+    }
     try {
       await updateExpense(id, {
         date: editForm.date,
         category: editForm.category,
         subcategory: editForm.subcategory,
         description: editForm.description,
-        amount: parseFloat(editForm.amount),
+        amount,
         quantity: parseFloat(editForm.quantity) || 1,
         unit: editForm.unit || 'Count',
         shop: editForm.shop,

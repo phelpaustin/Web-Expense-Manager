@@ -11,6 +11,8 @@ from app.api.options import default_currency_for
 from app.core import fx
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
+from app.core.money import MAX_MONEY
+from app.core.validation import PartialUpdate
 from app.db import models
 from app.logic import currency as currency_logic
 from app.logic import trips as trips_logic
@@ -25,7 +27,7 @@ class TripCreate(BaseModel):
     destination: str = ""
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
-    budget: Decimal | None = Field(default=None, gt=0)
+    budget: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
     # Reporting currency of the trip; None = the creator's base currency.
     currency: str | None = None
     status: str = "Planned"
@@ -37,12 +39,14 @@ class TripCreate(BaseModel):
         return normalize_convertible_currency(value) if value is not None else None
 
 
-class TripUpdate(BaseModel):
+class TripUpdate(PartialUpdate):
+    # destination, dates, budget and parent_group_id may be null (clear them).
+    not_nullable = frozenset({"name", "currency", "status"})
     name: str | None = Field(default=None, min_length=1)
     destination: str | None = None
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
-    budget: Decimal | None = Field(default=None, gt=0)
+    budget: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
     currency: str | None = None
     status: str | None = None
     parent_group_id: int | None = None

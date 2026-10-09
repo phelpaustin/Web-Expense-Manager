@@ -16,3 +16,7 @@ def as_decimal(value) -> Decimal:
 
 def quantize_money(value) -> Decimal:
     return as_decimal(value).quantize(CENT)
+
+# Largest amount a Numeric(12, 2) column can hold. Request models cap money
+# fields at this so an oversized value is a 422, not a database overflow (500).
+MAX_MONEY = Decimal("9999999999.99")

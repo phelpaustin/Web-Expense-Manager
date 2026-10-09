@@ -9,6 +9,8 @@ from app.api.deps import get_current_user
 from app.api.options import convert_rows, default_currency_for
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
+from app.core.validation import PartialUpdate
+from app.core.money import MAX_MONEY
 from app.db import models
 from app.logic import income as income_logic
 
@@ -32,7 +34,7 @@ def _valid_currency(value: str | None) -> str | None:
 
 class IncomeCreate(BaseModel):
     date: datetime.date
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(gt=0, le=MAX_MONEY)
     source: str = Field(min_length=1)
     note: str = ""
     currency: str | None = None  # None = the user's base currency
@@ -40,9 +42,10 @@ class IncomeCreate(BaseModel):
     check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
 
 
-class IncomeUpdate(BaseModel):
+class IncomeUpdate(PartialUpdate):
+    not_nullable = frozenset({"date", "amount", "source", "note", "currency"})
     date: datetime.date | None = None
-    amount: Decimal | None = Field(default=None, gt=0)
+    amount: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
     source: str | None = Field(default=None, min_length=1)
     note: str | None = None
     currency: str | None = None
@@ -112,8 +115,6 @@ def update_income(
 ):
     row = _get_owned_or_404(db, income_id, user.id)
     changes = payload.model_dump(exclude_unset=True)
-    if changes.get("currency") is None:
-        changes.pop("currency", None)  # currency is required; an explicit null means "unchanged"
     for field, value in changes.items():
         setattr(row, field, value)
     db.commit()

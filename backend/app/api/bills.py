@@ -1,7 +1,7 @@
 import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
@@ -10,10 +10,11 @@ from app.api.deps import get_current_user
 from app.api.options import convert_rows, default_currency_for, get_reporting_currency
 from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
-from app.core.file_upload import read_upload_limited
+from app.core.file_upload import content_disposition, read_upload_limited, safe_filename
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
 from app.api.expenses import fetch_expenses, fetch_expenses_in_reporting_currency
 from app.db.database import get_db
+from app.core.money import MAX_MONEY
 from app.db import models
 from app.logic import bills as bills_logic
 from app.logic import receipt_ocr
@@ -30,7 +31,7 @@ def _valid_currency(value: str | None) -> str | None:
 class PendingCreate(BaseModel):
     date: datetime.date
     shop: str = Field(min_length=1)
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(gt=0, le=MAX_MONEY)
     note: str = ""
     currency: str | None = None  # None = the user's base currency
 
@@ -94,7 +95,7 @@ def create_pending(
 async def upload_pending(
     file: UploadFile = File(...),
     shop: str = Form(""),
-    amount: Decimal = Form(Decimal("0")),
+    amount: Decimal = Form(Decimal("0"), ge=0, le=MAX_MONEY),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
@@ -116,7 +117,7 @@ async def upload_pending(
     b = models.PendingBill(
         user_id=user.id,
         date=(parsed and parsed["date"]) or datetime.date.today(),
-        shop=(shop.strip() or (parsed and parsed["shop"]) or (file.filename or "Uploaded bill")),
+        shop=(shop.strip() or (parsed and parsed["shop"]) or safe_filename(file.filename, "Uploaded bill")),
         amount=amount or (parsed and parsed["amount"]) or Decimal("0"),
         currency=default_currency_for(db, user.id),
         note="",
@@ -128,7 +129,7 @@ async def upload_pending(
         models.Receipt(
             user_id=user.id,
             pending_bill_id=b.id,
-            filename=file.filename or "receipt",
+            filename=safe_filename(file.filename, "receipt"),
             content_type=content_type,
             data=data,
         )
@@ -228,13 +229,31 @@ def delete_pending(
 def itemise_pending(
     bill_id: int,
     category: str = "Bills",
-    amount: Decimal | None = None,
+    amount: Decimal | None = Query(default=None, gt=0, le=MAX_MONEY),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Convert a pending bill into a real expense and archive it as itemised."""
+    """Convert a pending bill into a real expense and archive it as itemised.
+
+    Happens at most once per bill: a repeat (double-click, retry, second tab)
+    gets a 409 instead of creating a duplicate expense.
+    """
     b = _pending_or_404(db, bill_id, user.id)
+    if b.status != "pending":
+        raise HTTPException(status_code=409, detail="This bill has already been itemised")
     final_amount = amount if amount is not None else b.amount
+    if final_amount is None or final_amount <= 0:
+        raise HTTPException(status_code=400, detail="Enter an amount greater than zero to itemise this bill")
+
+    # Claim the bill atomically: if two requests race, only one flips pending -> itemised.
+    claimed = (
+        db.query(models.PendingBill)
+        .filter(models.PendingBill.id == b.id, models.PendingBill.status == "pending")
+        .update({"status": "itemised"}, synchronize_session=False)
+    )
+    if claimed != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This bill has already been itemised")
     db.add(
         models.Expense(
             user_id=user.id,
@@ -247,7 +266,6 @@ def itemise_pending(
         )
     )
     db.query(models.Receipt).filter(models.Receipt.pending_bill_id == b.id).delete()
-    b.status = "itemised"
     db.commit()
     return {"itemised": bill_id, "expense_created": True}
 
@@ -271,7 +289,7 @@ async def upload_receipt(
 
     existing = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first()
     if existing:
-        existing.filename = file.filename or "receipt"
+        existing.filename = safe_filename(file.filename, "receipt")
         existing.content_type = content_type
         existing.data = data
     else:
@@ -279,7 +297,7 @@ async def upload_receipt(
             models.Receipt(
                 user_id=user.id,
                 pending_bill_id=bill.id,
-                filename=file.filename or "receipt",
+                filename=safe_filename(file.filename, "receipt"),
                 content_type=content_type,
                 data=data,
             )
@@ -301,7 +319,10 @@ def get_receipt(
     return Response(
         content=r.data,
         media_type=r.content_type,
-        headers={"Content-Disposition": f'inline; filename="{r.filename}"'},
+        headers={
+            "Content-Disposition": content_disposition(safe_filename(r.filename, "receipt")),
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -331,7 +352,7 @@ class ManualOut(BaseModel):
 class ManualCreate(BaseModel):
     date: datetime.date
     shop: str = Field(min_length=1)
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(gt=0, le=MAX_MONEY)
     note: str = ""
     currency: str | None = None  # None = the user's base currency
 

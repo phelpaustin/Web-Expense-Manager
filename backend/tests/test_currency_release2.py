@@ -95,8 +95,8 @@ def test_recurring_currency_can_be_set_and_changed(client, make_user):
     t = client.post("/api/recurring", json={"item": "Gym", "amount": "30", "currency": "usd"}, headers=h).json()
     assert t["currency"] == "USD"
     assert client.put(f"/api/recurring/{t['id']}", json={"currency": "SEK"}, headers=h).json()["currency"] == "SEK"
-    # an explicit null must not wipe the required field
-    assert client.put(f"/api/recurring/{t['id']}", json={"currency": None}, headers=h).json()["currency"] == "SEK"
+    # an explicit null is rejected (clear 422), and the stored currency is untouched
+    assert client.put(f"/api/recurring/{t['id']}", json={"currency": None}, headers=h).status_code == 422
     client.post(f"/api/recurring/{t['id']}/apply", headers=h)
     assert client.get("/api/expenses?search=Gym", headers=h).json()["items"][0]["currency"] == "SEK"
 

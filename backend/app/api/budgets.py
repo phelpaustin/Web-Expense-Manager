@@ -1,7 +1,7 @@
 import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 from app.api.options import get_or_create_options, get_reporting_currency
 from app.core.fx import normalize_convertible_currency
 from app.core import fx
-from app.core.money import quantize_money
+from app.core.money import quantize_money, MAX_MONEY
 from app.db.database import get_db
 from app.db import models
 from app.api.expenses import fetch_expenses_in_reporting_currency
@@ -21,7 +21,7 @@ router = APIRouter()
 
 class BudgetSet(BaseModel):
     category: str = Field(min_length=1)
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(gt=0, le=MAX_MONEY)
     # Currency of `amount`; None = the currency budgets are currently shown in.
     currency: str | None = None
 
@@ -127,7 +127,7 @@ def delete_budget(
 
 @router.get("/budgets/status")
 def budgets_status(
-    month: str | None = None,
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM"),
     scope: str | None = None,
     space_ids: str | None = None,
     db: Session = Depends(get_db),
