@@ -50,30 +50,38 @@ def convert_expenses(
     return converted
 
 
+def partition_convertible(
+    expenses: list[dict], target_currency: str, get_rate: Callable[..., Decimal | None]
+) -> tuple[list[dict], list[dict]]:
+    """Split expenses into (convertible, unconvertible) for ``target_currency``.
+
+    Unconvertible = no exchange rate for the expense's currency (unknown code,
+    unsupported by the provider, or not loadable right now).
+    """
+    try:
+        target = normalize_currency(target_currency or "SEK")
+    except ValueError as exc:
+        raise CurrencyConversionUnavailable(str(exc)) from exc
+    ok: list[dict] = []
+    bad: list[dict] = []
+    for e in expenses:
+        try:
+            currency = normalize_currency(e.get("currency") or target)
+        except ValueError:
+            bad.append(e)
+            continue
+        (ok if get_rate(currency, target, e.get("date")) is not None else bad).append(e)
+    return ok, bad
+
+
 def convert_expenses_partial(
-    expenses: list[dict], base_currency: str, get_rate: Callable[[str, str], Decimal | None]
+    expenses: list[dict], base_currency: str, get_rate: Callable[..., Decimal | None]
 ) -> tuple[list[dict], int]:
     """Convert what can be converted; skip rows whose currency has no rate.
 
     Returns (converted_rows, skipped_count). Unlike convert_expenses, a single
     unconvertible expense never prevents the rest from being aggregated.
-    An invalid *base* currency is still an error: nothing can be converted.
+    An invalid *target* currency is still an error: nothing can be converted.
     """
-    try:
-        base_currency = normalize_currency(base_currency or "SEK")
-    except ValueError as exc:
-        raise CurrencyConversionUnavailable(str(exc)) from exc
-
-    convertible: list[dict] = []
-    skipped = 0
-    for e in expenses:
-        try:
-            currency = normalize_currency(e.get("currency") or base_currency)
-        except ValueError:
-            skipped += 1
-            continue
-        if get_rate(currency, base_currency, e.get("date")) is None:
-            skipped += 1
-            continue
-        convertible.append(e)
-    return convert_expenses(convertible, base_currency, get_rate), skipped
+    convertible, skipped = partition_convertible(expenses, base_currency, get_rate)
+    return convert_expenses(convertible, base_currency, get_rate), len(skipped)

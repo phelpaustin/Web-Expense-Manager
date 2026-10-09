@@ -268,11 +268,12 @@ export function deleteExpense(id) {
   return request(`/api/expenses/${id}`, { method: 'DELETE' })
 }
 
-export function setBudget(category, amount) {
+export function setBudget(category, amount, currency) {
   return request('/api/budgets', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ category, amount }),
+    // currency omitted -> the server uses the currency budgets are currently shown in
+    body: JSON.stringify({ category, amount, currency: currency || undefined }),
   })
 }
 
@@ -491,6 +492,15 @@ export function setBaseCurrency(currency) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ currency }),
+  })
+}
+
+// Currency totals/budgets/alerts are shown in. null = follow the base currency.
+export function saveDisplayCurrency(currency) {
+  return request('/api/options/display-currency', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currency: currency || null }),
   })
 }
 

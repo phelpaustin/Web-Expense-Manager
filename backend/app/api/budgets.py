@@ -1,16 +1,18 @@
+import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.api.options import get_or_create_options
+from app.api.options import get_or_create_options, get_reporting_currency
+from app.core.fx import normalize_convertible_currency
 from app.core import fx
 from app.core.money import quantize_money
 from app.db.database import get_db
 from app.db import models
-from app.api.expenses import fetch_expenses_in_base_currency
+from app.api.expenses import fetch_expenses_in_reporting_currency
 from app.logic import budgets as budgets_logic
 from app.logic.budgets import TOTAL_BUDGET_KEY
 
@@ -20,6 +22,13 @@ router = APIRouter()
 class BudgetSet(BaseModel):
     category: str = Field(min_length=1)
     amount: Decimal = Field(gt=0)
+    # Currency of `amount`; None = the currency budgets are currently shown in.
+    currency: str | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, value: str | None) -> str | None:
+        return normalize_convertible_currency(value) if value is not None else None
 
 
 class BudgetConfig(BaseModel):
@@ -27,21 +36,38 @@ class BudgetConfig(BaseModel):
     rollover: bool = False
 
 
-def fetch_budgets(db: Session, user_id: int) -> dict:
-    """Budgets as {category: amount} in the user's base currency.
+def _period_end(month: str | None) -> datetime.date | None:
+    """Last day of a 'YYYY-MM' month; None when absent or malformed."""
+    if not month:
+        return None
+    try:
+        first = datetime.date.fromisoformat(f"{month}-01")
+    except ValueError:
+        return None
+    nxt = (first.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+    return nxt - datetime.timedelta(days=1)
+
+
+def fetch_budgets(db: Session, user_id: int, on: datetime.date | None = None) -> dict:
+    """Budgets as {category: amount} in the user's reporting (display) currency.
 
     Each budget is stored in the currency it was set in; those in another
-    currency are converted at the latest rate, so changing the base currency
-    never silently reinterprets an amount. A budget that can't be converted
-    right now is left out rather than shown with a wrong number.
+    currency are converted, so changing the display or base currency never
+    silently reinterprets an amount. ``on`` is the date the budget applies to
+    (the end of a past month): a past date uses that day's exchange rate, today
+    or no date uses the latest rate. A budget that can't be converted right now
+    is left out rather than shown with a wrong number.
     """
-    base = get_or_create_options(db, user_id).base_currency or "SEK"
+    reporting = get_reporting_currency(db, user_id)
     rows = db.query(models.Budget).filter(models.Budget.user_id == user_id).all()
+    dated = on if on is not None and on < datetime.date.today() else None
+    if dated is not None:
+        fx.ensure_rates({(dated, b.currency) for b in rows if b.currency != reporting} | {(dated, reporting)})
     result = {}
     for b in rows:
         amount = b.amount
-        if b.currency != base:
-            rate = fx.get_rate(b.currency, base)
+        if b.currency != reporting:
+            rate = fx.get_rate(b.currency, reporting, dated)
             if rate is None:
                 continue
             amount = quantize_money(amount * rate)
@@ -69,14 +95,14 @@ def set_budget(
         .filter(models.Budget.user_id == user.id, models.Budget.category == payload.category)
         .first()
     )
-    # The amount the user typed is in the currency the budgets are shown in (base).
-    base = get_or_create_options(db, user.id).base_currency or "SEK"
+    # Unless the user picked one, the amount they typed is in the currency budgets are shown in.
+    currency = payload.currency or get_reporting_currency(db, user.id)
     if budget is None:
-        budget = models.Budget(user_id=user.id, category=payload.category, amount=payload.amount, currency=base)
+        budget = models.Budget(user_id=user.id, category=payload.category, amount=payload.amount, currency=currency)
         db.add(budget)
     else:
         budget.amount = payload.amount
-        budget.currency = base
+        budget.currency = currency
     db.commit()
     return fetch_budgets(db, user.id)
 
@@ -108,7 +134,9 @@ def budgets_status(
     user: models.User = Depends(get_current_user),
 ):
     return budgets_logic.calculate_budget_status(
-        fetch_expenses_in_base_currency(db, user.id, scope, space_ids), fetch_budgets(db, user.id), month
+        fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids),
+        fetch_budgets(db, user.id, _period_end(month)),
+        month,
     )
 
 
@@ -144,5 +172,5 @@ def budgets_period_status(
     opts = get_or_create_options(db, user.id)
     total_budget = fetch_budgets(db, user.id).get(TOTAL_BUDGET_KEY)
     return budgets_logic.period_budget_status(
-        fetch_expenses_in_base_currency(db, user.id, scope, space_ids), total_budget, opts.budget_period, opts.budget_rollover
+        fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids), total_budget, opts.budget_period, opts.budget_rollover
     )

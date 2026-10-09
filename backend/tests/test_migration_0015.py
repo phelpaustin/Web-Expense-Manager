@@ -73,3 +73,27 @@ def test_fresh_database_gets_the_schema_without_errors():
     cols = {r[1] for r in con.execute("PRAGMA table_info(budgets)")}
     assert "currency" in cols
     assert con.execute("SELECT count(*) FROM fx_rates").fetchone() == (0,)
+
+
+def test_0016_adds_nullable_display_currency_without_touching_existing_users():
+    path = os.path.join(tempfile.mkdtemp(), "legacy16.db")
+    assert _alembic(path, "upgrade", "0015_currency_columns").returncode == 0
+    con = sqlite3.connect(path)
+    con.execute("ALTER TABLE user_options DROP COLUMN display_currency")  # pre-0016 shape
+    con.execute("INSERT INTO users (id, email, hashed_password, name) VALUES (1, 'u@x.com', 'h', 'u')")
+    con.execute(
+        "INSERT INTO user_options (user_id, categories, subcategories, units, shops, base_currency, budget_period, budget_rollover) "
+        "VALUES (1, '[]', '{}', '[]', '[]', 'EUR', 'Monthly', 0)"
+    )
+    con.commit()
+    con.close()
+
+    assert _alembic(path, "upgrade", "head").returncode == 0
+    con = sqlite3.connect(path)
+    assert con.execute("SELECT base_currency, display_currency FROM user_options").fetchone() == ("EUR", None)
+    con.close()
+    assert _alembic(path, "upgrade", "head").returncode == 0  # idempotent
+    assert _alembic(path, "downgrade", "0015_currency_columns").returncode == 0
+    con = sqlite3.connect(path)
+    assert "display_currency" not in {r[1] for r in con.execute("PRAGMA table_info(user_options)")}
+    con.close()

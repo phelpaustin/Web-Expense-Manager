@@ -16,10 +16,11 @@ import {
   fetchAlerts,
   fetchTrips,
   fetchGroups,
+  saveDisplayCurrency,
 } from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
 
-const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [], base_currency: 'SEK' }
+const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [], base_currency: 'SEK', display_currency: 'SEK', currencies: [] }
 
 // Owns every piece of data App.jsx fetches on load/mutation, plus the
 // dashboard scope selector. Every domain handler hook calls loadAll() after a
@@ -77,7 +78,7 @@ export function useAppData() {
         load: () => fetchOptions(),
         apply: (opts) => {
           setOptions(opts)
-          setDisplayCurrency(opts.base_currency)
+          setDisplayCurrency(opts.display_currency || opts.base_currency)
         },
       },
       { load: () => fetchMetrics(scope, ids), apply: setMetrics },
@@ -133,7 +134,21 @@ export function useAppData() {
     setPeriodStatus(null)
   }
 
+  // Switch the currency totals are shown in (null = follow the base currency).
+  // Stored data is never changed, so this only needs a reload of the converted views.
+  async function changeDisplayCurrency(code) {
+    try {
+      const updated = await saveDisplayCurrency(code || null)
+      setOptions(updated)
+      setDisplayCurrency(updated.display_currency || updated.base_currency)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return {
+    changeDisplayCurrency,
     summary,
     trends,
     categories,

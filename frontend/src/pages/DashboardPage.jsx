@@ -1,3 +1,4 @@
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import { useState } from 'react'
 import { STATUS_COLORS } from '../constants.js'
 import { money } from '../format.js'
@@ -7,6 +8,8 @@ const CHOOSE_SPACES = '__choose__'
 const TOTAL_BUDGET_KEY = '__total_monthly__'
 
 export default function DashboardPage({
+  currencies = [],
+  displayCurrency,
   summary,
   budgets,
   trends,
@@ -30,6 +33,7 @@ export default function DashboardPage({
   const [budgetType, setBudgetType] = useState('total')
   const [newBudgetCategory, setNewBudgetCategory] = useState('')
   const [newBudgetAmount, setNewBudgetAmount] = useState('')
+  const [newBudgetCurrency, setNewBudgetCurrency] = useState('')
   const [savingBudget, setSavingBudget] = useState(false)
   const [budgetFormError, setBudgetFormError] = useState('')
   const multiActive = dashboardSpaceIds && dashboardSpaceIds.length > 0
@@ -63,13 +67,14 @@ export default function DashboardPage({
 
     setSavingBudget(true)
     try {
-      const saved = await onSetBudget(category, amount)
+      const saved = await onSetBudget(category, amount, newBudgetCurrency)
       if (!saved) {
         setBudgetFormError('Could not save the budget. Please try again.')
         return
       }
       setNewBudgetCategory('')
       setNewBudgetAmount('')
+      setNewBudgetCurrency('')
       setBudgetFormOpen(false)
     } catch {
       setBudgetFormError('Could not save the budget. Please try again.')
@@ -370,6 +375,13 @@ export default function DashboardPage({
                   step="0.01"
                   placeholder="0.00"
                   required
+                />
+                <CurrencySelect
+                  value={newBudgetCurrency}
+                  onChange={setNewBudgetCurrency}
+                  currencies={currencies}
+                  defaultCurrency={displayCurrency}
+                  title="Currency of this budget"
                 />
               </label>
               <button type="submit" disabled={savingBudget}>

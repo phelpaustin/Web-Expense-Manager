@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.api.options import convert_rows_to_base, default_currency_for
+from app.api.options import convert_rows, default_currency_for
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.db import models
@@ -63,9 +63,9 @@ def fetch_income(db: Session, user_id: int) -> list[dict]:
     ]
 
 
-def fetch_income_in_base_currency(db: Session, user_id: int) -> list[dict]:
+def fetch_income_in_reporting_currency(db: Session, user_id: int) -> list[dict]:
     """Income rows converted into the user's base currency at each row's date."""
-    return convert_rows_to_base(db, user_id, fetch_income(db, user_id))[0]
+    return convert_rows(db, user_id, fetch_income(db, user_id))[0]
 
 
 def _get_owned_or_404(db: Session, income_id: int, user_id: int) -> models.Income:
@@ -137,4 +137,4 @@ def income_summary(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return income_logic.summary(fetch_income_in_base_currency(db, user.id))
+    return income_logic.summary(fetch_income_in_reporting_currency(db, user.id))

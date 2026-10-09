@@ -10,7 +10,13 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_group_ids, is_group_member, require_role_at_least
-from app.api.options import convert_rows_to_base, default_currency_for, ensure_options, get_or_create_options
+from app.api.options import (
+    convert_rows,
+    default_currency_for,
+    ensure_options,
+    get_or_create_options,
+    get_reporting_currency,
+)
 from app.core import fx
 from app.core.currency import normalize_currency
 from app.core.fx import normalize_convertible_currency
@@ -195,28 +201,28 @@ def fetch_expenses(
     ]
 
 
-def fetch_expenses_in_base_currency_ex(
+def fetch_expenses_in_reporting_currency_ex(
     db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
 ) -> tuple[list[dict], int]:
-    """Rows converted into the user's base_currency, plus how many were skipped.
+    """Rows converted into the user's reporting (display) currency, plus how many were skipped.
 
     Expenses whose currency has no exchange rate are left out of the aggregate
     (and counted) rather than failing the whole request, so one bad row can't
     take every dashboard endpoint down for the user or a shared space.
     """
-    return convert_rows_to_base(db, user_id, fetch_expenses(db, user_id, scope, space_ids))
+    return convert_rows(db, user_id, fetch_expenses(db, user_id, scope, space_ids))
 
 
-def fetch_expenses_in_base_currency(
+def fetch_expenses_in_reporting_currency(
     db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
 ) -> list[dict]:
     """Same rows as fetch_expenses, but every amount converted into the user's
-    base_currency — analytics/budgets/metrics/alerts need one common unit to
+    reporting currency — analytics/budgets/metrics/alerts need one common unit to
     aggregate across currencies (see app/logic/currency.py + app/core/fx.py).
-    Unconvertible rows are skipped; use fetch_expenses_in_base_currency_ex to
+    Unconvertible rows are skipped; use fetch_expenses_in_reporting_currency_ex to
     also learn how many.
     """
-    return fetch_expenses_in_base_currency_ex(db, user_id, scope, space_ids)[0]
+    return fetch_expenses_in_reporting_currency_ex(db, user_id, scope, space_ids)[0]
 
 
 def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Expense:
@@ -408,8 +414,8 @@ def expenses_summary(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses, unconverted = fetch_expenses_in_base_currency_ex(db, user.id, scope, space_ids)
-    base_currency = get_or_create_options(db, user.id).base_currency or "SEK"
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+    reporting = get_reporting_currency(db, user.id)
     total = sum(e["amount"] for e in expenses)
     by_category: dict[str, Decimal] = {}
     for e in expenses:
@@ -418,7 +424,7 @@ def expenses_summary(
         "total": round(total, 2),
         "count": len(expenses),
         "by_category": by_category,
-        "currency": base_currency,
+        "currency": reporting,
         # Expenses left out of the totals because their currency can't be converted.
         "unconverted_count": unconverted,
     }

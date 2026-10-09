@@ -1,11 +1,11 @@
 import { setBudget, deleteBudget, setBudgetConfig } from '../api/client.js'
 
 export function useBudgetHandlers(loadAll, setError) {
-  async function handleSetBudget(category, amount) {
+  async function handleSetBudget(category, amount, currency) {
     const value = parseFloat(amount)
     if (!value || value <= 0) return false
     try {
-      await setBudget(category, value)
+      await setBudget(category, value, currency)
       await loadAll()
       return true
     } catch (err) {

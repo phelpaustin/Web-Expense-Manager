@@ -262,6 +262,14 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                   {loadingDetail && <p className="subtitle">Loading…</p>}
                   {detail && (
                     <>
+                      {detail.summary.unconverted_count > 0 && (
+                        <div className="auth-error" role="alert">
+                          {detail.summary.unconverted_count} expense{detail.summary.unconverted_count === 1 ? '' : 's'} in a
+                          currency without an exchange rate {detail.summary.unconverted_count === 1 ? 'is' : 'are'} left
+                          out of these totals. Edit {detail.summary.unconverted_count === 1 ? 'it' : 'them'} on the Expenses
+                          page and choose a supported currency.
+                        </div>
+                      )}
                       <div className="trip-summary-row">
                         <span>
                           Spent: <strong>{money(detail.summary.total_spent, detail.summary.currency)}</strong>
@@ -307,7 +315,23 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                         </table>
                       )}
 
-                      {detail.settlement && detail.settlement.per_member.length > 1 && (
+                      {detail.settlement && detail.settlement.complete === false && (
+                        <>
+                          <h3>💰 Settlement</h3>
+                          <div className="auth-error" role="alert">
+                            {detail.settlement.message}
+                            <ul>
+                              {(detail.settlement.unconverted_expenses || []).map((e) => (
+                                <li key={e.id}>
+                                  {e.date} · {e.description || 'Expense'} · {e.amount} {e.currency}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </>
+                      )}
+
+                      {detail.settlement && detail.settlement.complete !== false && detail.settlement.per_member.length > 1 && (
                         <>
                           <h3>💰 Settlement</h3>
                           <p className="subtitle">

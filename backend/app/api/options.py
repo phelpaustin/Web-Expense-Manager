@@ -80,16 +80,32 @@ def default_currency_for(db: Session, user_id: int, group_id: int | None = None)
     return get_or_create_options(db, user_id).base_currency or "SEK"
 
 
-def convert_rows_to_base(db: Session, user_id: int, rows: list[dict]) -> tuple[list[dict], int]:
-    """Convert dict rows (date/amount/currency) into the user's base currency.
+def reporting_currency(opts: models.UserOptions) -> str:
+    """Currency totals, budgets and alerts are shown in.
+
+    The user's display currency when they set one, otherwise their base currency.
+    (The base currency is separate: it is only the default for *new* records.)
+    """
+    return opts.display_currency or opts.base_currency or "SEK"
+
+
+def get_reporting_currency(db: Session, user_id: int) -> str:
+    return reporting_currency(get_or_create_options(db, user_id))
+
+
+def convert_rows(
+    db: Session, user_id: int, rows: list[dict], target: str | None = None
+) -> tuple[list[dict], int]:
+    """Convert dict rows (date/amount/currency) into ``target`` (default: the
+    user's reporting currency).
 
     Uses each row's own date for the exchange rate. Rows whose currency can't be
     converted are left out and counted instead of failing the whole request.
     """
-    base = get_or_create_options(db, user_id).base_currency or "SEK"
-    fx.ensure_rates_for(rows, base)
+    target = target or get_reporting_currency(db, user_id)
+    fx.ensure_rates_for(rows, target)
     try:
-        return currency_logic.convert_expenses_partial(rows, base, fx.get_rate)
+        return currency_logic.convert_expenses_partial(rows, target, fx.get_rate)
     except currency_logic.CurrencyConversionUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -100,7 +116,11 @@ def _serialize(opts: models.UserOptions) -> dict:
         "subcategories": opts.subcategories or {},
         "units": opts.units or [],
         "shops": opts.shops or [],
+        # Default currency for NEW records (expenses, income, bills, ...).
         "base_currency": opts.base_currency or "SEK",
+        # Currency every total/budget/alert is shown in; follows base unless the user chose one.
+        "display_currency": reporting_currency(opts),
+        "display_currency_is_custom": opts.display_currency is not None,
         # Currencies a record can be entered in (those with an exchange rate).
         "currencies": sorted(fx.supported_currencies()),
     }
@@ -171,6 +191,16 @@ class CurrencyIn(BaseModel):
     @classmethod
     def _valid_currency(cls, value: str) -> str:
         return normalize_convertible_currency(value)
+
+
+class DisplayCurrencyIn(BaseModel):
+    # None resets to "follow the base currency".
+    currency: str | None = Field(default=None, max_length=8)
+
+    @field_validator("currency")
+    @classmethod
+    def _valid_currency(cls, value: str | None) -> str | None:
+        return normalize_convertible_currency(value) if value is not None else None
 
 
 @router.get("/options")
@@ -307,5 +337,19 @@ def set_base_currency(
 ):
     opts = get_or_create_options(db, user.id)
     opts.base_currency = payload.currency.strip().upper()
+    db.commit()
+    return _serialize(opts)
+
+
+@router.post("/options/display-currency")
+def set_display_currency(
+    payload: DisplayCurrencyIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Choose the currency totals are shown in. Changes no stored data; send
+    ``{"currency": null}`` to follow the base currency again."""
+    opts = get_or_create_options(db, user.id)
+    opts.display_currency = payload.currency
     db.commit()
     return _serialize(opts)

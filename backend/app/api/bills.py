@@ -7,12 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.api.options import convert_rows_to_base, default_currency_for, get_or_create_options
+from app.api.options import convert_rows, default_currency_for, get_reporting_currency
 from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
 from app.core.file_upload import read_upload_limited
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
-from app.api.expenses import fetch_expenses_in_base_currency
+from app.api.expenses import fetch_expenses, fetch_expenses_in_reporting_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import bills as bills_logic
@@ -162,15 +162,18 @@ async def bulk_upload_pending(
     if not rows:
         return {"created": 0, "possible_duplicates": 0, "skipped": skipped}
 
+    # A bank statement is in the account's currency (the base currency), so compare in that
+    # currency regardless of which currency totals are displayed in.
+    statement_currency = default_currency_for(db, user.id)
     existing = [
         (e["date"], e["amount"])
-        for e in fetch_expenses_in_base_currency(db, user.id, scope="personal")
+        for e in convert_rows(db, user.id, fetch_expenses(db, user.id, scope="personal"), statement_currency)[0]
     ]
     pending_rows = [
         {"date": p.date, "amount": p.amount, "currency": p.currency}
         for p in db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id).all()
     ]
-    existing += [(p["date"], p["amount"]) for p in convert_rows_to_base(db, user.id, pending_rows)[0]]
+    existing += [(p["date"], p["amount"]) for p in convert_rows(db, user.id, pending_rows, statement_currency)[0]]
     bills_logic.flag_duplicates(rows, existing)
 
     base_currency = default_currency_for(db, user.id)
@@ -382,9 +385,9 @@ def get_ledger(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses_in_base_currency(db, user.id)
-    base_currency = get_or_create_options(db, user.id).base_currency or "SEK"
-    pending = convert_rows_to_base(
+    expenses = fetch_expenses_in_reporting_currency(db, user.id)
+    reporting = get_reporting_currency(db, user.id)
+    pending = convert_rows(
         db,
         user.id,
         [
@@ -394,7 +397,7 @@ def get_ledger(
             .all()
         ],
     )[0]
-    manual = convert_rows_to_base(
+    manual = convert_rows(
         db,
         user.id,
         [
@@ -402,4 +405,4 @@ def get_ledger(
             for m in db.query(models.ManualBill).filter(models.ManualBill.user_id == user.id).all()
         ],
     )[0]
-    return bills_logic.build_ledger(expenses, pending, manual, base_currency)
+    return bills_logic.build_ledger(expenses, pending, manual, reporting)

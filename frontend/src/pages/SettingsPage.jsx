@@ -1,3 +1,4 @@
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import { useState } from 'react'
 import {
   changePassword,
@@ -49,7 +50,15 @@ function AddInline({ placeholder, onAdd }) {
   )
 }
 
-export default function SettingsPage({ user, options, onOptionsUpdated, onError, onDeleteAccount }) {
+export default function SettingsPage({
+  user,
+  options,
+  onOptionsUpdated,
+  onCurrencyChanged,
+  onDisplayCurrencyChange,
+  onError,
+  onDeleteAccount,
+}) {
   const [tab, setTab] = useState('account')
 
   // Account tab
@@ -188,28 +197,47 @@ export default function SettingsPage({ user, options, onOptionsUpdated, onError,
       {tab === 'data' && (
         <>
           <section className="panel">
-            <h2>Display currency</h2>
-            <p className="muted-note">How amounts are shown across the app.</p>
-            <select
+            <h2>Base currency</h2>
+            <p className="muted-note">
+              The default for new expenses, income, bills, and recurring items. Changing it never alters existing
+              records, which keep the currency they were entered in.
+            </p>
+            <CurrencySelect
               className="cat-select"
               value={options.base_currency || 'SEK'}
-              onChange={async (e) => {
-                const updated = await setBaseCurrency(e.target.value).catch((err) => {
+              currencies={options.currencies}
+              allowDefault={false}
+              title="Base currency"
+              onChange={async (code) => {
+                const updated = await setBaseCurrency(code).catch((err) => {
                   onError(err.message)
                   return null
                 })
                 if (updated) {
-                  setDisplayCurrency(updated.base_currency)
+                  setDisplayCurrency(updated.display_currency || updated.base_currency)
                   onOptionsUpdated(updated)
+                  // If totals follow the base currency they are shown in a new currency now.
+                  if (!updated.display_currency_is_custom && onCurrencyChanged) await onCurrencyChanged()
                 }
               }}
-            >
-              {['SEK', 'USD', 'EUR', 'GBP', 'INR', 'DKK', 'NOK'].map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            />
+          </section>
+
+          <section className="panel">
+            <h2>Display currency</h2>
+            <p className="muted-note">
+              The currency totals, budgets, and alerts are shown in. Switching it only changes how amounts are
+              displayed; nothing stored is changed. By default it follows your base currency.
+            </p>
+            <CurrencySelect
+              className="cat-select"
+              value={options.display_currency_is_custom ? options.display_currency : ''}
+              currencies={options.currencies}
+              defaultLabel="Same as base currency"
+              defaultCurrency={options.base_currency || 'SEK'}
+              title="Display currency"
+              onChange={(code) => onDisplayCurrencyChange && onDisplayCurrencyChange(code)}
+            />
           </section>
 
           <section className="panel">

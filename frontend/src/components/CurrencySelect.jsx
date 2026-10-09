@@ -6,6 +6,7 @@ export default function CurrencySelect({
   onChange,
   currencies = [],
   defaultCurrency,
+  defaultLabel = 'Default',
   allowDefault = true,
   disabled = false,
   title = 'Currency',
@@ -15,7 +16,7 @@ export default function CurrencySelect({
   const list = value && !currencies.includes(value) ? [value, ...currencies] : currencies
   return (
     <select className={className} value={value || ''} disabled={disabled} title={title} onChange={(e) => onChange(e.target.value)}>
-      {allowDefault && <option value="">Default{defaultCurrency ? ` (${defaultCurrency})` : ''}</option>}
+      {allowDefault && <option value="">{defaultLabel}{defaultCurrency ? ` (${defaultCurrency})` : ''}</option>}
       {list.map((c) => (
         <option key={c} value={c}>
           {c}

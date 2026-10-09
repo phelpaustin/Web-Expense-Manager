@@ -13,7 +13,7 @@ import {
   deleteManualBill,
 } from '../api/client.js'
 
-const EMPTY_BILL = { date: '', shop: '', amount: '', note: '' }
+const EMPTY_BILL = { date: '', shop: '', amount: '', note: '', currency: '' }
 
 // pendingBills is passed in (rather than fetched here) so handleItemise can
 // look up whether a bill already has an amount before prompting for one.
@@ -30,6 +30,7 @@ export function useBillsHandlers(loadAll, setError, pendingBills) {
         shop: pendingForm.shop,
         amount: parseFloat(pendingForm.amount),
         note: pendingForm.note,
+        currency: pendingForm.currency || undefined,
       })
       setPendingForm(EMPTY_BILL)
       await loadAll()
@@ -126,6 +127,7 @@ export function useBillsHandlers(loadAll, setError, pendingBills) {
         shop: manualForm.shop,
         amount: parseFloat(manualForm.amount),
         note: manualForm.note,
+        currency: manualForm.currency || undefined,
       })
       setManualForm(EMPTY_BILL)
       await loadAll()

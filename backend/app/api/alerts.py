@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.api.budgets import fetch_budgets
 from app.api.options import get_or_create_options
-from app.api.expenses import fetch_expenses_in_base_currency
+from app.api.expenses import fetch_expenses_in_reporting_currency
 from app.core.config import settings
 from app.core.email import send_email
 from app.db.database import get_db
@@ -23,7 +23,7 @@ log = logging.getLogger("alerts")
 
 
 def _alerts_for_user(db: Session, user_id: int) -> list[dict]:
-    expenses = fetch_expenses_in_base_currency(db, user_id)
+    expenses = fetch_expenses_in_reporting_currency(db, user_id)
     budgets = fetch_budgets(db, user_id)
     opts = get_or_create_options(db, user_id)
 

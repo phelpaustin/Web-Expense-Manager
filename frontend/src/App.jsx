@@ -68,13 +68,23 @@ export default function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route
         element={
-          <Layout user={auth.user} onLogout={auth.handleLogout} error={data.error} loading={auth.loading} alerts={data.alerts} />
+          <Layout
+            user={auth.user}
+            onLogout={auth.handleLogout}
+            error={data.error}
+            loading={auth.loading}
+            alerts={data.alerts}
+            options={data.options}
+            onDisplayCurrencyChange={data.changeDisplayCurrency}
+          />
         }
       >
         <Route
           index
           element={
             <DashboardPage
+              currencies={data.options.currencies}
+              displayCurrency={data.options.display_currency}
               summary={data.summary}
               budgets={data.budgets}
               trends={data.trends}
@@ -161,6 +171,8 @@ export default function App() {
           path="bills"
           element={
             <BillsPage
+              currencies={data.options.currencies}
+              baseCurrency={data.options.base_currency}
               pendingBills={data.pendingBills}
               pendingForm={bills.pendingForm}
               setPendingForm={bills.setPendingForm}
@@ -190,6 +202,8 @@ export default function App() {
               user={auth.user}
               options={data.options}
               onOptionsUpdated={data.setOptions}
+              onCurrencyChanged={data.loadAll}
+              onDisplayCurrencyChange={data.changeDisplayCurrency}
               onError={data.setError}
               onDeleteAccount={auth.handleDeleteAccount}
             />

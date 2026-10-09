@@ -1,6 +1,9 @@
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import { money } from '../format.js'
 
 export default function BillsPage({
+  currencies = [],
+  baseCurrency,
   pendingBills,
   pendingForm,
   setPendingForm,
@@ -106,6 +109,12 @@ export default function BillsPage({
             value={pendingForm.amount}
             onChange={(e) => setPendingForm({ ...pendingForm, amount: e.target.value })}
           />
+          <CurrencySelect
+            value={pendingForm.currency}
+            onChange={(c) => setPendingForm({ ...pendingForm, currency: c })}
+            currencies={currencies}
+            defaultCurrency={baseCurrency}
+          />
           <button type="submit">Add</button>
         </form>
 
@@ -134,7 +143,7 @@ export default function BillsPage({
                   </td>
                   <td>{b.shop}</td>
                   <td>{b.note}</td>
-                  <td className="right">{money(b.amount)}</td>
+                  <td className="right">{money(b.amount, b.currency)}</td>
                   <td className="nowrap">
                     {b.has_receipt && (
                       <>
@@ -208,6 +217,12 @@ export default function BillsPage({
             required
             value={manualForm.amount}
             onChange={(e) => setManualForm({ ...manualForm, amount: e.target.value })}
+          />
+          <CurrencySelect
+            value={manualForm.currency}
+            onChange={(c) => setManualForm({ ...manualForm, currency: c })}
+            currencies={currencies}
+            defaultCurrency={baseCurrency}
           />
           <button type="submit">Add manual</button>
         </form>

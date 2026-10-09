@@ -90,12 +90,33 @@ def _validate_parent(db: Session, user_id: int, parent_group_id: int | None) -> 
         raise HTTPException(status_code=400, detail="Invalid parent Expense Space")
 
 
-def _convert_trip_expenses(expenses: list[dict], currency: str) -> list[dict]:
-    fx.ensure_rates_for(expenses, currency or "SEK")
+def _convert_trip_expenses(expenses: list[dict], currency: str) -> tuple[list[dict], list[dict]]:
+    """Convert trip expenses into the trip currency at each expense's date.
+
+    Returns (converted, unconvertible): expenses whose currency has no exchange
+    rate are returned separately, not raised on, so the caller can say exactly
+    which ones are the problem.
+    """
+    currency = currency or "SEK"
+    fx.ensure_rates_for(expenses, currency)
     try:
-        return currency_logic.convert_expenses(expenses, currency or "SEK", fx.get_rate)
+        ok, bad = currency_logic.partition_convertible(expenses, currency, fx.get_rate)
+        return currency_logic.convert_expenses(ok, currency, fx.get_rate), bad
     except currency_logic.CurrencyConversionUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _describe_unconverted(rows: list[dict]) -> list[dict]:
+    return [
+        {
+            "id": r.get("id"),
+            "date": r["date"].isoformat() if hasattr(r.get("date"), "isoformat") else r.get("date"),
+            "description": r.get("description") or "",
+            "amount": r["amount"],
+            "currency": r.get("currency"),
+        }
+        for r in rows
+    ]
 
 
 def _serialize_trip(db: Session, trip: models.Group, member: models.GroupMember) -> dict:
@@ -203,12 +224,15 @@ def trip_summary(
     trip = _trip_or_404(db, trip_id)
     _member_or_403(db, trip_id, user.id)
     expenses = db.query(models.Expense).filter(models.Expense.group_id == trip.id).all()
-    expense_dicts = _convert_trip_expenses(
+    expense_dicts, unconverted = _convert_trip_expenses(
         [{"date": e.date, "category": e.category, "amount": e.amount, "currency": e.currency} for e in expenses],
         trip.currency or "SEK",
     )
     trip_dict = {"id": trip.id, "budget": trip.budget, "currency": trip.currency or "SEK"}
-    return trips_logic.trip_summary(trip_dict, expense_dicts)
+    summary = trips_logic.trip_summary(trip_dict, expense_dicts)
+    # Expenses with no exchange rate are left out of the totals (and counted) instead of failing.
+    summary["unconverted_count"] = len(unconverted)
+    return summary
 
 
 @router.get("/trips/{trip_id}/expenses")
@@ -256,13 +280,49 @@ def trip_settlement(
         members.append({"user_id": m.user_id, "name": u.name if u else "", "email": u.email if u else ""})
 
     expenses = (
-        db.query(models.Expense.user_id, models.Expense.date, models.Expense.amount, models.Expense.currency)
+        db.query(
+            models.Expense.id,
+            models.Expense.user_id,
+            models.Expense.date,
+            models.Expense.description,
+            models.Expense.amount,
+            models.Expense.currency,
+        )
         .filter(models.Expense.group_id == trip_id)
         .all()
     )
-    expense_dicts = _convert_trip_expenses(
-        [{"user_id": e.user_id, "date": e.date, "amount": e.amount, "currency": e.currency} for e in expenses],
-        trip.currency or "SEK",
+    currency = trip.currency or "SEK"
+    expense_dicts, unconverted = _convert_trip_expenses(
+        [
+            {
+                "id": e.id,
+                "user_id": e.user_id,
+                "date": e.date,
+                "description": e.description,
+                "amount": e.amount,
+                "currency": e.currency,
+            }
+            for e in expenses
+        ],
+        currency,
     )
 
-    return trips_logic.trip_settlement(members, expense_dicts, trip.currency or "SEK")
+    if unconverted:
+        # Settlement must be exact, so don't guess: leaving these out would give a
+        # wrong "who owes whom". Say which expenses need fixing instead of erroring.
+        return {
+            "complete": False,
+            "currency": currency,
+            "message": (
+                f"{len(unconverted)} expense(s) in a currency without an exchange rate can't be included. "
+                "Change their currency to settle up."
+            ),
+            "unconverted_expenses": _describe_unconverted(unconverted),
+            "total_spent": 0,
+            "share_per_person": 0,
+            "per_member": [],
+            "transactions": [],
+        }
+    settlement = trips_logic.trip_settlement(members, expense_dicts, currency)
+    settlement["complete"] = True
+    return settlement

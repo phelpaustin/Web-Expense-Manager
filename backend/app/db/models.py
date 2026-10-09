@@ -48,6 +48,8 @@ class UserOptions(Base):
     units = Column(JSON, nullable=False, default=list)
     shops = Column(JSON, nullable=False, default=list)
     base_currency = Column(String, nullable=False, default="SEK")
+    # Currency totals are shown in; NULL = follow base_currency (the default for new records).
+    display_currency = Column(String, nullable=True)
     budget_period = Column(String, nullable=False, default="Monthly")
     budget_rollover = Column(Boolean, nullable=False, default=False)
 

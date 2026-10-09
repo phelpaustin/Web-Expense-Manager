@@ -1,3 +1,4 @@
+import CurrencySelect from './components/CurrencySelect.jsx'
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
@@ -53,7 +54,7 @@ function NotificationBell({ alerts }) {
   )
 }
 
-export default function Layout({ user, onLogout, error, loading, alerts = [] }) {
+export default function Layout({ user, onLogout, error, loading, alerts = [], options, onDisplayCurrencyChange }) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -83,6 +84,17 @@ export default function Layout({ user, onLogout, error, loading, alerts = [] }) 
 
       <main className="main-content">
         <div className="topbar">
+          {options && onDisplayCurrencyChange && (options.currencies || []).length > 0 && (
+            <label className="topbar-currency" title="Currency totals are shown in. Stored data is never changed.">
+              View in{' '}
+              <CurrencySelect
+                value={options.display_currency}
+                onChange={onDisplayCurrencyChange}
+                currencies={options.currencies}
+                allowDefault={false}
+              />
+            </label>
+          )}
           <NotificationBell alerts={alerts} />
         </div>
         {loading && <p>Loading…</p>}
