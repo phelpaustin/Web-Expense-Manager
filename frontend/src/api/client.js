@@ -248,11 +248,13 @@ export function createExpense(expense) {
   })
 }
 
-export function createExpensesBulk(items) {
+// With billId the items itemise that bill: it becomes "itemised" and any single
+// total-only expense it had is replaced by the items (server-side, in one step).
+export function createExpensesBulk(items, billId) {
   return request('/api/expenses/bulk', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ items, bill_id: billId ?? undefined }),
   })
 }
 
@@ -341,8 +343,15 @@ export function applyDueRecurring() {
   return request('/api/recurring/apply-due', { method: 'POST' })
 }
 
-export function fetchPendingBills() {
-  return request('/api/pending-bills')
+// ── Bills ──────────────────────────────────────────────────────
+// status: pending (to itemise) | total_only | itemised | all. Returns
+// { items, total, page, page_size, counts: { pending, total_only, itemised, all } }.
+export function fetchBills(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, value)
+  }
+  return request(`/api/bills?${params.toString()}`)
 }
 
 export function createPendingBill(bill) {
@@ -357,16 +366,45 @@ export function deletePendingBill(id) {
   return request(`/api/pending-bills/${id}`, { method: 'DELETE' })
 }
 
-export function itemisePendingBill(id, amount) {
-  const qs = amount != null ? `?amount=${encodeURIComponent(amount)}` : ''
-  return request(`/api/pending-bills/${id}/itemise${qs}`, { method: 'POST' })
+export function bulkDeleteBills(ids) {
+  return request('/api/bills/bulk-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
 }
 
-export function uploadBill(file, { shop = '', amount = '' } = {}) {
+// Record a bill's whole amount as one expense (it can still be itemised later).
+export function recordBillTotal(id, { category, amount } = {}) {
+  return request(`/api/bills/${id}/record-total`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: category || undefined, amount: amount || undefined }),
+  })
+}
+
+export function recordBillTotals(ids, category) {
+  return request('/api/bills/record-total', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, category: category || undefined }),
+  })
+}
+
+export function undoBillTotal(id) {
+  return request(`/api/bills/${id}/undo`, { method: 'POST' })
+}
+
+// Upload a receipt. The server answers { result: 'created' | 'attached' | 'match_found', ... }:
+// 'match_found' means it matches a bill you already have; resend with attachTo (add the
+// receipt to that bill) or createNew (make a separate bill anyway).
+export function uploadBill(file, { shop = '', amount = '', attachTo, createNew } = {}) {
   const body = new FormData()
   body.append('file', file)
   if (shop) body.append('shop', shop)
   if (amount !== '' && amount != null) body.append('amount', amount)
+  if (attachTo != null) body.append('attach_to', attachTo)
+  if (createNew) body.append('create_new', 'true')
   return request('/api/pending-bills/upload', { method: 'POST', body })
 }
 
@@ -398,22 +436,6 @@ export async function viewReceipt(billId) {
 
 export function deleteReceipt(billId) {
   return request(`/api/pending-bills/${billId}/receipt`, { method: 'DELETE' })
-}
-
-export function fetchLedger() {
-  return request('/api/bills-ledger')
-}
-
-export function createManualBill(bill) {
-  return request('/api/bills-ledger/manual', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(bill),
-  })
-}
-
-export function deleteManualBill(id) {
-  return request(`/api/bills-ledger/manual/${id}`, { method: 'DELETE' })
 }
 
 export function fetchOptions() {
@@ -501,6 +523,15 @@ export function saveDisplayCurrency(currency) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ currency: currency || null }),
+  })
+}
+
+// Record a bill's total as spending automatically when it is uploaded/imported/added.
+export function saveCountBillsAsSpending(enabled) {
+  return request('/api/options/count-bills-as-spending', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
   })
 }
 

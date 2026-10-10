@@ -1,4 +1,5 @@
 from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, JSON, LargeBinary, Numeric, String, UniqueConstraint, text
+from sqlalchemy.sql import expression
 
 from app.db.database import Base
 
@@ -36,6 +37,12 @@ class Expense(Base):
     currency = Column(String, nullable=False, default="SEK")
     price_per_unit = Column(Numeric(12, 4), nullable=False, default=0)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True, index=True)
+    # The bill (see PendingBill) this expense was created from, if any. Deleting the bill
+    # keeps the expense and just clears the link.
+    source_bill_id = Column(Integer, ForeignKey("pending_bills.id", ondelete="SET NULL"), nullable=True, index=True)
+    # True for the single placeholder expense made by "Record total": the full bill amount
+    # with no item breakdown. It is replaced by the real items when the bill is itemised.
+    bill_total_only = Column(Boolean, nullable=False, default=False, server_default=expression.false())
 
 
 class UserOptions(Base):
@@ -50,6 +57,9 @@ class UserOptions(Base):
     base_currency = Column(String, nullable=False, default="SEK")
     # Currency totals are shown in; NULL = follow base_currency (the default for new records).
     display_currency = Column(String, nullable=True)
+    # When on, uploaded/imported/added bills are recorded as total-only expenses right away,
+    # so they count towards budgets before they are itemised.
+    count_bills_as_spending = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     budget_period = Column(String, nullable=False, default="Monthly")
     budget_rollover = Column(Boolean, nullable=False, default=False)
 
@@ -107,7 +117,9 @@ class PendingBill(Base):
     shop = Column(String, nullable=False, default="")
     amount = Column(Numeric(12, 2), nullable=False)
     note = Column(String, nullable=False, default="")
-    # "pending" until itemised into a real expense.
+    # "pending"    = to itemise, no expense yet
+    # "total_only" = recorded as one expense for the whole amount; can still be itemised
+    # "itemised"   = broken down into its line items
     status = Column(String, nullable=False, default="pending")
     # Set on bulk import when (date, amount) matches an existing expense/pending bill.
     possible_duplicate = Column(Boolean, nullable=False, default=False)

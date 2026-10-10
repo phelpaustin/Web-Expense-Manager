@@ -4,10 +4,17 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.api.options import convert_rows, default_currency_for, get_reporting_currency
+from app.api.options import (
+    convert_rows,
+    default_currency_for,
+    ensure_options,
+    get_or_create_options,
+    get_reporting_currency,
+)
 from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
 from app.core.file_upload import content_disposition, read_upload_limited, safe_filename
@@ -45,7 +52,21 @@ def _pending_or_404(db: Session, bill_id: int, user_id: int) -> models.PendingBi
     return b
 
 
-def _serialize_pending(b: models.PendingBill, has_receipt: bool) -> dict:
+STATUS_PENDING = "pending"        # to itemise: no expense yet
+STATUS_TOTAL_ONLY = "total_only"  # recorded as one expense for the whole amount; can still be itemised
+STATUS_ITEMISED = "itemised"      # broken down into its line items
+DEFAULT_BILL_CATEGORY = "Bills"
+
+_SORTS = {
+    "date_desc": (models.PendingBill.date.desc(), models.PendingBill.id.desc()),
+    "date_asc": (models.PendingBill.date.asc(), models.PendingBill.id.asc()),
+    "amount_desc": (models.PendingBill.amount.desc(), models.PendingBill.id.desc()),
+    "amount_asc": (models.PendingBill.amount.asc(), models.PendingBill.id.asc()),
+    "shop": (models.PendingBill.shop.asc(), models.PendingBill.date.desc()),
+}
+
+
+def _serialize_pending(b: models.PendingBill, has_receipt: bool, item_count: int = 0) -> dict:
     return {
         "id": b.id,
         "date": b.date.isoformat(),
@@ -56,24 +77,154 @@ def _serialize_pending(b: models.PendingBill, has_receipt: bool) -> dict:
         "status": b.status,
         "has_receipt": has_receipt,
         "possible_duplicate": bool(b.possible_duplicate),
+        # Expenses created from this bill: 1 for a total-only bill, N for an itemised one.
+        "item_count": item_count,
     }
 
 
-@router.get("/pending-bills")
-def list_pending(
-    include_itemised: bool = False,
+def _receipt_flags(db: Session, user_id: int, bill_ids: list[int]) -> set[int]:
+    if not bill_ids:
+        return set()
+    return {
+        r.pending_bill_id
+        for r in db.query(models.Receipt.pending_bill_id).filter(
+            models.Receipt.user_id == user_id, models.Receipt.pending_bill_id.in_(bill_ids)
+        )
+    }
+
+
+def _item_counts(db: Session, user_id: int, bill_ids: list[int]) -> dict[int, int]:
+    if not bill_ids:
+        return {}
+    rows = (
+        db.query(models.Expense.source_bill_id, func.count(models.Expense.id))
+        .filter(models.Expense.user_id == user_id, models.Expense.source_bill_id.in_(bill_ids))
+        .group_by(models.Expense.source_bill_id)
+        .all()
+    )
+    return {bill_id: n for bill_id, n in rows}
+
+
+def _serialize_one(db: Session, user_id: int, b: models.PendingBill) -> dict:
+    return _serialize_pending(
+        b,
+        b.id in _receipt_flags(db, user_id, [b.id]),
+        _item_counts(db, user_id, [b.id]).get(b.id, 0),
+    )
+
+
+# ── Recording a bill's total as spending ──────────────────────
+def _record_total(
+    db: Session,
+    user: models.User,
+    bill: models.PendingBill,
+    category: str | None = None,
+    amount: Decimal | None = None,
+) -> models.Expense:
+    """Create the single total-only expense for a pending bill and claim the bill.
+
+    The bill moves pending -> total_only atomically, so a double click or a second tab
+    can't record it twice. Caller commits.
+    """
+    final_amount = amount if amount is not None else bill.amount
+    if final_amount is None or final_amount <= 0:
+        raise HTTPException(status_code=400, detail="Enter an amount greater than zero to record this bill")
+    claimed = (
+        db.query(models.PendingBill)
+        .filter(
+            models.PendingBill.id == bill.id,
+            models.PendingBill.user_id == user.id,
+            models.PendingBill.status == STATUS_PENDING,
+        )
+        .update({"status": STATUS_TOTAL_ONLY, "amount": final_amount}, synchronize_session=False)
+    )
+    if claimed != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This bill has already been recorded or itemised")
+    expense = models.Expense(
+        user_id=user.id,
+        date=bill.date,
+        category=(category or "").strip() or DEFAULT_BILL_CATEGORY,
+        description=bill.shop,
+        amount=final_amount,
+        currency=bill.currency,
+        price_per_unit=final_amount,
+        source_bill_id=bill.id,
+        bill_total_only=True,
+    )
+    db.add(expense)
+    return expense
+
+
+def _auto_record(db: Session, user: models.User, bills: list[models.PendingBill]) -> int:
+    """Record new bills as total-only expenses when the user's setting is on.
+
+    Bills flagged as possible duplicates are left for review (recording them could
+    double count), and so are bills with no readable amount. Caller commits.
+    """
+    if not get_or_create_options(db, user.id).count_bills_as_spending:
+        return 0
+    recorded = 0
+    for b in bills:
+        if b.possible_duplicate or b.amount is None or b.amount <= 0 or b.status != STATUS_PENDING:
+            continue
+        _record_total(db, user, b)
+        recorded += 1
+    return recorded
+
+
+def _learn_default_category(db: Session, user_id: int) -> None:
+    ensure_options(db, user_id, DEFAULT_BILL_CATEGORY, "", "")
+
+
+# ── List (one list for every status; paginated) ───────────────
+@router.get("/bills")
+def list_bills(
+    status: str = Query(default=STATUS_PENDING, pattern=r"^(pending|total_only|itemised|all)$"),
+    q: str | None = Query(default=None, max_length=100),
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    sort: str = Query(default="date_desc", pattern=r"^(date_desc|date_asc|amount_desc|amount_asc|shop)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    q = db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id)
-    if not include_itemised:
-        q = q.filter(models.PendingBill.status == "pending")
-    bills = q.order_by(models.PendingBill.date.desc()).all()
-    receipt_ids = {
-        r.pending_bill_id
-        for r in db.query(models.Receipt.pending_bill_id).filter(models.Receipt.user_id == user.id)
+    """Bills of every status with filters, sorting and pagination.
+
+    ``counts`` always covers every status (for the tab badges) under the same search and
+    date filters, so the tabs show how much is waiting without loading it.
+    """
+    base = db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id)
+    if date_from:
+        base = base.filter(models.PendingBill.date >= date_from)
+    if date_to:
+        base = base.filter(models.PendingBill.date <= date_to)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        base = base.filter(or_(models.PendingBill.shop.ilike(like), models.PendingBill.note.ilike(like)))
+
+    counts = {STATUS_PENDING: 0, STATUS_TOTAL_ONLY: 0, STATUS_ITEMISED: 0}
+    for st, n in base.with_entities(models.PendingBill.status, func.count(models.PendingBill.id)).group_by(
+        models.PendingBill.status
+    ):
+        if st in counts:
+            counts[st] = n
+    counts["all"] = sum(counts.values())
+
+    rows_q = base if status == "all" else base.filter(models.PendingBill.status == status)
+    total = counts["all"] if status == "all" else counts[status]
+    bills = rows_q.order_by(*_SORTS[sort]).offset((page - 1) * page_size).limit(page_size).all()
+    ids = [b.id for b in bills]
+    has_receipt = _receipt_flags(db, user.id, ids)
+    item_counts = _item_counts(db, user.id, ids)
+    return {
+        "items": [_serialize_pending(b, b.id in has_receipt, item_counts.get(b.id, 0)) for b in bills],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "counts": counts,
     }
-    return [_serialize_pending(b, b.id in receipt_ids) for b in bills]
 
 
 @router.post("/pending-bills", status_code=201)
@@ -82,24 +233,57 @@ def create_pending(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
+    """Add a bill by hand. With "count bills as spending" on it is recorded as a total right away."""
     data = payload.model_dump()
     data["currency"] = data["currency"] or default_currency_for(db, user.id)
     b = models.PendingBill(user_id=user.id, **data)
     db.add(b)
+    db.flush()
+    recorded = _auto_record(db, user, [b])
     db.commit()
+    if recorded:
+        _learn_default_category(db, user.id)
     db.refresh(b)
-    return _serialize_pending(b, False)
+    return _serialize_one(db, user.id, b)
 
 
-@router.post("/pending-bills/upload", status_code=201)
+def _store_receipt(db: Session, user_id: int, bill_id: int, filename: str | None, content_type: str, data: bytes) -> None:
+    existing = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill_id).first()
+    if existing:
+        existing.filename = safe_filename(filename, "receipt")
+        existing.content_type = content_type
+        existing.data = data
+    else:
+        db.add(
+            models.Receipt(
+                user_id=user_id,
+                pending_bill_id=bill_id,
+                filename=safe_filename(filename, "receipt"),
+                content_type=content_type,
+                data=data,
+            )
+        )
+
+
+@router.post("/pending-bills/upload")
 async def upload_pending(
+    response: Response,
     file: UploadFile = File(...),
     shop: str = Form(""),
     amount: Decimal = Form(Decimal("0"), ge=0, le=MAX_MONEY),
+    attach_to: int | None = Form(None),
+    create_new: bool = Form(False),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Create a pending bill straight from an uploaded PDF/photo, to itemise later."""
+    """Upload a receipt (PDF/photo), to itemise whenever you like.
+
+    * ``attach_to`` puts the receipt on an existing bill (e.g. one from a bank statement).
+    * Otherwise the receipt is read; if it matches a bill you already have (same date and
+      amount) nothing is created and the matches are returned so you can choose to attach
+      it instead of double counting. Send ``create_new=true`` to create a bill anyway.
+    * With "count bills as spending" on, a new bill is recorded as a total right away.
+    """
     data = await file.read(_MAX_RECEIPT_BYTES + 1)
     if len(data) > _MAX_RECEIPT_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
@@ -108,35 +292,63 @@ async def upload_pending(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    if attach_to is not None:
+        bill = _pending_or_404(db, attach_to, user.id)
+        _store_receipt(db, user.id, bill.id, file.filename, content_type, data)
+        db.commit()
+        response.status_code = 200
+        return {"result": "attached", "bill": _serialize_one(db, user.id, bill)}
+
     # Autofill whatever the caller left blank by best-effort parsing the receipt
     # itself (see app/logic/receipt_ocr.py — degrades gracefully if unavailable).
     parsed = None
     if not shop.strip() or amount <= Decimal("0"):
         parsed = receipt_ocr.extract_fields(data, content_type)
 
+    bill_date = (parsed and parsed["date"]) or datetime.date.today()
+    bill_amount = amount or (parsed and parsed["amount"]) or Decimal("0")
+    currency = default_currency_for(db, user.id)
+
+    if not create_new and parsed and parsed.get("date") and bill_amount > 0:
+        matches = (
+            db.query(models.PendingBill)
+            .filter(
+                models.PendingBill.user_id == user.id,
+                models.PendingBill.status.in_((STATUS_PENDING, STATUS_TOTAL_ONLY)),
+                models.PendingBill.date == bill_date,
+                models.PendingBill.amount == bill_amount,
+                models.PendingBill.currency == currency,
+            )
+            .order_by(models.PendingBill.id)
+            .all()
+        )
+        if matches:
+            response.status_code = 200
+            return {
+                "result": "match_found",
+                "matches": [_serialize_one(db, user.id, m) for m in matches],
+                "parsed": {"date": bill_date.isoformat(), "amount": bill_amount, "shop": parsed.get("shop") or ""},
+            }
+
     b = models.PendingBill(
         user_id=user.id,
-        date=(parsed and parsed["date"]) or datetime.date.today(),
+        date=bill_date,
         shop=(shop.strip() or (parsed and parsed["shop"]) or safe_filename(file.filename, "Uploaded bill")),
-        amount=amount or (parsed and parsed["amount"]) or Decimal("0"),
-        currency=default_currency_for(db, user.id),
+        amount=bill_amount,
+        currency=currency,
         note="",
-        status="pending",
+        status=STATUS_PENDING,
     )
     db.add(b)
     db.flush()
-    db.add(
-        models.Receipt(
-            user_id=user.id,
-            pending_bill_id=b.id,
-            filename=safe_filename(file.filename, "receipt"),
-            content_type=content_type,
-            data=data,
-        )
-    )
+    _store_receipt(db, user.id, b.id, file.filename, content_type, data)
+    recorded = _auto_record(db, user, [b])
     db.commit()
+    if recorded:
+        _learn_default_category(db, user.id)
     db.refresh(b)
-    return _serialize_pending(b, True)
+    response.status_code = 201
+    return {"result": "created", "bill": _serialize_one(db, user.id, b)}
 
 
 @router.post("/pending-bills/bulk-upload", status_code=201)
@@ -145,10 +357,12 @@ async def bulk_upload_pending(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Import pending bills in bulk from a bank-statement spreadsheet (date, shop,
-    amount columns) — no receipt is attached, attach one later per bill. Rows whose
-    (date, amount) match an existing expense or pending bill are flagged as possible
-    duplicates so they can be reviewed and deleted if needed.
+    """Import bills in bulk from a bank-statement spreadsheet (date, shop, amount columns).
+
+    No receipt is attached; attach one later per bill. Rows whose (date, amount) match an
+    existing expense or bill are flagged as possible duplicates so they can be reviewed.
+    With "count bills as spending" on, every row that is not a possible duplicate is
+    recorded as a total-only expense (itemise it later whenever you like).
     """
     name = file.filename or ""
     if not name.lower().endswith((".xlsx", ".csv")):
@@ -161,7 +375,7 @@ async def bulk_upload_pending(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not rows:
-        return {"created": 0, "possible_duplicates": 0, "skipped": skipped}
+        return {"created": 0, "possible_duplicates": 0, "auto_recorded": 0, "skipped": skipped}
 
     # A bank statement is in the account's currency (the base currency), so compare in that
     # currency regardless of which currency totals are displayed in.
@@ -172,29 +386,38 @@ async def bulk_upload_pending(
     ]
     pending_rows = [
         {"date": p.date, "amount": p.amount, "currency": p.currency}
-        for p in db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id).all()
+        for p in db.query(models.PendingBill)
+        .filter(models.PendingBill.user_id == user.id, models.PendingBill.status == STATUS_PENDING)
+        .all()
     ]
     existing += [(p["date"], p["amount"]) for p in convert_rows(db, user.id, pending_rows, statement_currency)[0]]
     bills_logic.flag_duplicates(rows, existing)
 
-    base_currency = default_currency_for(db, user.id)
-    duplicates = 0
+    new_bills = []
     for row in rows:
-        db.add(
-            models.PendingBill(
-                user_id=user.id,
-                date=row["date"],
-                shop=row["shop"],
-                amount=row["amount"],
-                currency=base_currency,
-                note="Bulk import",
-                status="pending",
-                possible_duplicate=row["possible_duplicate"],
-            )
+        b = models.PendingBill(
+            user_id=user.id,
+            date=row["date"],
+            shop=row["shop"],
+            amount=row["amount"],
+            currency=statement_currency,
+            note="Bulk import",
+            status=STATUS_PENDING,
+            possible_duplicate=row["possible_duplicate"],
         )
-        duplicates += 1 if row["possible_duplicate"] else 0
+        db.add(b)
+        new_bills.append(b)
+    db.flush()
+    recorded = _auto_record(db, user, new_bills)
     db.commit()
-    return {"created": len(rows), "possible_duplicates": duplicates, "skipped": skipped}
+    if recorded:
+        _learn_default_category(db, user.id)
+    return {
+        "created": len(rows),
+        "possible_duplicates": sum(1 for r in rows if r["possible_duplicate"]),
+        "auto_recorded": recorded,
+        "skipped": skipped,
+    }
 
 
 @router.post("/pending-bills/{bill_id}/dismiss-duplicate")
@@ -207,10 +430,16 @@ def dismiss_duplicate(
     bill = _pending_or_404(db, bill_id, user.id)
     bill.possible_duplicate = False
     db.commit()
-    has_receipt = (
-        db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first() is not None
+    return _serialize_one(db, user.id, bill)
+
+
+def _delete_bill_record(db: Session, bill: models.PendingBill) -> None:
+    """Remove a bill (and its receipt). Expenses made from it are kept, just unlinked."""
+    db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).delete()
+    db.query(models.Expense).filter(models.Expense.source_bill_id == bill.id).update(
+        {"source_bill_id": None}, synchronize_session=False
     )
-    return _serialize_pending(bill, has_receipt)
+    db.delete(bill)
 
 
 @router.delete("/pending-bills/{bill_id}", status_code=204)
@@ -220,54 +449,128 @@ def delete_pending(
     user: models.User = Depends(get_current_user),
 ):
     bill = _pending_or_404(db, bill_id, user.id)
-    db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).delete()
-    db.delete(bill)
+    if bill.status == STATUS_TOTAL_ONLY:
+        raise HTTPException(status_code=409, detail="Undo the recorded total before deleting this bill")
+    _delete_bill_record(db, bill)
     db.commit()
 
 
-@router.post("/pending-bills/{bill_id}/itemise")
-def itemise_pending(
-    bill_id: int,
-    category: str = "Bills",
-    amount: Decimal | None = Query(default=None, gt=0, le=MAX_MONEY),
+class BulkIds(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class BulkRecordIn(BulkIds):
+    category: str | None = Field(default=None, max_length=100)
+
+
+@router.post("/bills/bulk-delete")
+def bulk_delete_bills(
+    payload: BulkIds,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Convert a pending bill into a real expense and archive it as itemised.
+    """Delete several bills. Bills recorded as a total must be undone first."""
+    deleted, skipped = 0, []
+    for bill in db.query(models.PendingBill).filter(
+        models.PendingBill.user_id == user.id, models.PendingBill.id.in_(payload.ids)
+    ):
+        if bill.status == STATUS_TOTAL_ONLY:
+            skipped.append({"id": bill.id, "reason": "Undo the recorded total first"})
+            continue
+        _delete_bill_record(db, bill)
+        deleted += 1
+    db.commit()
+    return {"deleted": deleted, "skipped": skipped}
 
-    Happens at most once per bill: a repeat (double-click, retry, second tab)
-    gets a 409 instead of creating a duplicate expense.
+
+# ── Record total / undo ───────────────────────────────────────
+class RecordTotalIn(BaseModel):
+    category: str | None = Field(default=None, max_length=100)
+    # For a bill whose amount couldn't be read: the amount to record (also saved on the bill).
+    amount: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
+
+
+@router.post("/bills/record-total")
+def record_totals_bulk(
+    payload: BulkRecordIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Record the whole amount of several bills as spending (itemise them later if you like).
+
+    Bills flagged as possible duplicates are skipped: review them first, since recording
+    them could double count.
     """
-    b = _pending_or_404(db, bill_id, user.id)
-    if b.status != "pending":
-        raise HTTPException(status_code=409, detail="This bill has already been itemised")
-    final_amount = amount if amount is not None else b.amount
-    if final_amount is None or final_amount <= 0:
-        raise HTTPException(status_code=400, detail="Enter an amount greater than zero to itemise this bill")
+    recorded, skipped = 0, []
+    bills = (
+        db.query(models.PendingBill)
+        .filter(models.PendingBill.user_id == user.id, models.PendingBill.id.in_(payload.ids))
+        .order_by(models.PendingBill.id)
+        .all()
+    )
+    found = {b.id for b in bills}
+    skipped += [{"id": i, "reason": "Bill not found"} for i in payload.ids if i not in found]
+    for b in bills:
+        if b.status != STATUS_PENDING:
+            skipped.append({"id": b.id, "reason": "Already recorded or itemised"})
+        elif b.possible_duplicate:
+            skipped.append({"id": b.id, "reason": "Possible duplicate: review it first"})
+        elif b.amount is None or b.amount <= 0:
+            skipped.append({"id": b.id, "reason": "No amount to record"})
+        else:
+            _record_total(db, user, b, payload.category)
+            recorded += 1
+    db.commit()
+    if recorded:
+        _learn_default_category(db, user.id)
+        if payload.category:
+            ensure_options(db, user.id, payload.category.strip(), "", "")
+    return {"recorded": recorded, "skipped": skipped}
 
-    # Claim the bill atomically: if two requests race, only one flips pending -> itemised.
+
+@router.post("/bills/{bill_id}/record-total")
+def record_total(
+    bill_id: int,
+    payload: RecordTotalIn | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Record one bill's whole amount as a single expense. It counts towards budgets
+    straight away, stays linked to the bill, and can be itemised later."""
+    bill = _pending_or_404(db, bill_id, user.id)
+    payload = payload or RecordTotalIn()
+    _record_total(db, user, bill, payload.category, payload.amount)
+    db.commit()
+    ensure_options(db, user.id, (payload.category or DEFAULT_BILL_CATEGORY).strip(), "", "")
+    db.refresh(bill)
+    return _serialize_one(db, user.id, bill)
+
+
+@router.post("/bills/{bill_id}/undo")
+def undo_record_total(
+    bill_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Take a recorded total back: the one-line expense is removed and the bill returns to
+    "to itemise"."""
+    bill = _pending_or_404(db, bill_id, user.id)
     claimed = (
         db.query(models.PendingBill)
-        .filter(models.PendingBill.id == b.id, models.PendingBill.status == "pending")
-        .update({"status": "itemised"}, synchronize_session=False)
+        .filter(models.PendingBill.id == bill.id, models.PendingBill.status == STATUS_TOTAL_ONLY)
+        .update({"status": STATUS_PENDING}, synchronize_session=False)
     )
     if claimed != 1:
         db.rollback()
-        raise HTTPException(status_code=409, detail="This bill has already been itemised")
-    db.add(
-        models.Expense(
-            user_id=user.id,
-            date=b.date,
-            category=category or "Bills",
-            description=b.shop,
-            amount=final_amount,
-            currency=b.currency,
-            price_per_unit=final_amount,
-        )
-    )
-    db.query(models.Receipt).filter(models.Receipt.pending_bill_id == b.id).delete()
+        raise HTTPException(status_code=409, detail="Only a bill recorded as a total can be undone")
+    db.query(models.Expense).filter(
+        models.Expense.source_bill_id == bill.id,
+        models.Expense.bill_total_only.is_(True),
+        models.Expense.user_id == user.id,
+    ).delete(synchronize_session=False)
     db.commit()
-    return {"itemised": bill_id, "expense_created": True}
+    db.refresh(bill)
+    return _serialize_one(db, user.id, bill)
 
 
 # ── Receipts (attached to pending bills) ──────────────────────
@@ -278,6 +581,7 @@ async def upload_receipt(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
+    """Attach (or replace) a receipt on a bill of any status."""
     bill = _pending_or_404(db, bill_id, user.id)
     data = await file.read(_MAX_RECEIPT_BYTES + 1)
     if len(data) > _MAX_RECEIPT_BYTES:
@@ -286,22 +590,7 @@ async def upload_receipt(
         content_type = detect_receipt_content_type(data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    existing = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first()
-    if existing:
-        existing.filename = safe_filename(file.filename, "receipt")
-        existing.content_type = content_type
-        existing.data = data
-    else:
-        db.add(
-            models.Receipt(
-                user_id=user.id,
-                pending_bill_id=bill.id,
-                filename=safe_filename(file.filename, "receipt"),
-                content_type=content_type,
-                data=data,
-            )
-        )
+    _store_receipt(db, user.id, bill.id, file.filename, content_type, data)
     db.commit()
     return {"uploaded": True}
 

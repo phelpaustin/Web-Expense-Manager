@@ -64,6 +64,9 @@ class ExpenseOut(BaseModel):
     currency: str
     price_per_unit: Decimal
     group_id: int | None = None
+    # Set when the expense came from a bill; bill_total_only marks the one-line "Record total".
+    source_bill_id: int | None = None
+    bill_total_only: bool = False
 
 
 class ExpenseCreate(BaseModel):
@@ -111,6 +114,9 @@ class ExpenseUpdate(PartialUpdate):
 
 class ExpenseBulkCreate(BaseModel):
     items: list[ExpenseCreate] = Field(min_length=1)
+    # Itemising a bill: the bill these line items break down. Once saved the bill is
+    # "itemised" and any single "total only" expense it had is replaced by the items.
+    bill_id: int | None = None
 
 
 def _price_per_unit(amount: Decimal, quantity: float) -> Decimal:
@@ -263,6 +269,7 @@ def list_expenses(
     shop: str | None = None,
     date_from: datetime.date | None = None,
     date_to: datetime.date | None = None,
+    total_only: bool | None = None,
     page: int = 1,
     page_size: int = 25,
     db: Session = Depends(get_db),
@@ -286,6 +293,8 @@ def list_expenses(
         q = q.filter(models.Expense.date >= date_from)
     if date_to:
         q = q.filter(models.Expense.date <= date_to)
+    if total_only is not None:
+        q = q.filter(models.Expense.bill_total_only == total_only)
     if search:
         like = f"%{search.strip()}%"
         q = q.filter(
@@ -327,6 +336,8 @@ def list_expenses(
             "currency": r.currency,
             "price_per_unit": r.price_per_unit,
             "group_id": r.group_id,
+            "source_bill_id": r.source_bill_id,
+            "bill_total_only": bool(r.bill_total_only),
             "created_by": (
                 (creators.get(r.user_id) or "Deleted user") if r.user_id is not None else "Deleted user"
             ) if r.group_id is not None else None,
@@ -361,14 +372,44 @@ def create_expenses_bulk(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Add several line items from a single bill/receipt in one request."""
+    """Add several line items from a single bill/receipt in one request.
+
+    With ``bill_id`` the items itemise that bill: they are linked to it, the bill becomes
+    "itemised", and the single total-only expense it may have had is removed (replaced by
+    the items) in the same transaction, so nothing is double counted.
+    """
     for item in payload.items:
         _require_group_write_access(db, item.group_id, user.id)
+
+    bill = None
+    if payload.bill_id is not None:
+        bill = db.get(models.PendingBill, payload.bill_id)
+        if bill is None or bill.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Bill not found")
+        # Claim the bill atomically: two simultaneous submissions can't both itemise it.
+        claimed = (
+            db.query(models.PendingBill)
+            .filter(
+                models.PendingBill.id == bill.id,
+                models.PendingBill.status.in_(("pending", "total_only")),
+            )
+            .update({"status": "itemised"}, synchronize_session=False)
+        )
+        if claimed != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This bill has already been itemised")
+        db.query(models.Expense).filter(
+            models.Expense.source_bill_id == bill.id,
+            models.Expense.bill_total_only.is_(True),
+            models.Expense.user_id == user.id,
+        ).delete(synchronize_session=False)
 
     created: list[models.Expense] = []
     for item in payload.items:
         data = item.model_dump()
         data["currency"] = data["currency"] or default_currency_for(db, user.id, item.group_id)
+        if bill is not None:
+            data["source_bill_id"] = bill.id
         expense = models.Expense(user_id=user.id, **data)
         expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
         db.add(expense)
@@ -409,7 +450,17 @@ def delete_expense(
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
     _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
+    reopen_bill_id = expense.source_bill_id if expense.bill_total_only else None
+    owner_id = expense.user_id
     db.delete(expense)
+    if reopen_bill_id is not None:
+        # The recorded total is gone, so the bill goes back to "to itemise" rather than
+        # claiming a spend that no longer exists.
+        db.query(models.PendingBill).filter(
+            models.PendingBill.id == reopen_bill_id,
+            models.PendingBill.user_id == owner_id,
+            models.PendingBill.status == "total_only",
+        ).update({"status": "pending"}, synchronize_session=False)
     db.commit()
 
 

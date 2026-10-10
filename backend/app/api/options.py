@@ -121,6 +121,8 @@ def _serialize(opts: models.UserOptions) -> dict:
         # Currency every total/budget/alert is shown in; follows base unless the user chose one.
         "display_currency": reporting_currency(opts),
         "display_currency_is_custom": opts.display_currency is not None,
+        # New bills are recorded as total-only expenses straight away (so budgets include them).
+        "count_bills_as_spending": bool(opts.count_bills_as_spending),
         # Currencies a record can be entered in (those with an exchange rate).
         "currencies": sorted(fx.supported_currencies()),
     }
@@ -337,6 +339,23 @@ def set_base_currency(
 ):
     opts = get_or_create_options(db, user.id)
     opts.base_currency = payload.currency.strip().upper()
+    db.commit()
+    return _serialize(opts)
+
+
+class BillsSettingIn(BaseModel):
+    enabled: bool
+
+
+@router.post("/options/count-bills-as-spending")
+def set_count_bills_as_spending(
+    payload: BillsSettingIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Turn "count new bills as spending straight away" on or off."""
+    opts = get_or_create_options(db, user.id)
+    opts.count_bills_as_spending = payload.enabled
     db.commit()
     return _serialize(opts)
 

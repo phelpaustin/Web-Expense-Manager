@@ -7,7 +7,7 @@ A personal and shared expense manager built with React, Vite, FastAPI, and SQLAl
 - Record, edit, search, filter, paginate, import, and export expenses. CSV and Excel imports support up to 10 MB and 10,000 rows; duplicate rows are skipped.
 - View spending trends, category breakdowns, forecasts, price history, cash flow, and financial metrics.
 - Set category and overall budgets, choose weekly, monthly, or annual tracking, and optionally carry unused or overspent amounts between periods.
-- Track income, recurring expenses, pending bills, manual bills, and receipts. Receipt upload supports PDF, JPEG, and PNG files up to 10 MB; field extraction is best-effort.
+- Track income, recurring expenses, bills (to itemise, total only, or itemised), and receipts. Receipt upload supports PDF, JPEG, and PNG files up to 10 MB; field extraction is best-effort.
 - Organize shared expenses in Expense Spaces with owner, admin, editor, and viewer roles. Members can invite people by email.
 - Track trips as separate shared spaces, with trip budgets, currencies, expenses, and equal-share settlement summaries.
 - Use password sign-in with email verification and password reset, or optionally enable Google sign-in.
@@ -97,7 +97,7 @@ Every amount keeps the currency it was entered in. Currencies are validated on w
 
 **Where a currency comes from.** Each expense, income entry, recurring template, and bill stores its own currency. When you don't pick one, it defaults to the Expense Space's currency (for expenses filed under a space) or to your base currency. A space's currency is chosen when it is created and only sets that default for *new* expenses: changing it later never alters existing expenses, and a trip's currency is the currency its summary and settlement are reported in. Budgets are stored in the currency they were set in (you can pick it when creating one) and converted for display, so changing your base or display currency never silently reinterprets them.
 
-**Base currency vs display currency.** Two separate settings. The *base currency* (Settings) is only the default for new records. The *display currency* is the currency every total, budget, bill ledger, income summary, metric, and alert is shown in; it follows your base currency until you choose one, and can be switched from the "View in" selector in the top bar or in Settings. Switching either one never changes stored data, because every record keeps the currency it was entered in and conversion happens when it is read.
+**Base currency vs display currency.** Two separate settings. The *base currency* (Settings) is only the default for new records. The *display currency* is the currency every total, budget, bills list, income summary, metric, and alert is shown in; it follows your base currency until you choose one, and can be switched from the "View in" selector in the top bar or in Settings. Switching either one never changes stored data, because every record keeps the currency it was entered in and conversion happens when it is read.
 
 **How conversion works.** Analytics, budgets, metrics, bills, and trip summaries convert each record into the reporting currency using the exchange rate **for the record's own date** (weekends and holidays use the previous business day's rate). Final historical rates never change, so they are cached permanently in the `fx_rates` table and later requests make no network call. Rates for today, the future, and any weekend not yet followed by a published business day are provisional: they are held in memory briefly and never stored. If a historical rate cannot be loaded (for example during a provider outage), the latest rate is used instead and the exact rate is picked up on a later request. A record whose currency has no rate at all is left out of aggregates and counted in the dashboard warning rather than failing the page. Budgets for a past month convert at that month's end-of-month rate; the current period uses the latest rate. A trip's settlement is never guessed: if any trip expense can't be converted, the settlement lists those expenses instead of showing possibly wrong balances.
 
@@ -105,7 +105,13 @@ Recurring templates support daily, weekly, bi-weekly, monthly, quarterly, and ye
 
 ## Bills and receipts
 
-Pending bills can be entered manually, imported from CSV or Excel bank statements, or created from an uploaded receipt. Bulk-import rows matching an existing expense or bill are marked as possible duplicates for review. Receipts can be PDFs, JPEGs, or PNGs. PDF text extraction works without an OCR system package; image OCR also requires the Tesseract system binary and may not be available on the default Render runtime.
+Bills can be added by hand, imported from CSV or Excel bank statements (`,` or `;` delimited, decimal commas, UTF-8 or Windows-1252; only money going out becomes a bill), or created from an uploaded receipt. Everything lives in one paginated list on the Bills page, and every bill is in one of three states:
+
+- **To itemise**: not counted as spending yet.
+- **Total only**: recorded as a single expense for the whole amount (category "Bills" unless you pick another), so it counts towards budgets and analytics straight away. Expenses like this are highlighted on the Expenses page (with a **Total only** badge, an **Itemise** button, and a filter).
+- **Itemised**: broken down into its line items.
+
+By default (Settings → Bills, or the toggle on the Bills page) every new bill is recorded as **Total only** immediately, so you can itemise whenever you like. **Itemise** opens the Expenses "Add by bill" screen prefilled with the bill (date, shop, currency, total and any receipt); when you submit the items they replace the single total line in one step, so nothing is counted twice. **Undo** takes a recorded total back and returns the bill to To itemise. With the setting off, bills wait in To itemise until you record or itemise them. Bills flagged as possible duplicates (same date and amount as an existing expense or bill) are never recorded automatically; review them first. Uploading a receipt that matches a bill you already have (same date and amount) offers to attach it to that bill instead of creating a second one. Receipts stay attached through every state until you remove them or delete the bill. Deleting a bill keeps any expenses made from it. Receipts can be PDFs, JPEGs, or PNGs. PDF text extraction works without an OCR system package; image OCR also requires the Tesseract system binary and may not be available on the default Render runtime.
 
 ## Database
 

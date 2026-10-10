@@ -1,7 +1,9 @@
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { TotalOnlyBadge } from '../components/BillStatus.jsx'
 import { money } from '../format.js'
-import { suggestCategory, autoCategorize, fetchExpenses } from '../api/client.js'
+import { suggestCategory, autoCategorize, fetchExpenses, viewReceipt } from '../api/client.js'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
@@ -56,6 +58,11 @@ export default function ExpensesPage({
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [groupByBill, setGroupByBill] = useState(true)
+  const [filterTotalOnly, setFilterTotalOnly] = useState(false)
+  // The bill whose items are being entered (set when coming from the Bills page or a total-only row).
+  const [itemisingBill, setItemisingBill] = useState(null)
+  const location = useLocation()
+  const navigate = useNavigate()
   const [expandedBillKeys, setExpandedBillKeys] = useState(() => new Set())
 
   const [pageExpenses, setPageExpenses] = useState([])
@@ -91,6 +98,7 @@ export default function ExpensesPage({
       shop: filterShop,
       date_from: dateFrom,
       date_to: dateTo,
+      total_only: filterTotalOnly ? 'true' : '',
       page,
       page_size: pageSize,
     })
@@ -100,7 +108,7 @@ export default function ExpensesPage({
       })
       .catch((err) => onError?.(err.message))
       .finally(() => setLoadingExpenses(false))
-  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, page, pageSize, onError])
+  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, filterTotalOnly, page, pageSize, onError])
 
   // Fetch the current page whenever filters/pagination change (and once on mount).
   useEffect(() => {
@@ -159,7 +167,7 @@ export default function ExpensesPage({
     }
   }
 
-  const hasActiveFilters = search || filterCategory || filterShop || filterGroup || dateFrom || dateTo
+  const hasActiveFilters = search || filterCategory || filterShop || filterGroup || dateFrom || dateTo || filterTotalOnly
 
   function clearFilters() {
     setSearch('')
@@ -168,6 +176,7 @@ export default function ExpensesPage({
     setFilterGroup('')
     setDateFrom('')
     setDateTo('')
+    setFilterTotalOnly(false)
     setPage(1)
   }
 
@@ -219,9 +228,56 @@ export default function ExpensesPage({
     if (billMode && billItems.length > 0 && !window.confirm(`Discard ${billItems.length} unsaved item(s) from this bill?`)) {
       return
     }
+    if (billMode && itemisingBill) setForm((f) => ({ ...f, shop: '' }))
     setBillMode((v) => !v)
     setBillItems([])
     setReceiptTotal('')
+    setItemisingBill(null)
+  }
+
+  // Start entering the items of a bill: bill mode, with its date/shop/currency/total filled in.
+  function beginItemising(bill) {
+    setItemisingBill(bill)
+    setBillMode(true)
+    setBillItems([])
+    setReceiptTotal(String(Number(bill.amount)))
+    setForm((f) => ({
+      ...f,
+      date: bill.date,
+      shop: bill.shop,
+      currency: bill.currency,
+      group_id: '',
+      category: '',
+      subcategory: '',
+      description: '',
+      brand: '',
+      amount: '',
+      quantity: '1',
+      unit: 'Count',
+    }))
+    document.getElementById('add-expense-panel')?.scrollIntoView?.({ behavior: 'smooth' })
+  }
+
+  // Arriving from the Bills page ("Itemise"): pick the bill up from the navigation state, then clear it
+  // so a refresh doesn't start itemising again.
+  useEffect(() => {
+    const bill = location.state?.itemiseBill
+    if (!bill) return
+    beginItemising(bill)
+    navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
+
+  // From a total-only row: the expense stands in for its bill (same date, shop name, amount, currency).
+  function itemiseFromExpense(e) {
+    beginItemising({
+      id: e.source_bill_id,
+      date: e.date,
+      shop: e.description,
+      amount: e.amount,
+      currency: e.currency,
+      status: 'total_only',
+    })
   }
 
   // In bill mode, submitting the form stashes the current line item locally
@@ -282,10 +338,15 @@ export default function ExpensesPage({
             currency: it.currency || effectiveCurrency,
             group_id: form.group_id ? parseInt(form.group_id, 10) : null,
           })),
+          itemisingBill?.id,
         ),
       )
       setBillItems([])
       setReceiptTotal('')
+      if (itemisingBill) {
+        setItemisingBill(null)
+        setBillMode(false)
+      }
       setForm((f) => ({
         ...f,
         category: '',
@@ -456,12 +517,15 @@ export default function ExpensesPage({
       )
     }
     return (
-      <tr key={e.id}>
+      <tr key={e.id} className={e.bill_total_only ? 'row-total-only' : ''}>
         <td>{e.date}</td>
         <td>{e.category}</td>
         <td>{e.subcategory}</td>
         <td>{e.shop}</td>
-        <td>{e.description}</td>
+        <td>
+          {e.description}
+          {e.bill_total_only && <TotalOnlyBadge />}
+        </td>
         <td>
           {groupName(e.group_id) ? (
             <span title={e.created_by ? `Added by ${e.created_by}` : undefined}>
@@ -477,6 +541,11 @@ export default function ExpensesPage({
           {money(e.amount, e.currency)}
         </td>
         <td className="right nowrap">
+          {canEditExpense(e) && e.bill_total_only && e.source_bill_id && (
+            <button className="mini-btn primary" onClick={() => itemiseFromExpense(e)} title="Enter the items on this bill; they replace this single total">
+              Itemise
+            </button>
+          )}
           {canEditExpense(e) && (
             <>
               <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
@@ -611,11 +680,31 @@ export default function ExpensesPage({
         </section>
       )}
 
-      <section className="panel">
+      <section className="panel" id="add-expense-panel">
         <h2>➕ Add expense</h2>
+        {itemisingBill && (
+          <div className="itemising-banner" role="status">
+            <div className="grow">
+              <strong>Itemising: {itemisingBill.shop}</strong> · {itemisingBill.date} · {money(itemisingBill.amount, itemisingBill.currency)}
+              <small>
+                {itemisingBill.status === 'total_only'
+                  ? 'Its single total line is replaced by these items when you submit, so nothing is counted twice.'
+                  : 'This bill becomes itemised when you submit its items.'}
+              </small>
+            </div>
+            {itemisingBill.has_receipt !== false && (
+              <button type="button" className="ghost-btn" onClick={() => viewReceipt(itemisingBill.id).catch((err) => onError?.(err.message))}>
+                📎 View receipt
+              </button>
+            )}
+            <button type="button" className="ghost-btn" onClick={toggleBillMode}>
+              Cancel
+            </button>
+          </div>
+        )}
         <div className="auto-cat-row">
           <button type="button" className="ghost-btn" onClick={toggleBillMode}>
-            {billMode ? '✕ Exit bill mode' : '🧾 Add by bill'}
+            {billMode ? (itemisingBill ? '✕ Cancel itemising' : '✕ Exit bill mode') : '🧾 Add by bill'}
           </button>
           {billMode && (
             <span className="subtitle">
@@ -874,6 +963,14 @@ export default function ExpensesPage({
               value={dateTo}
               onChange={(e) => resetToFirstPage(setDateTo)(e.target.value)}
             />
+            <label className="toggle-row inline-toggle" title="Show only expenses that are a bill's total with no items yet">
+              <input
+                type="checkbox"
+                checked={filterTotalOnly}
+                onChange={(e) => resetToFirstPage(setFilterTotalOnly)(e.target.checked)}
+              />
+              <span>Total-only bills</span>
+            </label>
             {hasActiveFilters && (
               <button type="button" className="ghost-btn" onClick={clearFilters}>
                 Clear filters
@@ -908,13 +1005,36 @@ export default function ExpensesPage({
             {groupByBill
               ? billGroups.map((group) => {
                   const isExpanded = expandedBillKeys.has(group.key)
+                  // A bill recorded as a total only (no items yet) is flagged right on its header,
+                  // so it is visible without expanding and can be itemised from there.
+                  const totalOnlyItems = group.items.filter((e) => e.bill_total_only)
+                  const allTotalOnly = totalOnlyItems.length === group.items.length
+                  const single = group.items.length === 1 ? group.items[0] : null
+                  const name = group.shop || (allTotalOnly && single ? single.description : '') || 'No shop'
                   return (
                     <Fragment key={group.key}>
-                      <tr className="bill-group-header clickable-row" onClick={() => toggleBillGroup(group.key)}>
+                      <tr
+                        className={`bill-group-header clickable-row${allTotalOnly ? ' row-total-only' : ''}`}
+                        onClick={() => toggleBillGroup(group.key)}
+                      >
                         <td colSpan={10}>
-                          {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {group.shop || 'No shop'} · {group.items.length}{' '}
+                          {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {name} · {group.items.length}{' '}
                           item{group.items.length === 1 ? '' : 's'} · Bill total:{' '}
                           {money(group.items.reduce((sum, e) => sum + e.amount, 0), group.currency)}
+                          {totalOnlyItems.length > 0 && <TotalOnlyBadge />}
+                          {allTotalOnly && single && single.source_bill_id && canEditExpense(single) && (
+                            <button
+                              type="button"
+                              className="mini-btn primary"
+                              onClick={(ev) => {
+                                ev.stopPropagation()
+                                itemiseFromExpense(single)
+                              }}
+                              title="Enter the items on this bill; they replace this single total"
+                            >
+                              Itemise
+                            </button>
+                          )}
                         </td>
                       </tr>
                       {isExpanded && group.items.map((e) => renderExpenseRow(e))}

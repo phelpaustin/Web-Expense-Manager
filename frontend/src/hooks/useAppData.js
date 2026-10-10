@@ -7,8 +7,6 @@ import {
   fetchIncome,
   fetchIncomeSummary,
   fetchRecurring,
-  fetchPendingBills,
-  fetchLedger,
   fetchOptions,
   fetchMetrics,
   fetchBudgetConfig,
@@ -34,8 +32,6 @@ export function useAppData() {
   const [income, setIncome] = useState([])
   const [incomeSummary, setIncomeSummary] = useState(null)
   const [recurring, setRecurring] = useState([])
-  const [pendingBills, setPendingBills] = useState([])
-  const [ledger, setLedger] = useState([])
   const [options, setOptions] = useState(EMPTY_OPTIONS)
   const [metrics, setMetrics] = useState(null)
   const [periodStatus, setPeriodStatus] = useState(null)
@@ -72,8 +68,6 @@ export function useAppData() {
       { load: () => fetchIncome(), apply: setIncome },
       { load: () => fetchIncomeSummary(), apply: setIncomeSummary },
       { load: () => fetchRecurring(), apply: setRecurring },
-      { load: () => fetchPendingBills(), apply: setPendingBills },
-      { load: () => fetchLedger(), apply: setLedger },
       {
         load: () => fetchOptions(),
         apply: (opts) => {
@@ -127,8 +121,6 @@ export function useAppData() {
     setIncome([])
     setIncomeSummary(null)
     setRecurring([])
-    setPendingBills([])
-    setLedger([])
     setOptions(EMPTY_OPTIONS)
     setMetrics(null)
     setPeriodStatus(null)
@@ -158,8 +150,6 @@ export function useAppData() {
     income,
     incomeSummary,
     recurring,
-    pendingBills,
-    ledger,
     options,
     setOptions,
     metrics,

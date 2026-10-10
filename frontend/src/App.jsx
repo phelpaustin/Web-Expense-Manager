@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useNavigate } from 'react-router-dom'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
@@ -32,7 +32,8 @@ export default function App() {
   const expense = useExpenseHandlers(data.loadAll, data.setError)
   const income = useIncomeHandlers(data.loadAll, data.setError)
   const recurring = useRecurringHandlers(data.loadAll, data.setError)
-  const bills = useBillsHandlers(data.loadAll, data.setError, data.pendingBills)
+  const navigate = useNavigate()
+  const bills = useBillsHandlers(data.loadAll, data.setError, data.setOptions, navigate, !!auth.user)
   const tripHandlers = useTripHandlers(data.loadAll, data.setError)
   const groupHandlers = useGroupHandlers(data.loadAll, data.setError)
   const budgetHandlers = useBudgetHandlers(data.loadAll, data.setError)
@@ -170,29 +171,7 @@ export default function App() {
         <Route
           path="bills"
           element={
-            <BillsPage
-              currencies={data.options.currencies}
-              baseCurrency={data.options.base_currency}
-              pendingBills={data.pendingBills}
-              pendingForm={bills.pendingForm}
-              setPendingForm={bills.setPendingForm}
-              onAddPending={bills.handleAddPending}
-              onItemise={bills.handleItemise}
-              onDeletePending={bills.handleDeletePending}
-              onUploadReceipt={bills.handleUploadReceipt}
-              onUploadBill={bills.handleUploadBill}
-              onBulkUploadBills={bills.handleBulkUploadBills}
-              bulkImportNotice={bills.bulkImportNotice}
-              onDismissBulkNotice={() => bills.setBulkImportNotice(null)}
-              onDismissDuplicate={bills.handleDismissDuplicate}
-              onViewReceipt={bills.handleViewReceipt}
-              onDeleteReceipt={bills.handleDeleteReceipt}
-              ledger={data.ledger}
-              manualForm={bills.manualForm}
-              setManualForm={bills.setManualForm}
-              onAddManual={bills.handleAddManual}
-              onDeleteManual={bills.handleDeleteManual}
-            />
+            <BillsPage state={bills} options={data.options} />
           }
         />
         <Route

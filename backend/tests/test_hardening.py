@@ -83,51 +83,59 @@ def test_oversized_amounts_are_rejected_not_a_database_error(client, make_user):
     assert client.post("/api/expenses", json={"date": TODAY, "category": "F", "amount": "9999999999.99"}, headers=h).status_code == 201
 
 
-# ── itemise ──────────────────────────────────────────────────────────────
+# ── record total (the old one-click "itemise") ───────────────────────────
+def _manual_mode(client, h):
+    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h)
+
+
 def _bill(client, h, amount="50", shop="Elbolag"):
     return client.post("/api/pending-bills", json={"date": TODAY, "shop": shop, "amount": amount}, headers=h).json()
 
 
-def test_itemise_happens_once(client, make_user):
+def test_recording_a_total_happens_once(client, make_user):
     _, h = make_user()
+    _manual_mode(client, h)
     b = _bill(client, h)
-    assert client.post(f"/api/pending-bills/{b['id']}/itemise", headers=h).status_code == 200
-    again = client.post(f"/api/pending-bills/{b['id']}/itemise", headers=h)
+    assert client.post(f"/api/bills/{b['id']}/record-total", headers=h).status_code == 200
+    again = client.post(f"/api/bills/{b['id']}/record-total", headers=h)
     assert again.status_code == 409 and "already" in again.json()["detail"]
     assert client.get("/api/expenses?search=Elbolag", headers=h).json()["total"] == 1  # not duplicated
 
 
-def test_itemise_rejects_zero_and_negative_amounts(client, make_user):
+def test_record_total_rejects_zero_and_negative_amounts(client, make_user):
     _, h = make_user()
+    _manual_mode(client, h)
     b = _bill(client, h)
-    assert client.post(f"/api/pending-bills/{b['id']}/itemise?amount=-500", headers=h).status_code == 422
-    assert client.post(f"/api/pending-bills/{b['id']}/itemise?amount=0", headers=h).status_code == 422
+    assert client.post(f"/api/bills/{b['id']}/record-total", json={"amount": "-500"}, headers=h).status_code == 422
+    assert client.post(f"/api/bills/{b['id']}/record-total", json={"amount": "0"}, headers=h).status_code == 422
     assert client.get("/api/expenses?search=Elbolag", headers=h).json()["total"] == 0
-    # the bill is still pending and can be itemised properly afterwards
-    assert client.post(f"/api/pending-bills/{b['id']}/itemise?amount=42", headers=h).status_code == 200
+    # the bill is still pending and can be recorded properly afterwards
+    assert client.post(f"/api/bills/{b['id']}/record-total", json={"amount": "42"}, headers=h).status_code == 200
     assert Decimal(str(client.get("/api/expenses?search=Elbolag", headers=h).json()["items"][0]["amount"])) == Decimal("42")
 
 
-def test_itemise_needs_an_amount_when_the_bill_has_none(client, make_user):
+def test_record_total_needs_an_amount_when_the_bill_has_none(client, make_user):
     uid, h = make_user()
+    _manual_mode(client, h)
     r = client.post("/api/pending-bills/upload", files={"file": ("r.pdf", PDF, "application/pdf")}, data={"shop": "Cafe"}, headers=h)
     assert r.status_code == 201, r.text
-    bid = r.json()["id"]
-    if Decimal(str(r.json()["amount"])) == 0:
-        no_amount = client.post(f"/api/pending-bills/{bid}/itemise", headers=h)
+    bill = r.json()["bill"]
+    if Decimal(str(bill["amount"])) == 0:
+        no_amount = client.post(f"/api/bills/{bill['id']}/record-total", headers=h)
         assert no_amount.status_code == 400 and "greater than zero" in no_amount.json()["detail"]
-    assert client.post(f"/api/pending-bills/{bid}/itemise?amount=9", headers=h).status_code == 200
+    assert client.post(f"/api/bills/{bill['id']}/record-total", json={"amount": "9"}, headers=h).status_code == 200
 
 
-def test_itemise_claim_is_atomic(client, make_user):
+def test_record_total_claim_is_atomic(client, make_user):
     """If the bill was already claimed after it was read, no expense is created."""
     uid, h = make_user()
+    _manual_mode(client, h)
     b = _bill(client, h, shop="Race")
     db = SessionLocal()
     db.query(models.PendingBill).filter(models.PendingBill.id == b["id"]).update({"status": "itemised"})
     db.commit()
     db.close()
-    assert client.post(f"/api/pending-bills/{b['id']}/itemise", headers=h).status_code == 409
+    assert client.post(f"/api/bills/{b['id']}/record-total", headers=h).status_code == 409
     assert client.get("/api/expenses?search=Race", headers=h).json()["total"] == 0
 
 
@@ -143,7 +151,7 @@ def test_receipt_download_works_for_any_filename(client, make_user, name):
     _, h = make_user()
     r = client.post("/api/pending-bills/upload", files={"file": (name, PDF, "application/pdf")}, data={"shop": "S", "amount": "5"}, headers=h)
     assert r.status_code == 201, r.text
-    got = client.get(f"/api/pending-bills/{r.json()['id']}/receipt", headers=h)
+    got = client.get(f"/api/pending-bills/{r.json()['bill']['id']}/receipt", headers=h)
     assert got.status_code == 200, got.text  # used to be a 500 for non-Latin-1 names
     cd = got.headers["content-disposition"]
     assert cd.startswith("inline; filename=") and "filename*=UTF-8''" in cd

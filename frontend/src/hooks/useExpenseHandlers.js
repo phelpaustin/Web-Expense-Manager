@@ -81,8 +81,9 @@ export function useExpenseHandlers(loadAll, setError) {
     await loadAll()
   }
 
-  async function handleAddBill(items) {
-    await createExpensesBulk(items)
+  // billId: the bill these items itemise (replaces its single total-only expense, if any).
+  async function handleAddBill(items, billId) {
+    await createExpensesBulk(items, billId)
     await loadAll()
   }
 

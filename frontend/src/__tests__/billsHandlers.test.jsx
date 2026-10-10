@@ -1,0 +1,328 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, act, waitFor } from '@testing-library/react'
+
+vi.mock('../api/client.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  const mocked = {}
+  for (const k of Object.keys(actual)) mocked[k] = vi.fn(async () => ({}))
+  return mocked
+})
+
+import * as client from '../api/client.js'
+import { useBillsHandlers, billForItemising, DEFAULT_QUERY } from '../hooks/useBillsHandlers.js'
+
+const COUNTS = { pending: 2, total_only: 1, itemised: 0, all: 3 }
+const page = (items, extra = {}) => ({ items, total: items.length, page: 1, page_size: 25, counts: COUNTS, ...extra })
+const BILL = (id, extra = {}) => ({ id, date: '2026-07-21', shop: `Shop ${id}`, amount: 10, currency: 'SEK', status: 'pending', has_receipt: false, ...extra })
+
+let loadAll, setError, setOptions, navigate
+const setup = async (enabled = true) => {
+  const hook = renderHook(() => useBillsHandlers(loadAll, setError, setOptions, navigate, enabled))
+  await waitFor(() => expect(hook.result.current.loading).toBe(false))
+  return hook
+}
+const lastParams = () => client.fetchBills.mock.calls.at(-1)[0]
+
+beforeEach(() => {
+  loadAll = vi.fn(async () => {})
+  setError = vi.fn()
+  setOptions = vi.fn()
+  navigate = vi.fn()
+  client.fetchBills.mockImplementation(async () => page([BILL(1), BILL(2)]))
+})
+afterEach(() => vi.restoreAllMocks())
+
+describe('loading', () => {
+  it('loads the first page of to-itemise bills once signed in', async () => {
+    const { result } = await setup()
+    expect(client.fetchBills).toHaveBeenCalledTimes(1)
+    expect(lastParams()).toEqual(DEFAULT_QUERY)
+    expect(result.current.data.items.map((b) => b.id)).toEqual([1, 2])
+    expect(result.current.data.counts).toEqual(COUNTS)
+  })
+
+  it('does nothing before sign-in (no 401 on the login screen)', async () => {
+    renderHook(() => useBillsHandlers(loadAll, setError, setOptions, navigate, false))
+    await act(async () => {})
+    expect(client.fetchBills).not.toHaveBeenCalled()
+  })
+
+  it('reloads on the first page when the tab, search or sort changes', async () => {
+    const { result } = await setup()
+    await act(async () => { result.current.setQuery({ page: 3 }) })
+    await waitFor(() => expect(lastParams().page).toBe(3))
+    await act(async () => { result.current.setQuery({ status: 'itemised' }) })
+    await waitFor(() => expect(lastParams()).toMatchObject({ status: 'itemised', page: 1 }))
+    await act(async () => { result.current.setQuery({ q: 'lidl', sort: 'shop' }) })
+    await waitFor(() => expect(lastParams()).toMatchObject({ q: 'lidl', sort: 'shop', page: 1 }))
+  })
+
+  it('reports a load failure without crashing', async () => {
+    client.fetchBills.mockRejectedValueOnce(new Error('boom'))
+    await setup()
+    expect(setError).toHaveBeenCalledWith('boom')
+  })
+
+  it('steps back a page when the current one is empty after a delete', async () => {
+    client.fetchBills.mockImplementation(async (q) => (q.page === 2 ? { ...page([]), total: 25, page: 2 } : page([BILL(1)], { total: 25 })))
+    const { result } = await setup()
+    await act(async () => { result.current.setQuery({ page: 2 }) })
+    await waitFor(() => expect(lastParams().page).toBe(1))
+    expect(result.current.query.page).toBe(1)
+  })
+})
+
+describe('selection', () => {
+  it('toggles, selects the page and clears', async () => {
+    const { result } = await setup()
+    act(() => result.current.toggleSelect(1))
+    expect([...result.current.selected]).toEqual([1])
+    act(() => result.current.toggleSelect(1))
+    expect(result.current.selected.size).toBe(0)
+    act(() => result.current.selectPage())
+    expect([...result.current.selected].sort()).toEqual([1, 2])
+    act(() => result.current.clearSelection())
+    expect(result.current.selected.size).toBe(0)
+  })
+
+  it('keeps the selection across pages but drops it when the tab or search changes', async () => {
+    const { result } = await setup()
+    act(() => result.current.toggleSelect(1))
+    await act(async () => { result.current.setQuery({ page: 2 }) })
+    expect(result.current.selected.has(1)).toBe(true)
+    await act(async () => { result.current.setQuery({ status: 'total_only' }) })
+    expect(result.current.selected.size).toBe(0)
+  })
+})
+
+describe('uploading a receipt', () => {
+  const file = new File(['x'], 'lidl.pdf', { type: 'application/pdf' })
+
+  it('attaches it to the matching bill when you agree (no double counting)', async () => {
+    const match = BILL(7, { shop: 'LIDL145MALMOBA', amount: 35.91 })
+    client.uploadBill
+      .mockResolvedValueOnce({ result: 'match_found', matches: [match] })
+      .mockResolvedValueOnce({ result: 'attached', bill: match })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.uploadBill(file) })
+    expect(window.confirm.mock.calls[0][0]).toMatch(/LIDL145MALMOBA/)
+    expect(client.uploadBill).toHaveBeenNthCalledWith(2, file, { attachTo: 7 })
+    expect(result.current.notice.text).toMatch(/attached to LIDL145MALMOBA/)
+    expect(loadAll).toHaveBeenCalled()
+  })
+
+  it('creates a separate bill when you decline', async () => {
+    client.uploadBill
+      .mockResolvedValueOnce({ result: 'match_found', matches: [BILL(7)] })
+      .mockResolvedValueOnce({ result: 'created', bill: BILL(8, { status: 'total_only' }) })
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.uploadBill(file) })
+    expect(client.uploadBill).toHaveBeenNthCalledWith(2, file, { createNew: true })
+  })
+
+  it.each([
+    [{ result: 'created', bill: BILL(1, { status: 'total_only', amount: 12 }) }, /counted as spending/],
+    [{ result: 'created', bill: BILL(1, { status: 'pending', amount: 12 }) }, /to itemise/],
+    [{ result: 'created', bill: BILL(1, { status: 'pending', amount: 0 }) }, /could not be read/],
+  ])('explains what happened to a new bill', async (response, text) => {
+    client.uploadBill.mockResolvedValueOnce(response)
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.uploadBill(file) })
+    expect(result.current.notice.text).toMatch(text)
+    expect(client.uploadBill).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a failed upload', async () => {
+    client.uploadBill.mockRejectedValueOnce(new Error('File too large (max 10 MB)'))
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.uploadBill(file) })
+    expect(setError).toHaveBeenCalledWith('File too large (max 10 MB)')
+  })
+})
+
+describe('importing a bank statement', () => {
+  const sheet = new File(['x'], 's.csv', { type: 'text/csv' })
+
+  it('summarises the import and lands on what needs attention', async () => {
+    client.bulkUploadPendingBills.mockResolvedValueOnce({
+      created: 10, auto_recorded: 8, possible_duplicates: 2, skipped: [{ row: 4, reason: 'bad amount' }],
+    })
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.bulkUpload(sheet) })
+    expect(result.current.notice.text).toBe('Imported 10 bills · 8 counted as spending (itemise them whenever you like) · 2 possible duplicates left for you to review · 1 row skipped.')
+    expect(result.current.notice.details).toEqual(['Row 4: bad amount'])
+    expect(result.current.query.status).toBe('pending') // duplicates to review
+    expect(loadAll).toHaveBeenCalled()
+  })
+
+  it('shows the recorded totals when there is nothing to review', async () => {
+    client.bulkUploadPendingBills.mockResolvedValueOnce({ created: 5, auto_recorded: 5, possible_duplicates: 0, skipped: [] })
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.bulkUpload(sheet) })
+    expect(result.current.query.status).toBe('total_only')
+  })
+
+  it('shows to-itemise when the setting is off and nothing was recorded', async () => {
+    client.bulkUploadPendingBills.mockResolvedValueOnce({ created: 5, auto_recorded: 0, possible_duplicates: 0, skipped: [] })
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.bulkUpload(sheet) })
+    expect(result.current.query.status).toBe('pending')
+    expect(result.current.notice.text).not.toMatch(/counted as spending/)
+  })
+})
+
+describe('recording totals, undoing, deleting', () => {
+  it('records a bill with the chosen category and refreshes the totals', async () => {
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.recordTotal(BILL(1), 'Groceries') })
+    expect(client.recordBillTotal).toHaveBeenCalledWith(1, { category: 'Groceries', amount: undefined })
+    expect(loadAll).toHaveBeenCalled() // budgets/dashboard include the new total
+    expect(client.fetchBills.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('asks for the amount when the bill has none', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('42.5')
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.recordTotal(BILL(1, { amount: 0 }), 'Bills') })
+    expect(client.recordBillTotal).toHaveBeenCalledWith(1, { category: 'Bills', amount: 42.5 })
+  })
+
+  it('does nothing if that prompt is cancelled, and rejects an invalid amount', async () => {
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce(null).mockReturnValueOnce('abc').mockReturnValueOnce('-3')
+    const { result } = await setup()
+    for (let i = 0; i < 3; i++) await act(async () => { await result.current.actions.recordTotal(BILL(1, { amount: 0 }), 'Bills') })
+    expect(prompt).toHaveBeenCalledTimes(3)
+    expect(client.recordBillTotal).not.toHaveBeenCalled()
+    expect(setError).toHaveBeenCalledTimes(2)
+  })
+
+  it('bulk-records the selection, reports skips and clears the selection', async () => {
+    client.recordBillTotals.mockResolvedValueOnce({ recorded: 2, skipped: [{ id: 9, reason: 'Possible duplicate: review it first' }] })
+    const { result } = await setup()
+    act(() => { result.current.toggleSelect(1); result.current.toggleSelect(2); result.current.toggleSelect(9) })
+    await act(async () => { await result.current.actions.bulkRecord('Food') })
+    expect(client.recordBillTotals).toHaveBeenCalledWith([1, 2, 9], 'Food')
+    expect(result.current.notice.text).toBe('Recorded 2 bills as spending, skipped 1.')
+    expect(result.current.notice.details).toEqual(['Possible duplicate: review it first'])
+    expect(result.current.selected.size).toBe(0)
+    expect(loadAll).toHaveBeenCalled()
+  })
+
+  it('undoes a recorded total', async () => {
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.undo(BILL(2, { status: 'total_only' })) })
+    expect(client.undoBillTotal).toHaveBeenCalledWith(2)
+    expect(loadAll).toHaveBeenCalled()
+  })
+
+  it('only deletes after you confirm', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.remove(BILL(1)) })
+    expect(client.deletePendingBill).not.toHaveBeenCalled()
+    await act(async () => { await result.current.actions.remove(BILL(1)) })
+    expect(client.deletePendingBill).toHaveBeenCalledWith(1)
+    expect(confirm).toHaveBeenCalledTimes(2)
+  })
+
+  it('tells you expenses are kept when deleting an itemised bill', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.remove(BILL(3, { status: 'itemised' })) })
+    expect(confirm.mock.calls[0][0]).toMatch(/expenses made from it are kept/)
+  })
+
+  it('bulk-deletes after confirming and reports skipped total-only bills', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    client.bulkDeleteBills.mockResolvedValueOnce({ deleted: 1, skipped: [{ id: 2, reason: 'Undo the recorded total first' }] })
+    const { result } = await setup()
+    act(() => { result.current.toggleSelect(1); result.current.toggleSelect(2) })
+    await act(async () => { await result.current.actions.bulkDelete() })
+    expect(client.bulkDeleteBills).toHaveBeenCalledWith([1, 2])
+    expect(result.current.notice.text).toBe('Deleted 1 bill, skipped 1 (undo their recorded total first).')
+    expect(result.current.selected.size).toBe(0)
+  })
+
+  it('does not bulk-delete when you cancel', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { result } = await setup()
+    act(() => result.current.toggleSelect(1))
+    await act(async () => { await result.current.actions.bulkDelete() })
+    expect(client.bulkDeleteBills).not.toHaveBeenCalled()
+    expect(result.current.selected.size).toBe(1)
+  })
+
+  it('reports a server refusal (e.g. already itemised) instead of failing silently', async () => {
+    client.recordBillTotal.mockRejectedValueOnce(new Error('This bill has already been recorded or itemised'))
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.recordTotal(BILL(1), 'Bills') })
+    expect(setError).toHaveBeenCalledWith('This bill has already been recorded or itemised')
+  })
+})
+
+describe('itemising later', () => {
+  it('opens the Expenses page prefilled with the bill', async () => {
+    const { result } = await setup()
+    act(() => result.current.actions.itemise(BILL(2, { status: 'total_only', has_receipt: true, note: 'ignored', possible_duplicate: true })))
+    expect(navigate).toHaveBeenCalledWith('/expenses', {
+      state: { itemiseBill: { id: 2, date: '2026-07-21', shop: 'Shop 2', amount: 10, currency: 'SEK', status: 'total_only', has_receipt: true } },
+    })
+  })
+
+  it('billForItemising keeps only what the Expenses page needs', () => {
+    expect(Object.keys(billForItemising(BILL(1, { note: 'x', item_count: 2 }))).sort()).toEqual(
+      ['amount', 'currency', 'date', 'has_receipt', 'id', 'shop', 'status'],
+    )
+  })
+})
+
+describe('adding a bill and receipts', () => {
+  it('rejects a zero or invalid amount without calling the server', async () => {
+    const { result } = await setup()
+    for (const bad of ['', '0', 'abc']) {
+      act(() => result.current.setForm({ date: '2026-07-21', shop: 'x', amount: bad, note: '', currency: '' }))
+      await act(async () => { await result.current.actions.add({ preventDefault() {} }) })
+    }
+    expect(client.createPendingBill).not.toHaveBeenCalled()
+    expect(setError).toHaveBeenCalledWith('Enter an amount greater than zero')
+  })
+
+  it('creates the bill, omits an unset currency and resets the form', async () => {
+    const { result } = await setup()
+    act(() => result.current.setForm({ date: '2026-07-21', shop: 'Coop', amount: '19.9', note: 'n', currency: '' }))
+    await act(async () => { await result.current.actions.add({ preventDefault() {} }) })
+    expect(client.createPendingBill).toHaveBeenCalledWith({ date: '2026-07-21', shop: 'Coop', amount: 19.9, note: 'n', currency: undefined })
+    expect(result.current.form.shop).toBe('')
+    expect(loadAll).toHaveBeenCalled()
+  })
+
+  it('attaches, views and removes receipts', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    client.viewReceipt.mockResolvedValue(undefined)
+    const { result } = await setup()
+    const file = new File(['x'], 'r.pdf')
+    await act(async () => { await result.current.actions.uploadReceipt(1, file) })
+    expect(client.uploadReceipt).toHaveBeenCalledWith(1, file)
+    act(() => result.current.actions.viewReceipt(1))
+    expect(client.viewReceipt).toHaveBeenCalledWith(1)
+    await act(async () => { await result.current.actions.deleteReceipt(1) })
+    expect(client.deleteReceipt).toHaveBeenCalledWith(1)
+  })
+
+  it('clears the duplicate warning without refreshing the dashboard', async () => {
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.dismissDuplicate(4) })
+    expect(client.dismissDuplicate).toHaveBeenCalledWith(4)
+    expect(loadAll).not.toHaveBeenCalled()
+  })
+
+  it('saves the spending setting and hands the new options to the app', async () => {
+    client.saveCountBillsAsSpending.mockResolvedValueOnce({ count_bills_as_spending: false })
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.toggleCount(false) })
+    expect(client.saveCountBillsAsSpending).toHaveBeenCalledWith(false)
+    expect(setOptions).toHaveBeenCalledWith({ count_bills_as_spending: false })
+  })
+})
