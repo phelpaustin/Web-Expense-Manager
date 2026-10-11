@@ -1,4 +1,5 @@
 import CurrencySelect from '../components/CurrencySelect.jsx'
+import Switch from '../components/Switch.jsx'
 import { saveCountBillsAsSpending } from '../api/client.js'
 import { useState } from 'react'
 import {
@@ -243,27 +244,18 @@ export default function SettingsPage({
 
           <section className="panel">
             <h2>Bills</h2>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={options.count_bills_as_spending !== false}
-                onChange={async (e) => {
-                  try {
-                    onOptionsUpdated(await saveCountBillsAsSpending(e.target.checked))
-                  } catch (err) {
-                    onError(err.message)
-                  }
-                }}
-              />
-              <span>
-                Count new bills as spending right away
-                <small>
-                  When on, uploaded, imported and added bills are recorded as a total-only expense, so they count towards
-                  your budgets straight away. Itemise them whenever you like; the items then replace the total. When off,
-                  bills wait in “To itemise” until you record or itemise them.
-                </small>
-              </span>
-            </label>
+            <Switch
+              checked={options.count_bills_as_spending !== false}
+              onChange={async (enabled) => {
+                try {
+                  onOptionsUpdated(await saveCountBillsAsSpending(enabled))
+                } catch (err) {
+                  onError(err.message)
+                }
+              }}
+              label="Count new bills as spending right away"
+              description="When on, uploaded, imported and added bills are recorded as a total-only expense, so they count towards your budgets straight away. Itemise them whenever you like; the items then replace the total. When off, bills wait in “To itemise” until you record or itemise them."
+            />
           </section>
 
           <section className="panel">

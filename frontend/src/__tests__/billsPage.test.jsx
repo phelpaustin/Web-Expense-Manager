@@ -38,6 +38,8 @@ const renderPage = (state = makeState(), options = OPTIONS) => {
   return state
 }
 const row = (text) => screen.getByText(text).closest('tr')
+const allTab = () => makeState({ query: { status: 'all', q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 } })
+const openMenu = (shop) => fireEvent.click(screen.getByRole('button', { name: `More actions for ${shop}` }))
 
 describe('Bills page: tabs and counts', () => {
   it('shows every tab with its count and marks the active one', () => {
@@ -56,15 +58,16 @@ describe('Bills page: tabs and counts', () => {
 })
 
 describe('Bills page: actions depend on the bill status', () => {
-  it('to itemise: Itemise, Record total and Delete (no Undo)', () => {
+  it('to itemise: Itemise and Record total are on the row; Delete is in the menu (no Undo)', () => {
     const state = renderPage()
     const r = within(row('INDO PAK MALMO'))
-    expect(r.getByText('To itemise')).toBeTruthy()
     fireEvent.click(r.getByRole('button', { name: 'Itemise' }))
     expect(state.actions.itemise).toHaveBeenCalledWith(expect.objectContaining({ id: 1, shop: 'INDO PAK MALMO' }))
     fireEvent.click(r.getByRole('button', { name: 'Record total' }))
     expect(state.actions.recordTotal).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'Bills')
-    fireEvent.click(r.getByRole('button', { name: 'Delete' }))
+    expect(r.queryByRole('button', { name: 'Delete' })).toBeNull() // not a loose button any more
+    openMenu('INDO PAK MALMO')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bill' }))
     expect(state.actions.remove).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }))
     expect(r.queryByRole('button', { name: 'Undo' })).toBeNull()
   })
@@ -72,24 +75,35 @@ describe('Bills page: actions depend on the bill status', () => {
   it('total only: can still be itemised or undone, but not deleted or recorded again', () => {
     const state = renderPage()
     const r = within(row('LIDL'))
-    expect(r.getByText('Total only')).toBeTruthy()
     fireEvent.click(r.getByRole('button', { name: 'Itemise' }))
     expect(state.actions.itemise).toHaveBeenCalledWith(expect.objectContaining({ id: 2, status: 'total_only' }))
     fireEvent.click(r.getByRole('button', { name: 'Undo' }))
     expect(state.actions.undo).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }))
-    expect(r.queryByRole('button', { name: 'Delete' })).toBeNull()
     expect(r.queryByRole('button', { name: 'Record total' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'More actions for LIDL' })).toBeNull() // nothing to put in a menu
   })
 
-  it('itemised: shows the item count and can only be deleted', () => {
+  it('itemised: only a delete in the menu', () => {
     const state = renderPage()
     const r = within(row('ICA KVANTUM'))
-    expect(r.getByText('Itemised · 3 items')).toBeTruthy()
     expect(r.queryByRole('button', { name: 'Itemise' })).toBeNull()
     expect(r.queryByRole('button', { name: 'Record total' })).toBeNull()
     expect(r.queryByRole('button', { name: 'Undo' })).toBeNull()
-    fireEvent.click(r.getByRole('button', { name: 'Delete' }))
+    openMenu('ICA KVANTUM')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete bill' }))
     expect(state.actions.remove).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }))
+  })
+
+  it('shows the status chip only on the All tab (on a status tab it would repeat on every row)', () => {
+    const { unmount } = render(<BillsPage state={makeState()} options={OPTIONS} />)
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull()
+    expect(within(row('INDO PAK MALMO')).queryByText('To itemise')).toBeNull()
+    unmount()
+    render(<BillsPage state={allTab()} options={OPTIONS} />)
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
+    expect(within(row('INDO PAK MALMO')).getByText('To itemise')).toBeTruthy()
+    expect(within(row('LIDL')).getByText('Total only')).toBeTruthy()
+    expect(within(row('ICA KVANTUM')).getByText('Itemised · 3 items')).toBeTruthy()
   })
 
   it('flags a possible duplicate and lets you clear the warning', () => {
@@ -107,6 +121,12 @@ describe('Bills page: actions depend on the bill status', () => {
     expect(within(row('Unreadable receipt')).getByText('no amount')).toBeTruthy()
     expect(screen.getByText(/my note/)).toBeTruthy() // user notes show; the "Bulk import" label does not
     expect(screen.queryByText(/Bulk import/)).toBeNull()
+  })
+
+  it('highlights selected rows', () => {
+    renderPage(makeState({ selected: new Set([1]) }))
+    expect(row('INDO PAK MALMO').className).toContain('row-selected')
+    expect(row('LIDL').className).not.toContain('row-selected')
   })
 
   it('records with the category chosen in the bulk bar', () => {
@@ -187,7 +207,7 @@ describe('Bills page: selection and the bulk bar', () => {
 describe('Bills page: the spending setting', () => {
   it('reflects the setting and toggles it', () => {
     const state = renderPage()
-    const box = screen.getByLabelText(/Count new bills as spending right away/)
+    const box = screen.getByRole('switch', { name: /Count new bills as spending right away/ })
     expect(box.checked).toBe(true)
     expect(screen.getByText(/count towards budgets/i)).toBeTruthy()
     fireEvent.click(box)
@@ -242,18 +262,28 @@ describe('Bills page: pagination and empty states', () => {
   })
 
   it.each([
-    ['pending', /Nothing is waiting/],
-    ['total_only', /recorded as a total only/],
-    ['itemised', /No itemised bills yet/],
-    ['all', /Upload a receipt, import a bank statement/],
-  ])('says something useful when the %s tab is empty', (status, text) => {
+    ['pending', 'Nothing is waiting'],
+    ['total_only', 'No total-only bills'],
+    ['itemised', 'No itemised bills yet'],
+    ['all', 'No bills yet'],
+  ])('says something useful when the %s tab is empty', (status, title) => {
     const state = makeState({
       data: { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } },
       query: { status, q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 },
     })
     renderPage(state)
-    expect(screen.getByText(text)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: title })).toBeTruthy()
     expect(screen.queryByRole('table')).toBeNull()
+  })
+
+  it('offers upload/import shortcuts only when there are no bills at all', () => {
+    const empty = { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } }
+    const query = (status) => ({ status, q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 })
+    const { unmount } = render(<BillsPage state={makeState({ data: empty, query: query('all') })} options={OPTIONS} />)
+    expect(screen.getAllByText(/Upload receipt/)).toHaveLength(2) // header + empty state
+    unmount()
+    render(<BillsPage state={makeState({ data: empty, query: query('pending') })} options={OPTIONS} />)
+    expect(screen.getAllByText(/Upload receipt/)).toHaveLength(1)
   })
 
   it('says nothing matched when a search finds nothing', () => {
@@ -262,7 +292,7 @@ describe('Bills page: pagination and empty states', () => {
       query: { status: 'pending', q: 'zzz', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 },
     })
     renderPage(state)
-    expect(screen.getByText('No bills match your search.')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'No bills match your search' })).toBeTruthy()
   })
 })
 
@@ -301,9 +331,19 @@ describe('Bills page: adding, uploading and notices', () => {
     expect(screen.getByText('…and 5 more')).toBeTruthy()
   })
 
-  it('shows a loading message only when there is nothing to show yet', () => {
+  it('shows a loading skeleton only when there is nothing to show yet', () => {
     const empty = { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } }
-    renderPage(makeState({ loading: true, data: empty }))
-    expect(screen.getByText('Loading…')).toBeTruthy()
+    const { container, unmount } = render(<BillsPage state={makeState({ loading: true, data: empty })} options={OPTIONS} />)
+    expect(container.querySelector('.skeleton-list')).not.toBeNull()
+    unmount()
+    const { container: loaded } = render(<BillsPage state={makeState({ loading: true })} options={OPTIONS} />)
+    expect(loaded.querySelector('.skeleton-list')).toBeNull() // keeps showing the rows while refreshing
+  })
+
+  it('renders the dialog the state asks for', () => {
+    const closeDialog = vi.fn()
+    renderPage(makeState({ dialog: { kind: 'confirm', title: 'Delete this bill?', message: 'x', confirmLabel: 'Delete bill', danger: true, cancelValue: false }, closeDialog }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete bill' }))
+    expect(closeDialog).toHaveBeenCalledWith(true)
   })
 })

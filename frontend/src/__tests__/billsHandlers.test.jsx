@@ -23,6 +23,17 @@ const setup = async (enabled = true) => {
 }
 const lastParams = () => client.fetchBills.mock.calls.at(-1)[0]
 
+// Flows now ask through in-app dialogs. Start the action, answer the dialog that opens, finish it.
+async function withDialog(result, start, answer) {
+  let promise
+  await act(async () => { promise = start() })
+  await waitFor(() => expect(result.current.dialog).not.toBeNull())
+  const opened = result.current.dialog
+  act(() => result.current.closeDialog(answer))
+  await act(async () => { await promise })
+  return opened
+}
+
 beforeEach(() => {
   loadAll = vi.fn(async () => {})
   setError = vi.fn()
@@ -103,23 +114,31 @@ describe('uploading a receipt', () => {
     client.uploadBill
       .mockResolvedValueOnce({ result: 'match_found', matches: [match] })
       .mockResolvedValueOnce({ result: 'attached', bill: match })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { result } = await setup()
-    await act(async () => { await result.current.actions.uploadBill(file) })
-    expect(window.confirm.mock.calls[0][0]).toMatch(/LIDL145MALMOBA/)
+    const dialog = await withDialog(result, () => result.current.actions.uploadBill(file), 'attach')
+    expect(dialog.kind).toBe('choose')
+    expect(dialog.detail).toMatch(/LIDL145MALMOBA/)
+    expect(dialog.choices.map((c) => c.key)).toEqual(['attach', 'new'])
     expect(client.uploadBill).toHaveBeenNthCalledWith(2, file, { attachTo: 7 })
     expect(result.current.notice.text).toMatch(/attached to LIDL145MALMOBA/)
     expect(loadAll).toHaveBeenCalled()
   })
 
-  it('creates a separate bill when you decline', async () => {
+  it('creates a separate bill when you choose that', async () => {
     client.uploadBill
       .mockResolvedValueOnce({ result: 'match_found', matches: [BILL(7)] })
       .mockResolvedValueOnce({ result: 'created', bill: BILL(8, { status: 'total_only' }) })
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
     const { result } = await setup()
-    await act(async () => { await result.current.actions.uploadBill(file) })
+    await withDialog(result, () => result.current.actions.uploadBill(file), 'new')
     expect(client.uploadBill).toHaveBeenNthCalledWith(2, file, { createNew: true })
+  })
+
+  it('creates nothing when you cancel the question', async () => {
+    client.uploadBill.mockResolvedValueOnce({ result: 'match_found', matches: [BILL(7)] })
+    const { result } = await setup()
+    await withDialog(result, () => result.current.actions.uploadBill(file), null)
+    expect(client.uploadBill).toHaveBeenCalledTimes(1) // no second request: neither attached nor created
+    expect(result.current.notice).toBeNull()
   })
 
   it.each([
@@ -182,20 +201,25 @@ describe('recording totals, undoing, deleting', () => {
     expect(client.fetchBills.mock.calls.length).toBeGreaterThan(1)
   })
 
-  it('asks for the amount when the bill has none', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('42.5')
+  it('asks for the amount in a dialog when the bill has none', async () => {
     const { result } = await setup()
-    await act(async () => { await result.current.actions.recordTotal(BILL(1, { amount: 0 }), 'Bills') })
+    const dialog = await withDialog(result, () => result.current.actions.recordTotal(BILL(1, { amount: 0 }), 'Bills'), 42.5)
+    expect(dialog).toMatchObject({ kind: 'amount', currency: 'SEK' })
+    expect(dialog.message).toMatch(/Shop 1/)
     expect(client.recordBillTotal).toHaveBeenCalledWith(1, { category: 'Bills', amount: 42.5 })
   })
 
-  it('does nothing if that prompt is cancelled, and rejects an invalid amount', async () => {
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce(null).mockReturnValueOnce('abc').mockReturnValueOnce('-3')
+  it('does nothing if that dialog is cancelled', async () => {
     const { result } = await setup()
-    for (let i = 0; i < 3; i++) await act(async () => { await result.current.actions.recordTotal(BILL(1, { amount: 0 }), 'Bills') })
-    expect(prompt).toHaveBeenCalledTimes(3)
+    await withDialog(result, () => result.current.actions.recordTotal(BILL(1, { amount: 0 }), 'Bills'), null)
     expect(client.recordBillTotal).not.toHaveBeenCalled()
-    expect(setError).toHaveBeenCalledTimes(2)
+    expect(setError).not.toHaveBeenCalled()
+  })
+
+  it('does not ask when the bill already has an amount', async () => {
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.recordTotal(BILL(1), 'Bills') })
+    expect(result.current.dialog).toBeNull()
   })
 
   it('bulk-records the selection, reports skips and clears the selection', async () => {
@@ -218,38 +242,35 @@ describe('recording totals, undoing, deleting', () => {
   })
 
   it('only deletes after you confirm', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     const { result } = await setup()
-    await act(async () => { await result.current.actions.remove(BILL(1)) })
+    const dialog = await withDialog(result, () => result.current.actions.remove(BILL(1)), false)
+    expect(dialog).toMatchObject({ kind: 'confirm', danger: true, confirmLabel: 'Delete bill' })
     expect(client.deletePendingBill).not.toHaveBeenCalled()
-    await act(async () => { await result.current.actions.remove(BILL(1)) })
+    await withDialog(result, () => result.current.actions.remove(BILL(1)), true)
     expect(client.deletePendingBill).toHaveBeenCalledWith(1)
-    expect(confirm).toHaveBeenCalledTimes(2)
   })
 
   it('tells you expenses are kept when deleting an itemised bill', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const { result } = await setup()
-    await act(async () => { await result.current.actions.remove(BILL(3, { status: 'itemised' })) })
-    expect(confirm.mock.calls[0][0]).toMatch(/expenses made from it are kept/)
+    const dialog = await withDialog(result, () => result.current.actions.remove(BILL(3, { status: 'itemised' })), false)
+    expect(dialog.message).toMatch(/expenses made from it are kept/)
   })
 
   it('bulk-deletes after confirming and reports skipped total-only bills', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     client.bulkDeleteBills.mockResolvedValueOnce({ deleted: 1, skipped: [{ id: 2, reason: 'Undo the recorded total first' }] })
     const { result } = await setup()
     act(() => { result.current.toggleSelect(1); result.current.toggleSelect(2) })
-    await act(async () => { await result.current.actions.bulkDelete() })
+    const dialog = await withDialog(result, () => result.current.actions.bulkDelete(), true)
+    expect(dialog.title).toBe('Delete 2 bills?')
     expect(client.bulkDeleteBills).toHaveBeenCalledWith([1, 2])
     expect(result.current.notice.text).toBe('Deleted 1 bill, skipped 1 (undo their recorded total first).')
     expect(result.current.selected.size).toBe(0)
   })
 
   it('does not bulk-delete when you cancel', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
     const { result } = await setup()
     act(() => result.current.toggleSelect(1))
-    await act(async () => { await result.current.actions.bulkDelete() })
+    await withDialog(result, () => result.current.actions.bulkDelete(), false)
     expect(client.bulkDeleteBills).not.toHaveBeenCalled()
     expect(result.current.selected.size).toBe(1)
   })
@@ -298,8 +319,7 @@ describe('adding a bill and receipts', () => {
     expect(loadAll).toHaveBeenCalled()
   })
 
-  it('attaches, views and removes receipts', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('attaches, views and removes receipts (removing asks first)', async () => {
     client.viewReceipt.mockResolvedValue(undefined)
     const { result } = await setup()
     const file = new File(['x'], 'r.pdf')
@@ -307,7 +327,8 @@ describe('adding a bill and receipts', () => {
     expect(client.uploadReceipt).toHaveBeenCalledWith(1, file)
     act(() => result.current.actions.viewReceipt(1))
     expect(client.viewReceipt).toHaveBeenCalledWith(1)
-    await act(async () => { await result.current.actions.deleteReceipt(1) })
+    const dialog = await withDialog(result, () => result.current.actions.deleteReceipt(1), true)
+    expect(dialog).toMatchObject({ kind: 'confirm', danger: true })
     expect(client.deleteReceipt).toHaveBeenCalledWith(1)
   })
 

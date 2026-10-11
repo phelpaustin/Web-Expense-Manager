@@ -16,6 +16,7 @@ import {
   saveCountBillsAsSpending,
 } from '../api/client.js'
 import { money } from '../format.js'
+import { useDialogs } from './useDialogs.js'
 
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '', currency: '' }
 export const DEFAULT_QUERY = { status: 'pending', q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 }
@@ -44,6 +45,7 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
   const [selected, setSelected] = useState(() => new Set())
   const [notice, setNotice] = useState(null)
   const [form, setForm] = useState(EMPTY_BILL)
+  const dialogs = useDialogs()
 
   const queryRef = useRef(query)
   queryRef.current = query
@@ -137,12 +139,19 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
       let res = await uploadBill(file)
       if (res.result === 'match_found') {
         const m = res.matches[0]
-        const attach = window.confirm(
-          `This looks like a bill you already have:\n\n${m.date} · ${m.shop} · ${money(m.amount, m.currency)}\n\n` +
-            'OK = attach this receipt to it (recommended, avoids counting it twice).\n' +
-            'Cancel = create a separate new bill anyway.',
-        )
-        res = await uploadBill(file, attach ? { attachTo: m.id } : { createNew: true })
+        const choice = await dialogs.choose({
+          title: 'This looks like a bill you already have',
+          detail: `${m.date} · ${m.shop} · ${money(m.amount, m.currency)}`,
+          message:
+            'It has the same date and amount. Attaching the receipt to it avoids counting the same purchase twice. ' +
+            'You can still itemise it later.',
+          choices: [
+            { key: 'attach', label: 'Attach receipt to this bill', primary: true },
+            { key: 'new', label: 'Create a separate bill' },
+          ],
+        })
+        if (!choice) return // cancelled: nothing is created
+        res = await uploadBill(file, choice === 'attach' ? { attachTo: m.id } : { createNew: true })
       }
       if (res.result === 'attached') setNotice({ text: `Receipt attached to ${res.bill.shop} (${res.bill.date}).` })
       else if (Number(res.bill.amount) <= 0) {
@@ -174,13 +183,13 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
   async function handleRecordTotal(bill, category) {
     let amount
     if (!(Number(bill.amount) > 0)) {
-      const entered = window.prompt('This bill has no amount. Enter the total to record:')
-      if (entered === null) return
-      amount = parseFloat(entered)
-      if (!Number.isFinite(amount) || amount <= 0) {
-        setError('Enter an amount greater than zero')
-        return
-      }
+      amount = await dialogs.promptAmount({
+        title: 'Record total',
+        message: `${bill.shop} (${bill.date}) has no amount yet. Enter the total to record as spending.`,
+        currency: bill.currency,
+        confirmLabel: 'Record total',
+      })
+      if (amount == null) return
     }
     const done = await run(() => recordBillTotal(bill.id, { category, amount }))
     if (done) await refresh()
@@ -215,14 +224,28 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
 
   // ── deleting ──
   async function handleDelete(bill) {
-    if (!window.confirm(`Delete the bill from ${bill.shop} (${bill.date})?` + (bill.status === 'itemised' ? ' The expenses made from it are kept.' : ''))) return
+    const ok = await dialogs.confirm({
+      title: 'Delete this bill?',
+      message:
+        `${bill.shop} · ${bill.date}` +
+        (bill.status === 'itemised' ? '. The expenses made from it are kept.' : '. Its receipt is removed too.'),
+      confirmLabel: 'Delete bill',
+      danger: true,
+    })
+    if (!ok) return
     const done = await run(() => deletePendingBill(bill.id).then(() => true))
     if (done) await refresh()
   }
 
   async function handleBulkDelete() {
     const ids = [...selected]
-    if (!window.confirm(`Delete ${ids.length} selected bill${ids.length === 1 ? '' : 's'}? Bills with a recorded total must be undone first.`)) return
+    const ok = await dialogs.confirm({
+      title: `Delete ${ids.length} bill${ids.length === 1 ? '' : 's'}?`,
+      message: 'Bills with a recorded total are skipped: undo their total first. Receipts are removed with their bills.',
+      confirmLabel: `Delete ${ids.length}`,
+      danger: true,
+    })
+    if (!ok) return
     const r = await run(() => bulkDeleteBills(ids))
     if (!r) return
     setNotice({
@@ -243,7 +266,13 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
   }
 
   async function handleDeleteReceipt(id) {
-    if (!window.confirm('Remove the attached receipt?')) return
+    const ok = await dialogs.confirm({
+      title: 'Remove the receipt?',
+      message: 'The bill stays; only the attached file is removed.',
+      confirmLabel: 'Remove receipt',
+      danger: true,
+    })
+    if (!ok) return
     const done = await run(() => deleteReceipt(id).then(() => true))
     if (done) await loadBills(queryRef.current)
   }
@@ -264,6 +293,8 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     clearSelection,
     notice,
     setNotice,
+    dialog: dialogs.dialog,
+    closeDialog: dialogs.close,
     form,
     setForm,
     actions: {

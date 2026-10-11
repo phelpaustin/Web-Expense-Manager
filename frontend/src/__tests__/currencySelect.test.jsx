@@ -33,6 +33,11 @@ describe('CurrencySelect', () => {
     expect(onChange.mock.calls).toEqual([['EUR'], ['']])
   })
 
+  it('uses the wide currency-select style so "Default (SEK)" is never truncated', () => {
+    render(<CurrencySelect value="" onChange={() => {}} currencies={LIST} defaultCurrency="SEK" />)
+    expect(screen.getByRole('combobox').className).toBe('currency-select')
+  })
+
   it('renders safely before the currency list has loaded', () => {
     render(<CurrencySelect value="" onChange={() => {}} defaultCurrency="SEK" />)
     expect(screen.getAllByRole('option')).toHaveLength(1)

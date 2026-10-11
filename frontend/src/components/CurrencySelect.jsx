@@ -10,7 +10,7 @@ export default function CurrencySelect({
   allowDefault = true,
   disabled = false,
   title = 'Currency',
-  className = 'unit-input',
+  className = 'currency-select',
 }) {
   // Keep an unsupported legacy value selectable so editing it is possible.
   const list = value && !currencies.includes(value) ? [value, ...currencies] : currencies
