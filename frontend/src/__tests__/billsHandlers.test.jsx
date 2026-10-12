@@ -283,6 +283,41 @@ describe('recording totals, undoing, deleting', () => {
   })
 })
 
+describe('reverting an itemised bill to a total', () => {
+  const ITEMISED = BILL(3, { status: 'itemised', amount: 100, item_count: 3 })
+
+  it('asks first, then replaces the items and refreshes the totals', async () => {
+    client.revertBillToTotal.mockResolvedValueOnce({ ...ITEMISED, status: 'total_only' })
+    const { result } = await setup()
+    const dialog = await withDialog(result, () => result.current.actions.revertToTotal(ITEMISED, 'Groceries'), true)
+    expect(dialog).toMatchObject({ kind: 'confirm', danger: true, confirmLabel: 'Revert to total' })
+    expect(dialog.message).toMatch(/3 items are replaced by one line/)
+    expect(client.revertBillToTotal).toHaveBeenCalledWith(3, 'Groceries')
+    expect(result.current.notice.text).toMatch(/single total/)
+    expect(loadAll).toHaveBeenCalled()
+  })
+
+  it('does nothing if you cancel', async () => {
+    const { result } = await setup()
+    await withDialog(result, () => result.current.actions.revertToTotal(ITEMISED, 'Bills'), false)
+    expect(client.revertBillToTotal).not.toHaveBeenCalled()
+    expect(result.current.notice).toBeNull()
+  })
+
+  it('reports a server refusal', async () => {
+    client.revertBillToTotal.mockRejectedValueOnce(new Error('Only an itemised bill can be turned back into a total'))
+    const { result } = await setup()
+    await withDialog(result, () => result.current.actions.revertToTotal(ITEMISED, 'Bills'), true)
+    expect(setError).toHaveBeenCalledWith('Only an itemised bill can be turned back into a total')
+  })
+
+  it('"Edit items" opens the Expenses page with the bill and its itemised status', async () => {
+    const { result } = await setup()
+    act(() => result.current.actions.itemise(ITEMISED))
+    expect(navigate).toHaveBeenCalledWith('/expenses', { state: { itemiseBill: expect.objectContaining({ id: 3, status: 'itemised' }) } })
+  })
+})
+
 describe('itemising later', () => {
   it('opens the Expenses page prefilled with the bill', async () => {
     const { result } = await setup()

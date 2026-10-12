@@ -772,7 +772,8 @@ button {
   color: var(--danger);
 }
 
-.dialog-primary {
+.dialog-primary,
+.primary-btn {
   background: var(--grad);
   color: #fff;
   border: none;
@@ -784,11 +785,27 @@ button {
   box-shadow: 0 8px 18px -10px rgba(109, 123, 255, 0.7);
 }
 
-.dialog-primary:hover {
+.dialog-primary:hover,
+.primary-btn:hover:not(:disabled) {
   filter: brightness(1.05);
 }
 
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.primary-btn {
+  margin-top: 0.25rem;
+}
+
+/* Keep short action buttons on one line ("Cancel itemising" used to wrap in two) */
+.auto-cat-row .ghost-btn {
+  white-space: nowrap;
+}
+
 .dialog-primary:focus-visible,
+.primary-btn:focus-visible,
 .danger-btn:focus-visible,
 .ghost-btn:focus-visible {
   outline: none;

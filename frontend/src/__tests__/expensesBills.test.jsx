@@ -215,3 +215,121 @@ describe('arriving from the Bills page', () => {
     expect(screen.getByRole('button', { name: /Add by bill/ })).toBeTruthy()
   })
 })
+
+// ── re-itemising ──
+const ITEMISED_BILL = { id: 88, date: '2026-07-20', shop: 'ICA Nära', amount: 100, currency: 'SEK', status: 'itemised', has_receipt: false }
+const ITEM = (id, extra = {}) => ({
+  id, date: '2026-07-20', category: 'Food', subcategory: '', shop: 'ICA Nära', description: `Item ${id}`, quantity: 1, unit: 'Count',
+  amount: 40, currency: 'SEK', price_per_unit: 40, group_id: null, source_bill_id: 88, bill_total_only: false, brand: '', ...extra,
+})
+
+describe('re-itemising an itemised bill', () => {
+  beforeEach(() => {
+    client.fetchBillItems.mockImplementation(async () => [ITEM(1), ITEM(2, { amount: 60, category: 'Household', description: 'Soap' })])
+    client.fetchBill.mockImplementation(async () => ITEMISED_BILL)
+  })
+
+  it('loads the current items into bill mode, with its details, and says saving replaces them', async () => {
+    renderAt({ itemiseBill: ITEMISED_BILL })
+    const banner = await screen.findByRole('status')
+    expect(client.fetchBillItems).toHaveBeenCalledWith(88)
+    expect(within(banner).getByText(/Editing items: ICA Nära/)).toBeTruthy()
+    expect(within(banner).getByText(/Saving replaces this bill's current items/)).toBeTruthy()
+    expect(await screen.findByText('Soap')).toBeTruthy()
+    expect(screen.getByText('Item 1')).toBeTruthy()
+    expect(screen.getByLabelText(/Receipt total/).value).toBe('100')
+    expect(screen.getByText(/Matches the receipt total/)).toBeTruthy() // 40 + 60 = 100
+    expect(screen.getByRole('button', { name: /Cancel itemising/ })).toBeTruthy()
+  })
+
+  it('saves the edited list against the bill with replace=true', async () => {
+    renderAt({ itemiseBill: ITEMISED_BILL })
+    await screen.findByText('Soap')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Item 1' }))
+    fireEvent.change(screen.getByPlaceholderText('Category'), { target: { value: 'Food' } })
+    fireEvent.change(screen.getByPlaceholderText('Amount'), { target: { value: '40' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add item/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Submit bill/ }))
+    await waitFor(() => expect(client.createExpensesBulk).toHaveBeenCalled())
+    const [items, billId, options] = client.createExpensesBulk.mock.calls[0]
+    expect(billId).toBe(88)
+    expect(options).toEqual({ replace: true })
+    expect(items.map((i) => [i.description, i.amount, i.shop])).toEqual([['Soap', 60, 'ICA Nära'], ['', 40, 'ICA Nära']])
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull()) // leaves bill mode afterwards
+  })
+
+  it('a first-time itemise does not ask for replacement', async () => {
+    renderAt({ itemiseBill: { ...BILL, status: 'pending' } })
+    await screen.findByRole('status')
+    await addItem(35.91)
+    fireEvent.click(await screen.findByRole('button', { name: /Submit bill/ }))
+    await waitFor(() => expect(client.createExpensesBulk).toHaveBeenCalled())
+    expect(client.createExpensesBulk.mock.calls[0][2]).toBeUndefined()
+  })
+
+  it('moves an item back into the form to change it', async () => {
+    renderAt({ itemiseBill: ITEMISED_BILL })
+    await screen.findByText('Soap')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Soap' }))
+    expect(screen.queryByText('Soap')).toBeNull() // taken out of the list...
+    expect(screen.getByPlaceholderText('Category').value).toBe('Household') // ...and into the form
+    expect(screen.getByPlaceholderText('Amount').value).toBe('60')
+    fireEvent.change(screen.getByPlaceholderText('Amount'), { target: { value: '55' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add item/ }))
+    expect(await screen.findByText(/less than the receipt total/)).toBeTruthy() // 40 + 55 = 95 vs 100
+  })
+
+  it('shows an error and stays out of bill mode if the items cannot be loaded', async () => {
+    client.fetchBillItems.mockRejectedValueOnce(new Error('Bill not found'))
+    renderAt({ itemiseBill: ITEMISED_BILL })
+    await waitFor(() => expect(setError).toHaveBeenCalledWith('Bill not found'))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('cancelling leaves the bill untouched', async () => {
+    renderAt({ itemiseBill: ITEMISED_BILL })
+    await screen.findByText('Soap')
+    fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Cancel' }))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await waitFor(() => expect(client.createExpensesBulk).not.toHaveBeenCalled())
+  })
+})
+
+describe('"Edit items" on an itemised bill group', () => {
+  beforeEach(() => {
+    client.fetchBillItems.mockImplementation(async () => [ITEM(1)])
+    client.fetchBill.mockImplementation(async () => ITEMISED_BILL)
+  })
+
+  it('is on the header of a group of items from one itemised bill, and opens it for editing', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [ITEM(1), ITEM(2)], total: 2 }))
+    renderAt(undefined)
+    const head = await header('ICA Nära')
+    expect(head.className).not.toContain('row-total-only')
+    fireEvent.click(within(head).getByRole('button', { name: 'Edit items' }))
+    const banner = await screen.findByRole('status')
+    expect(client.fetchBill).toHaveBeenCalledWith(88)
+    expect(within(banner).getByText(/Editing items: ICA Nära/)).toBeTruthy()
+    expect(head.textContent).toContain('▸') // the click did not also expand the group
+  })
+
+  it.each([
+    ['an ordinary group with no bill', [ITEM(1, { source_bill_id: null })]],
+    ['a group that mixes two bills', [ITEM(1), ITEM(2, { source_bill_id: 99 })]],
+    ['a group that includes a total-only line', [ITEM(1), ITEM(2, { bill_total_only: true })]],
+  ])('is not offered for %s', async (_, items) => {
+    client.fetchExpenses.mockImplementation(async () => ({ items, total: items.length }))
+    renderAt(undefined)
+    const head = await header('ICA Nära')
+    expect(within(head).queryByRole('button', { name: 'Edit items' })).toBeNull()
+  })
+
+  it('reports a failure to load the bill', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [ITEM(1)], total: 1 }))
+    client.fetchBill.mockRejectedValueOnce(new Error('Bill not found'))
+    renderAt(undefined)
+    fireEvent.click(within(await header('ICA Nära')).getByRole('button', { name: 'Edit items' }))
+    await waitFor(() => expect(setError).toHaveBeenCalledWith('Bill not found'))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+})

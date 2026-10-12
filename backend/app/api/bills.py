@@ -19,7 +19,7 @@ from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
 from app.core.file_upload import content_disposition, read_upload_limited, safe_filename
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
-from app.api.expenses import fetch_expenses, fetch_expenses_in_reporting_currency
+from app.api.expenses import ExpenseOut, fetch_expenses, fetch_expenses_in_reporting_currency
 from app.db.database import get_db
 from app.core.money import MAX_MONEY
 from app.db import models
@@ -225,6 +225,36 @@ def list_bills(
         "page_size": page_size,
         "counts": counts,
     }
+
+
+@router.get("/bills/{bill_id}")
+def get_bill(
+    bill_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    return _serialize_one(db, user.id, _pending_or_404(db, bill_id, user.id))
+
+
+@router.get("/bills/{bill_id}/items", response_model=list[ExpenseOut])
+def list_bill_items(
+    bill_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """The line items an itemised bill currently has (for editing them). A bill recorded as a
+    total only has no items; its single total line is not included."""
+    bill = _pending_or_404(db, bill_id, user.id)
+    return (
+        db.query(models.Expense)
+        .filter(
+            models.Expense.source_bill_id == bill.id,
+            models.Expense.user_id == user.id,
+            models.Expense.bill_total_only.is_(False),
+        )
+        .order_by(models.Expense.id)
+        .all()
+    )
 
 
 @router.post("/pending-bills", status_code=201)
@@ -542,6 +572,59 @@ def record_total(
     _record_total(db, user, bill, payload.category, payload.amount)
     db.commit()
     ensure_options(db, user.id, (payload.category or DEFAULT_BILL_CATEGORY).strip(), "", "")
+    db.refresh(bill)
+    return _serialize_one(db, user.id, bill)
+
+
+@router.post("/bills/{bill_id}/revert-to-total")
+def revert_to_total(
+    bill_id: int,
+    payload: RecordTotalIn | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Turn an itemised bill back into a single total: its items are replaced by one expense for
+    the bill's full amount, and the bill returns to "total only" (so it can be itemised again)."""
+    payload = payload or RecordTotalIn()
+    bill = (
+        db.query(models.PendingBill)
+        .filter(models.PendingBill.id == bill_id, models.PendingBill.user_id == user.id)
+        .with_for_update()
+        .first()
+    )
+    if bill is None:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    if bill.status != STATUS_ITEMISED:
+        raise HTTPException(status_code=409, detail="Only an itemised bill can be turned back into a total")
+    if bill.amount is None or bill.amount <= 0:
+        raise HTTPException(status_code=400, detail="This bill has no amount to record as a total")
+    claimed = (
+        db.query(models.PendingBill)
+        .filter(models.PendingBill.id == bill.id, models.PendingBill.status == STATUS_ITEMISED)
+        .update({"status": STATUS_TOTAL_ONLY}, synchronize_session=False)
+    )
+    if claimed != 1:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Only an itemised bill can be turned back into a total")
+    db.query(models.Expense).filter(
+        models.Expense.source_bill_id == bill.id, models.Expense.user_id == user.id
+    ).delete(synchronize_session=False)
+    category = (payload.category or "").strip() or DEFAULT_BILL_CATEGORY
+    db.add(
+        models.Expense(
+            user_id=user.id,
+            date=bill.date,
+            category=category,
+            description=bill.shop,
+            amount=bill.amount,
+            currency=bill.currency,
+            price_per_unit=bill.amount,
+            source_bill_id=bill.id,
+            bill_total_only=True,
+        )
+    )
+    db.commit()
+    ensure_options(db, user.id, category, "", "")
     db.refresh(bill)
     return _serialize_one(db, user.id, bill)
 

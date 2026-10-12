@@ -92,11 +92,14 @@ function BillRow({ bill, selected, onToggle, actions, recordCategory, showStatus
       </td>
       <td className="cell-actions">
         <div className="row-actions">
-          {status !== 'itemised' && (
-            <button type="button" className="mini-btn primary" onClick={() => actions.itemise(bill)} title="Enter the items on this bill">
-              Itemise
-            </button>
-          )}
+          <button
+            type="button"
+            className="mini-btn primary"
+            onClick={() => actions.itemise(bill)}
+            title={status === 'itemised' ? 'Change, add or remove the items on this bill' : 'Enter the items on this bill'}
+          >
+            {status === 'itemised' ? 'Edit items' : 'Itemise'}
+          </button>
           {status === 'pending' && (
             <button
               type="button"
@@ -105,6 +108,16 @@ function BillRow({ bill, selected, onToggle, actions, recordCategory, showStatus
               title="Count the whole amount as spending now; itemise whenever you like"
             >
               Record total
+            </button>
+          )}
+          {status === 'itemised' && (
+            <button
+              type="button"
+              className="mini-btn"
+              onClick={() => actions.revertToTotal(bill, recordCategory)}
+              title="Replace the items with one line for the whole bill amount"
+            >
+              Revert to total
             </button>
           )}
           {status === 'total_only' && (

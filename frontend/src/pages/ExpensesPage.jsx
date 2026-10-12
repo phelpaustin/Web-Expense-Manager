@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { TotalOnlyBadge } from '../components/BillStatus.jsx'
 import { money } from '../format.js'
-import { suggestCategory, autoCategorize, fetchExpenses, viewReceipt } from '../api/client.js'
+import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems, viewReceipt } from '../api/client.js'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
@@ -235,8 +235,53 @@ export default function ExpensesPage({
     setItemisingBill(null)
   }
 
+  // Re-itemising: open bill mode with the bill's current items loaded, ready to change, remove or add to.
+  // Saving replaces those items.
+  async function beginReitemising(bill) {
+    let existing
+    try {
+      existing = await fetchBillItems(bill.id)
+    } catch (err) {
+      onError?.(err.message)
+      return
+    }
+    const first = existing[0]
+    setItemisingBill({ ...bill, reitemise: true })
+    setBillMode(true)
+    setBillItems(
+      existing.map((e) => ({
+        category: e.category,
+        subcategory: e.subcategory || '',
+        description: e.description || '',
+        brand: e.brand || '',
+        amount: Number(e.amount),
+        currency: e.currency,
+        quantity: Number(e.quantity) || 1,
+        unit: e.unit || 'Count',
+      })),
+    )
+    setReceiptTotal(String(Number(bill.amount)))
+    setForm((f) => ({
+      ...f,
+      date: first?.date || bill.date,
+      shop: first ? first.shop || '' : bill.shop,
+      currency: first?.currency || bill.currency,
+      group_id: first?.group_id ? String(first.group_id) : '',
+      category: '',
+      subcategory: '',
+      description: '',
+      brand: '',
+      amount: '',
+      quantity: '1',
+      unit: 'Count',
+    }))
+    document.getElementById('add-expense-panel')?.scrollIntoView?.({ behavior: 'smooth' })
+  }
+
   // Start entering the items of a bill: bill mode, with its date/shop/currency/total filled in.
+  // An already-itemised bill is re-itemised instead (its current items are loaded).
   function beginItemising(bill) {
+    if (bill.status === 'itemised') return beginReitemising(bill)
     setItemisingBill(bill)
     setBillMode(true)
     setBillItems([])
@@ -308,6 +353,33 @@ export default function ExpensesPage({
     setBillItems((prev) => prev.filter((_, idx) => idx !== i))
   }
 
+  // Move a line back into the form to change it, then add it again.
+  function editBillItem(i) {
+    const it = billItems[i]
+    if (!it) return
+    setForm((f) => ({
+      ...f,
+      category: it.category,
+      subcategory: it.subcategory || '',
+      description: it.description || '',
+      brand: it.brand || '',
+      amount: String(it.amount),
+      quantity: String(it.quantity),
+      unit: it.unit || 'Count',
+      currency: it.currency,
+    }))
+    removeBillItem(i)
+  }
+
+  // From the header of an itemised bill: load the bill and open its items for editing.
+  async function editItemsOfBill(billId) {
+    try {
+      beginItemising(await fetchBill(billId))
+    } catch (err) {
+      onError?.(err.message)
+    }
+  }
+
   async function handleSubmitBill() {
     if (billItems.length === 0) return
     if (billMismatch !== null && billMismatch !== 0) {
@@ -339,6 +411,7 @@ export default function ExpensesPage({
             group_id: form.group_id ? parseInt(form.group_id, 10) : null,
           })),
           itemisingBill?.id,
+          itemisingBill?.reitemise ? { replace: true } : undefined,
         ),
       )
       setBillItems([])
@@ -685,11 +758,16 @@ export default function ExpensesPage({
         {itemisingBill && (
           <div className="itemising-banner" role="status">
             <div className="grow">
-              <strong>Itemising: {itemisingBill.shop}</strong> · {itemisingBill.date} · {money(itemisingBill.amount, itemisingBill.currency)}
+              <strong>
+                {itemisingBill.reitemise ? 'Editing items' : 'Itemising'}: {itemisingBill.shop}
+              </strong>{' '}
+              · {itemisingBill.date} · {money(itemisingBill.amount, itemisingBill.currency)}
               <small>
-                {itemisingBill.status === 'total_only'
-                  ? 'Its single total line is replaced by these items when you submit, so nothing is counted twice.'
-                  : 'This bill becomes itemised when you submit its items.'}
+                {itemisingBill.reitemise
+                  ? 'Change, remove or add items below. Saving replaces this bill\'s current items, so nothing is counted twice.'
+                  : itemisingBill.status === 'total_only'
+                    ? 'Its single total line is replaced by these items when you submit, so nothing is counted twice.'
+                    : 'This bill becomes itemised when you submit its items.'}
               </small>
             </div>
             {itemisingBill.has_receipt !== false && (
@@ -839,7 +917,10 @@ export default function ExpensesPage({
                         <td>{it.unit}</td>
                         <td className="right">{money(it.amount, it.currency)}</td>
                         <td className="right nowrap">
-                          <button className="delete-btn" onClick={() => removeBillItem(i)} title="Remove">
+                          <button className="icon-btn" onClick={() => editBillItem(i)} title="Edit this item" aria-label={`Edit ${it.description || it.category}`}>
+                            ✎
+                          </button>
+                          <button className="delete-btn" onClick={() => removeBillItem(i)} title="Remove" aria-label={`Remove ${it.description || it.category}`}>
                             ✕
                           </button>
                         </td>
@@ -871,7 +952,7 @@ export default function ExpensesPage({
                         `of ${money(receiptTotalNum, effectiveCurrency)} (off by ${money(Math.abs(billMismatch), effectiveCurrency)}).`}
                   </p>
                 )}
-                <button type="button" onClick={handleSubmitBill} disabled={submittingBill}>
+                <button type="button" className="primary-btn" onClick={handleSubmitBill} disabled={submittingBill}>
                   {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal, effectiveCurrency)})`}
                 </button>
               </>
@@ -1010,6 +1091,9 @@ export default function ExpensesPage({
                   const totalOnlyItems = group.items.filter((e) => e.bill_total_only)
                   const allTotalOnly = totalOnlyItems.length === group.items.length
                   const single = group.items.length === 1 ? group.items[0] : null
+                  // Items that all came from one itemised bill can be re-opened for editing.
+                  const billIds = new Set(group.items.map((e) => e.source_bill_id))
+                  const itemisedBillId = totalOnlyItems.length === 0 && billIds.size === 1 ? [...billIds][0] : null
                   const name = group.shop || (allTotalOnly && single ? single.description : '') || 'No shop'
                   return (
                     <Fragment key={group.key}>
@@ -1022,6 +1106,19 @@ export default function ExpensesPage({
                           item{group.items.length === 1 ? '' : 's'} · Bill total:{' '}
                           {money(group.items.reduce((sum, e) => sum + e.amount, 0), group.currency)}
                           {totalOnlyItems.length > 0 && <TotalOnlyBadge />}
+                          {itemisedBillId && group.items.every(canEditExpense) && (
+                            <button
+                              type="button"
+                              className="mini-btn"
+                              onClick={(ev) => {
+                                ev.stopPropagation()
+                                editItemsOfBill(itemisedBillId)
+                              }}
+                              title="Change, add or remove the items on this bill"
+                            >
+                              Edit items
+                            </button>
+                          )}
                           {allTotalOnly && single && single.source_bill_id && canEditExpense(single) && (
                             <button
                               type="button"

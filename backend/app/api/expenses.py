@@ -117,6 +117,9 @@ class ExpenseBulkCreate(BaseModel):
     # Itemising a bill: the bill these line items break down. Once saved the bill is
     # "itemised" and any single "total only" expense it had is replaced by the items.
     bill_id: int | None = None
+    # Re-itemising: the bill is already itemised and these items replace its current ones.
+    # Without it an already-itemised bill is refused, which protects against double submits.
+    replace: bool = False
 
 
 def _price_per_unit(amount: Decimal, quantity: float) -> Decimal:
@@ -376,33 +379,41 @@ def create_expenses_bulk(
 
     With ``bill_id`` the items itemise that bill: they are linked to it, the bill becomes
     "itemised", and the single total-only expense it may have had is removed (replaced by
-    the items) in the same transaction, so nothing is double counted.
+    the items) in the same transaction, so nothing is double counted. With ``replace`` an
+    already-itemised bill is re-itemised: its current items are replaced by the new ones.
     """
     for item in payload.items:
         _require_group_write_access(db, item.group_id, user.id)
 
     bill = None
     if payload.bill_id is not None:
-        bill = db.get(models.PendingBill, payload.bill_id)
-        if bill is None or bill.user_id != user.id:
+        # Lock the bill row for this transaction so two simultaneous submissions (including two
+        # re-itemisations) are handled one after the other instead of both inserting items.
+        bill = (
+            db.query(models.PendingBill)
+            .filter(models.PendingBill.id == payload.bill_id, models.PendingBill.user_id == user.id)
+            .with_for_update()
+            .first()
+        )
+        if bill is None:
             raise HTTPException(status_code=404, detail="Bill not found")
-        # Claim the bill atomically: two simultaneous submissions can't both itemise it.
+        allowed = ("pending", "total_only", "itemised") if payload.replace else ("pending", "total_only")
         claimed = (
             db.query(models.PendingBill)
-            .filter(
-                models.PendingBill.id == bill.id,
-                models.PendingBill.status.in_(("pending", "total_only")),
-            )
+            .filter(models.PendingBill.id == bill.id, models.PendingBill.status.in_(allowed))
             .update({"status": "itemised"}, synchronize_session=False)
         )
         if claimed != 1:
             db.rollback()
             raise HTTPException(status_code=409, detail="This bill has already been itemised")
-        db.query(models.Expense).filter(
+        replaced = db.query(models.Expense).filter(
             models.Expense.source_bill_id == bill.id,
-            models.Expense.bill_total_only.is_(True),
             models.Expense.user_id == user.id,
-        ).delete(synchronize_session=False)
+        )
+        if not payload.replace:
+            # First itemisation: only the single total-only line is replaced.
+            replaced = replaced.filter(models.Expense.bill_total_only.is_(True))
+        replaced.delete(synchronize_session=False)
 
     created: list[models.Expense] = []
     for item in payload.items:

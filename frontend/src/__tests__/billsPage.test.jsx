@@ -10,7 +10,7 @@ const BILLS = [
   { id: 5, date: '2026-07-18', shop: 'Unreadable receipt', amount: 0, currency: 'SEK', note: 'my note', status: 'pending', has_receipt: true, possible_duplicate: false, item_count: 0 },
 ]
 
-const ACTIONS = ['add', 'uploadBill', 'bulkUpload', 'recordTotal', 'bulkRecord', 'undo', 'itemise', 'dismissDuplicate', 'remove', 'bulkDelete', 'uploadReceipt', 'viewReceipt', 'deleteReceipt', 'toggleCount']
+const ACTIONS = ['add', 'uploadBill', 'bulkUpload', 'recordTotal', 'bulkRecord', 'undo', 'revertToTotal', 'itemise', 'dismissDuplicate', 'remove', 'bulkDelete', 'uploadReceipt', 'viewReceipt', 'deleteReceipt', 'toggleCount']
 
 function makeState(overrides = {}) {
   return {
@@ -135,6 +135,35 @@ describe('Bills page: actions depend on the bill status', () => {
     fireEvent.change(screen.getByLabelText('Category for recorded totals'), { target: { value: 'Food' } })
     fireEvent.click(within(row('INDO PAK MALMO')).getByRole('button', { name: 'Record total' }))
     expect(state.actions.recordTotal).toHaveBeenCalledWith(expect.anything(), 'Food')
+  })
+})
+
+describe('Bills page: re-itemising an itemised bill', () => {
+  it('offers Edit items and Revert to total (not Itemise / Record total / Undo)', () => {
+    const state = renderPage()
+    const r = within(row('ICA KVANTUM'))
+    fireEvent.click(r.getByRole('button', { name: 'Edit items' }))
+    expect(state.actions.itemise).toHaveBeenCalledWith(expect.objectContaining({ id: 3, status: 'itemised' }))
+    fireEvent.click(r.getByRole('button', { name: 'Revert to total' }))
+    expect(state.actions.revertToTotal).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }), 'Bills')
+    for (const name of ['Itemise', 'Record total', 'Undo']) expect(r.queryByRole('button', { name })).toBeNull()
+  })
+
+  it('reverts with the category chosen in the bulk bar', () => {
+    const state = makeState({ selected: new Set([1]) })
+    renderPage(state)
+    fireEvent.change(screen.getByLabelText('Category for recorded totals'), { target: { value: 'Food' } })
+    fireEvent.click(within(row('ICA KVANTUM')).getByRole('button', { name: 'Revert to total' }))
+    expect(state.actions.revertToTotal).toHaveBeenCalledWith(expect.anything(), 'Food')
+  })
+
+  it('does not offer those on bills that are not itemised', () => {
+    renderPage()
+    for (const shop of ['INDO PAK MALMO', 'LIDL']) {
+      const r = within(row(shop))
+      expect(r.queryByRole('button', { name: 'Edit items' })).toBeNull()
+      expect(r.queryByRole('button', { name: 'Revert to total' })).toBeNull()
+    }
   })
 })
 

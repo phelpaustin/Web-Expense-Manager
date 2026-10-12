@@ -250,11 +250,12 @@ export function createExpense(expense) {
 
 // With billId the items itemise that bill: it becomes "itemised" and any single
 // total-only expense it had is replaced by the items (server-side, in one step).
-export function createExpensesBulk(items, billId) {
+// With replace the bill is already itemised and these items replace its current ones (re-itemise).
+export function createExpensesBulk(items, billId, { replace } = {}) {
   return request('/api/expenses/bulk', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, bill_id: billId ?? undefined }),
+    body: JSON.stringify({ items, bill_id: billId ?? undefined, replace: replace || undefined }),
   })
 }
 
@@ -352,6 +353,24 @@ export function fetchBills(filters = {}) {
     if (value !== undefined && value !== null && value !== '') params.set(key, value)
   }
   return request(`/api/bills?${params.toString()}`)
+}
+
+export function fetchBill(id) {
+  return request(`/api/bills/${id}`)
+}
+
+// The line items an itemised bill currently has, for editing them.
+export function fetchBillItems(id) {
+  return request(`/api/bills/${id}/items`)
+}
+
+// Replace an itemised bill's items with one line for its full amount (back to "total only").
+export function revertBillToTotal(id, category) {
+  return request(`/api/bills/${id}/revert-to-total`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: category || undefined }),
+  })
 }
 
 export function createPendingBill(bill) {

@@ -7,6 +7,7 @@ import {
   recordBillTotal,
   recordBillTotals,
   undoBillTotal,
+  revertBillToTotal,
   uploadReceipt,
   uploadBill,
   bulkUploadPendingBills,
@@ -213,6 +214,25 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     if (done) await refresh()
   }
 
+  async function handleRevertToTotal(bill, category) {
+    const ok = await dialogs.confirm({
+      title: 'Turn back into a single total?',
+      message:
+        `${bill.shop} · ${bill.date}. Its ${bill.item_count || ''} item${bill.item_count === 1 ? '' : 's'} are replaced by one line ` +
+        `for the full bill amount (${money(bill.amount, bill.currency)}). You can itemise it again any time.`,
+      confirmLabel: 'Revert to total',
+      danger: true,
+    })
+    if (!ok) return
+    const done = await run(() => revertBillToTotal(bill.id, category))
+    if (done) {
+      setNotice({ text: `${bill.shop} is a single total of ${money(bill.amount, bill.currency)} again. Itemise it whenever you like.` })
+      await refresh()
+    }
+  }
+
+  // Itemise a pending / total-only bill, or edit the items of an itemised one: the Expenses page
+  // works out which from the bill's status.
   function handleItemise(bill) {
     navigate('/expenses', { state: { itemiseBill: billForItemising(bill) } })
   }
@@ -304,6 +324,7 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
       recordTotal: handleRecordTotal,
       bulkRecord: handleBulkRecord,
       undo: handleUndo,
+      revertToTotal: handleRevertToTotal,
       itemise: handleItemise,
       dismissDuplicate: handleDismissDuplicate,
       remove: handleDelete,
