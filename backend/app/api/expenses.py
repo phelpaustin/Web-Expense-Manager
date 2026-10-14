@@ -22,6 +22,7 @@ from app.core.currency import normalize_currency
 from app.core.fx import normalize_convertible_currency
 from app.core.file_upload import read_upload_limited
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS
+from app.api import bill_sync
 from app.core.parsing import parse_amount, read_csv_bytes
 from app.core.validation import PartialUpdate
 from app.core.money import as_decimal, quantize_money, MAX_MONEY
@@ -120,6 +121,9 @@ class ExpenseBulkCreate(BaseModel):
     # Re-itemising: the bill is already itemised and these items replace its current ones.
     # Without it an already-itemised bill is refused, which protects against double submits.
     replace: bool = False
+    # Add by bill: the items are one bill. A bill record is made for them right away, so it shows
+    # on the Bills page as itemised (otherwise it is picked up the next time the page loads).
+    as_bill: bool = False
 
 
 def _price_per_unit(amount: Decimal, quantity: float) -> Decimal:
@@ -284,6 +288,7 @@ def list_expenses(
     page = max(page, 1)
     page_size = min(max(page_size, 1), 200)
 
+    bill_sync.adopt_if_needed(db, user.id)  # expenses entered any way are filed under a bill
     q = _visible_expenses_query(db, user.id, scope, space_ids)
     if q is None:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
@@ -425,6 +430,33 @@ def create_expenses_bulk(
         expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
         db.add(expense)
         created.append(expense)
+    if bill is not None and bill.origin == bill_sync.ORIGIN_EXPENSES:
+        # The user has taken over this bill's items: keep them together as one bill whatever their
+        # shop/date, and let its amount follow the new items.
+        bill.origin_key = bill_sync.new_explicit_key()
+        bill.amount = sum((e.amount for e in created), Decimal("0"))
+    elif bill is None and payload.as_bill and created:
+        same_day = {e.date for e in created}
+        same_currency = {e.currency for e in created}
+        if len(same_day) == 1 and len(same_currency) == 1:
+            db.flush()
+            first = created[0]
+            record = models.PendingBill(
+                user_id=user.id,
+                date=first.date,
+                shop=bill_sync.bill_name(first),
+                amount=sum((e.amount for e in created), Decimal("0")),
+                note="",
+                status="itemised",
+                possible_duplicate=False,
+                currency=first.currency,
+                origin=bill_sync.ORIGIN_EXPENSES,
+                origin_key=bill_sync.new_explicit_key(),
+            )
+            db.add(record)
+            db.flush()
+            for e in created:
+                e.source_bill_id = record.id
     db.commit()
     for expense in created:
         db.refresh(expense)
@@ -441,6 +473,7 @@ def update_expense(
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
     _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
+    linked_bill_id, owner_id = expense.source_bill_id, expense.user_id
     data = payload.model_dump(exclude_unset=True)
     if "group_id" in data:
         _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
@@ -448,6 +481,9 @@ def update_expense(
         setattr(expense, field, value)
     expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
     db.commit()
+    if linked_bill_id is not None and owner_id is not None:
+        # A bill made from expenses follows its items (amount, and regrouping if shop/date changed).
+        bill_sync.sync_user_bills(db, owner_id, bill_ids=[linked_bill_id])
     db.refresh(expense)
     ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
     return expense
@@ -462,6 +498,7 @@ def delete_expense(
     expense = _get_visible_or_404(db, expense_id, user.id)
     _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
     reopen_bill_id = expense.source_bill_id if expense.bill_total_only else None
+    linked_bill_id = expense.source_bill_id
     owner_id = expense.user_id
     db.delete(expense)
     if reopen_bill_id is not None:
@@ -473,6 +510,9 @@ def delete_expense(
             models.PendingBill.status == "total_only",
         ).update({"status": "pending"}, synchronize_session=False)
     db.commit()
+    if linked_bill_id is not None and owner_id is not None:
+        # A bill made from expenses follows its items; it goes away with the last one.
+        bill_sync.sync_user_bills(db, owner_id, bill_ids=[linked_bill_id])
 
 
 @router.get("/expenses/summary")

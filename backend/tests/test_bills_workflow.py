@@ -100,7 +100,10 @@ def test_statement_import_records_totals_but_not_possible_duplicates(client, mak
     out = _import(client, h, [("2026-09-01", "ICA", "-80"), ("2026-09-02", "Coop", "-120.50"), ("2026-09-03", "Willys", "-45.30")])
     assert out["created"] == 3 and out["possible_duplicates"] == 1 and out["auto_recorded"] == 2
     counts = _bills(client, h)["counts"]
-    assert counts == {"pending": 1, "total_only": 2, "itemised": 0, "all": 3}
+    # the expense typed in earlier is also a bill now (made from expenses, itemised)
+    assert counts == {"pending": 1, "total_only": 2, "itemised": 1, "all": 4}
+    [typed] = _bills(client, h, status="itemised")["items"]
+    assert typed["from_expenses"] is True and typed["item_count"] == 1
     [dup] = _bills(client, h, status="pending")["items"]
     assert dup["shop"] == "Coop" and dup["possible_duplicate"] is True
     assert _spent(client, h) == D("120.50") + D("80") + D("45.30")  # the pre-existing expense + 2 recorded; no double count
@@ -253,7 +256,10 @@ def test_delete_rules(client, make_user):
     client.post("/api/expenses/bulk", json={"items": _items(50), "bill_id": itemised["id"]}, headers=h)
     assert client.delete(f"/api/pending-bills/{itemised['id']}", headers=h).status_code == 204
     kept = [e for e in _expenses(client, h) if e["description"] == "item 0"]
-    assert len(kept) == 1 and kept[0]["source_bill_id"] is None  # the expenses stay, just unlinked
+    # the expenses stay, and are filed under a bill made from expenses so they are still on the Bills page
+    assert len(kept) == 1 and kept[0]["source_bill_id"] is not None
+    rehomed = client.get(f"/api/bills/{kept[0]['source_bill_id']}", headers=h).json()
+    assert rehomed["from_expenses"] is True and rehomed["status"] == "itemised"
 
 
 def test_bulk_delete(client, make_user):

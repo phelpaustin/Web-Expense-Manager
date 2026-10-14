@@ -87,7 +87,7 @@ describe('total-only expenses stand out on the Expenses page', () => {
     expect(special.className).toContain('row-total-only')
     expect(within(special).getByText(/Total only/)).toBeTruthy()
     expect(within(special).getByRole('button', { name: 'Itemise' })).toBeTruthy()
-    const ordinary = await header('No shop')
+    const ordinary = await header('Milk')
     expect(ordinary.className).not.toContain('row-total-only')
     expect(within(ordinary).queryByText(/Total only/)).toBeNull()
     expect(within(ordinary).queryByRole('button', { name: 'Itemise' })).toBeNull()
@@ -123,7 +123,7 @@ describe('total-only expenses stand out on the Expenses page', () => {
 
   it('can filter to total-only bills', async () => {
     renderAt(undefined)
-    await header('No shop')
+    await header('Milk')
     fireEvent.click(screen.getByLabelText('Total-only bills'))
     await waitFor(() => expect(client.fetchExpenses.mock.calls.at(-1)[0]).toMatchObject({ total_only: 'true', page: 1 }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
@@ -185,6 +185,33 @@ describe('itemising from a total-only row', () => {
   })
 })
 
+describe('Add by bill (a new bill, not itemising an existing one)', () => {
+  it('asks the server to make its bill record, so it shows on the Bills page', async () => {
+    renderAt(undefined)
+    await header('Milk')
+    fireEvent.click(screen.getByRole('button', { name: /Add by bill/ }))
+    fireEvent.change(document.querySelector('#add-expense-panel input[type=date]'), { target: { value: '2026-07-21' } })
+    await addItem(12)
+    fireEvent.click(await screen.findByRole('button', { name: /Submit bill/ }))
+    await waitFor(() => expect(client.createExpensesBulk).toHaveBeenCalled())
+    const [items, billId, options] = client.createExpensesBulk.mock.calls[0]
+    expect(items).toHaveLength(1)
+    expect(billId).toBeUndefined()
+    expect(options).toEqual({ asBill: true })
+  })
+
+  it('itemising an existing bill links to it instead (no second bill is made)', async () => {
+    renderAt({ itemiseBill: { ...BILL, status: 'pending' } })
+    await screen.findByRole('status')
+    await addItem(35.91)
+    fireEvent.click(await screen.findByRole('button', { name: /Submit bill/ }))
+    await waitFor(() => expect(client.createExpensesBulk).toHaveBeenCalled())
+    const [, billId, options] = client.createExpensesBulk.mock.calls[0]
+    expect(billId).toBe(77)
+    expect(options).toBeUndefined()
+  })
+})
+
 describe('arriving from the Bills page', () => {
   it('picks up the bill from the navigation state, prefills bill mode and clears the state', async () => {
     renderAt({ itemiseBill: { ...BILL, status: 'pending' } })
@@ -210,7 +237,7 @@ describe('arriving from the Bills page', () => {
 
   it('shows nothing special for an ordinary visit', async () => {
     renderAt(undefined)
-    await header('No shop')
+    await header('Milk')
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByRole('button', { name: /Add by bill/ })).toBeTruthy()
   })
@@ -331,5 +358,31 @@ describe('"Edit items" on an itemised bill group', () => {
     fireEvent.click(within(await header('ICA Nära')).getByRole('button', { name: 'Edit items' }))
     await waitFor(() => expect(setError).toHaveBeenCalledWith('Bill not found'))
     expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+describe('names of bill groups on the Expenses page', () => {
+  const line = (id, extra) => ({ ...NORMAL, id, shop: '', description: `Item ${id}`, source_bill_id: 500 + id, ...extra })
+
+  it('a single line with no shop is named after what it is (like on the Bills page)', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [line(1, { description: 'Bus ticket' })], total: 1 }))
+    renderAt(undefined)
+    expect(await header('Bus ticket')).toBeTruthy()
+  })
+
+  it('a group with a shop uses the shop, whatever the lines are called', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [line(1, { shop: 'ICA Maxi' }), line(2, { shop: 'ICA Maxi', source_bill_id: 501 })], total: 2 }))
+    renderAt(undefined)
+    expect(await header('ICA Maxi')).toBeTruthy()
+  })
+
+  it('shop-less lines are never merged: each is its own bill, named after itself (as on the Bills page)', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [line(1, { group_id: 3 }), line(2, { group_id: 3 })], total: 2 }))
+    renderAt(undefined)
+    const first = await header('Item 1')
+    const second = await header('Item 2')
+    expect(first).not.toBe(second)
+    expect(first.textContent).toMatch(/1 item ·/)
+    expect(second.textContent).toMatch(/1 item ·/)
   })
 })

@@ -19,6 +19,7 @@ from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
 from app.core.file_upload import content_disposition, read_upload_limited, safe_filename
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
+from app.api import bill_sync
 from app.api.expenses import ExpenseOut, fetch_expenses, fetch_expenses_in_reporting_currency
 from app.db.database import get_db
 from app.core.money import MAX_MONEY
@@ -56,6 +57,7 @@ STATUS_PENDING = "pending"        # to itemise: no expense yet
 STATUS_TOTAL_ONLY = "total_only"  # recorded as one expense for the whole amount; can still be itemised
 STATUS_ITEMISED = "itemised"      # broken down into its line items
 DEFAULT_BILL_CATEGORY = "Bills"
+_FROM_EXPENSES_MESSAGE = "Made from expenses you entered: delete those expenses to remove it"
 
 _SORTS = {
     "date_desc": (models.PendingBill.date.desc(), models.PendingBill.id.desc()),
@@ -79,6 +81,8 @@ def _serialize_pending(b: models.PendingBill, has_receipt: bool, item_count: int
         "possible_duplicate": bool(b.possible_duplicate),
         # Expenses created from this bill: 1 for a total-only bill, N for an itemised one.
         "item_count": item_count,
+        # Made from expenses entered some other way; it follows them and is removed with them.
+        "from_expenses": b.origin == bill_sync.ORIGIN_EXPENSES,
     }
 
 
@@ -195,6 +199,8 @@ def list_bills(
     ``counts`` always covers every status (for the tab badges) under the same search and
     date filters, so the tabs show how much is waiting without loading it.
     """
+    # File every expense under a bill first, so what this page shows matches the Expenses page.
+    bill_sync.sync_user_bills(db, user.id)
     base = db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id)
     if date_from:
         base = base.filter(models.PendingBill.date >= date_from)
@@ -344,7 +350,7 @@ async def upload_pending(
             db.query(models.PendingBill)
             .filter(
                 models.PendingBill.user_id == user.id,
-                models.PendingBill.status.in_((STATUS_PENDING, STATUS_TOTAL_ONLY)),
+                models.PendingBill.status.in_((STATUS_PENDING, STATUS_TOTAL_ONLY, STATUS_ITEMISED)),
                 models.PendingBill.date == bill_date,
                 models.PendingBill.amount == bill_amount,
                 models.PendingBill.currency == currency,
@@ -481,6 +487,8 @@ def delete_pending(
     bill = _pending_or_404(db, bill_id, user.id)
     if bill.status == STATUS_TOTAL_ONLY:
         raise HTTPException(status_code=409, detail="Undo the recorded total before deleting this bill")
+    if bill.origin == bill_sync.ORIGIN_EXPENSES:
+        raise HTTPException(status_code=409, detail=_FROM_EXPENSES_MESSAGE)
     _delete_bill_record(db, bill)
     db.commit()
 
@@ -506,6 +514,9 @@ def bulk_delete_bills(
     ):
         if bill.status == STATUS_TOTAL_ONLY:
             skipped.append({"id": bill.id, "reason": "Undo the recorded total first"})
+            continue
+        if bill.origin == bill_sync.ORIGIN_EXPENSES:
+            skipped.append({"id": bill.id, "reason": _FROM_EXPENSES_MESSAGE})
             continue
         _delete_bill_record(db, bill)
         deleted += 1
@@ -610,6 +621,8 @@ def revert_to_total(
         models.Expense.source_bill_id == bill.id, models.Expense.user_id == user.id
     ).delete(synchronize_session=False)
     category = (payload.category or "").strip() or DEFAULT_BILL_CATEGORY
+    # Once the user turns a bill into a total themselves it is theirs, not tracked from its items.
+    bill.origin, bill.origin_key = None, None
     db.add(
         models.Expense(
             user_id=user.id,

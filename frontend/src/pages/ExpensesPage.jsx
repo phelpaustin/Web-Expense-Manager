@@ -411,7 +411,8 @@ export default function ExpensesPage({
             group_id: form.group_id ? parseInt(form.group_id, 10) : null,
           })),
           itemisingBill?.id,
-          itemisingBill?.reitemise ? { replace: true } : undefined,
+          // Adding a new bill: have its bill record made. Itemising an existing one links to that bill.
+          itemisingBill ? (itemisingBill.reitemise ? { replace: true } : undefined) : { asBill: true },
         ),
       )
       setBillItems([])
@@ -1094,7 +1095,8 @@ export default function ExpensesPage({
                   // Items that all came from one itemised bill can be re-opened for editing.
                   const billIds = new Set(group.items.map((e) => e.source_bill_id))
                   const itemisedBillId = totalOnlyItems.length === 0 && billIds.size === 1 ? [...billIds][0] : null
-                  const name = group.shop || (allTotalOnly && single ? single.description : '') || 'No shop'
+                  // A single line with no shop is named after what it is, like its bill on the Bills page.
+                  const name = group.shop || (single ? single.description : '') || 'No shop'
                   return (
                     <Fragment key={group.key}>
                       <tr

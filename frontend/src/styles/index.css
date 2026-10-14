@@ -1926,6 +1926,19 @@ button {
   font-size: 0.85em;
 }
 
+.bill-origin {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 .duplicate-line {
   display: flex;
   flex-wrap: wrap;
@@ -2046,6 +2059,17 @@ label.link-btn input[type='file'] {
 /* "⋯" row menu */
 .row-menu {
   display: inline-block;
+}
+
+.row-menu-spacer {
+  display: inline-block;
+  width: 2.1rem;
+}
+
+@media (max-width: 720px) {
+  .row-menu-spacer {
+    display: none;
+  }
 }
 
 .row-menu-btn {

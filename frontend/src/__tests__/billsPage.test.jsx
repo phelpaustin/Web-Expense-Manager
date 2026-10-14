@@ -167,6 +167,40 @@ describe('Bills page: re-itemising an itemised bill', () => {
   })
 })
 
+describe('Bills page: bills made from expenses', () => {
+  const FROM_EXPENSES = { id: 9, date: '2026-07-10', shop: 'Coop', amount: 42.5, currency: 'SEK', note: '', status: 'itemised', has_receipt: false, possible_duplicate: false, item_count: 2, from_expenses: true }
+  const withBill = (b) => makeState({ data: { ...makeState().data, items: [b] } })
+
+  it('are tagged, can be edited or reverted, but have no Delete (they follow their expenses)', () => {
+    const state = renderPage(withBill(FROM_EXPENSES))
+    const r = within(row('Coop'))
+    expect(r.getByText('from expenses').title).toMatch(/follows them/)
+    fireEvent.click(r.getByRole('button', { name: 'Edit items' }))
+    expect(state.actions.itemise).toHaveBeenCalledWith(expect.objectContaining({ id: 9 }))
+    expect(r.getByRole('button', { name: 'Revert to total' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'More actions for Coop' })).toBeNull() // nothing left to put in the menu
+  })
+
+  it('keeps the action buttons lined up: a row without a menu gets a spacer of the same width', () => {
+    const { container } = render(<BillsPage state={withBill(FROM_EXPENSES)} options={OPTIONS} />)
+    expect(container.querySelector('tbody .row-menu-spacer')).not.toBeNull()
+    expect(container.querySelector('tbody .row-menu')).toBeNull()
+  })
+
+  it('a row that has a menu has no spacer', () => {
+    const { container } = render(<BillsPage state={withBill({ ...FROM_EXPENSES, from_expenses: false })} options={OPTIONS} />)
+    expect(container.querySelector('tbody .row-menu-spacer')).toBeNull()
+    expect(container.querySelector('tbody .row-menu')).not.toBeNull()
+  })
+
+  it('an ordinary itemised bill still has its Delete, and no tag', () => {
+    renderPage(withBill({ ...FROM_EXPENSES, from_expenses: false }))
+    expect(screen.queryByText('from expenses')).toBeNull()
+    openMenu('Coop')
+    expect(screen.getByRole('menuitem', { name: 'Delete bill' })).toBeTruthy()
+  })
+})
+
 describe('Bills page: receipts', () => {
   it('attach when there is none; view and remove when there is', () => {
     const state = renderPage()

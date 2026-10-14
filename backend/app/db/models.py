@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, JSON, LargeBinary, Numeric, String, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, String, UniqueConstraint, text
 from sqlalchemy.sql import expression
 
 from app.db.database import Base
@@ -124,6 +124,23 @@ class PendingBill(Base):
     # Set on bulk import when (date, amount) matches an existing expense/pending bill.
     possible_duplicate = Column(Boolean, nullable=False, default=False)
     currency = Column(String, nullable=False)
+    # "expenses" = this bill was made from expenses entered some other way (the Expenses page, an
+    # import, a recurring item ...) so that every expense shows up on the Bills page. Its amount
+    # follows its items and it disappears with them. NULL = a bill the user created or imported.
+    origin = Column(String, nullable=True)
+    # Identifies which expenses belong in a derived bill (see app/api/bill_sync.py). Unique per user.
+    origin_key = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_pending_bills_origin_key",
+            "user_id",
+            "origin_key",
+            unique=True,
+            sqlite_where=text("origin_key IS NOT NULL"),
+            postgresql_where=text("origin_key IS NOT NULL"),
+        ),
+    )
 
 
 class ManualBill(Base):

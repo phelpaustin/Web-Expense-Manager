@@ -251,11 +251,12 @@ export function createExpense(expense) {
 // With billId the items itemise that bill: it becomes "itemised" and any single
 // total-only expense it had is replaced by the items (server-side, in one step).
 // With replace the bill is already itemised and these items replace its current ones (re-itemise).
-export function createExpensesBulk(items, billId, { replace } = {}) {
+// With asBill the items are one bill from "Add by bill": its bill record is made right away.
+export function createExpensesBulk(items, billId, { replace, asBill } = {}) {
   return request('/api/expenses/bulk', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, bill_id: billId ?? undefined, replace: replace || undefined }),
+    body: JSON.stringify({ items, bill_id: billId ?? undefined, replace: replace || undefined, as_bill: asBill || undefined }),
   })
 }
 

@@ -48,6 +48,8 @@ function FileButton({ className = 'link-btn', title, accept, onFile, children })
 
 function BillRow({ bill, selected, onToggle, actions, recordCategory, showStatus }) {
   const { status } = bill
+  // A bill made from expenses follows them (delete the expenses to remove it); a recorded total is undone first.
+  const menuItems = [status !== 'total_only' && !bill.from_expenses && { label: 'Delete bill', danger: true, onSelect: () => actions.remove(bill) }].filter(Boolean)
   return (
     <tr className={`${bill.possible_duplicate ? 'row-flagged' : ''}${selected ? ' row-selected' : ''}`.trim()}>
       <td className="cell-check">
@@ -57,6 +59,11 @@ function BillRow({ bill, selected, onToggle, actions, recordCategory, showStatus
       <td className="cell-shop">
         <span className="bill-shop">{bill.shop}</span>
         {bill.note && bill.note !== 'Bulk import' && <span className="bill-note"> · {bill.note}</span>}
+        {bill.from_expenses && (
+          <span className="bill-origin" title="Made from expenses you entered. It follows them: edit its items here, or change or delete the expenses to change or remove it.">
+            from expenses
+          </span>
+        )}
         {bill.possible_duplicate && (
           <span className="duplicate-line">
             <span className="duplicate-badge" title="Same date and amount as an existing expense or bill. Review it before recording.">
@@ -125,10 +132,11 @@ function BillRow({ bill, selected, onToggle, actions, recordCategory, showStatus
               Undo
             </button>
           )}
-          <RowMenu
-            label={`More actions for ${bill.shop}`}
-            items={[status !== 'total_only' && { label: 'Delete bill', danger: true, onSelect: () => actions.remove(bill) }]}
-          />
+          {menuItems.length > 0 ? (
+            <RowMenu label={`More actions for ${bill.shop}`} items={menuItems} />
+          ) : (
+            <span className="row-menu-spacer" aria-hidden="true" /> // keeps the buttons lined up across rows
+          )}
         </div>
       </td>
     </tr>
