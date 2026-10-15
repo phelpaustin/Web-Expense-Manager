@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -107,6 +108,37 @@ def _post_expense(db: Session, user_id: int, template: models.RecurringTemplate,
     )
 
 
+def _claim(
+    db: Session,
+    template: models.RecurringTemplate,
+    *,
+    last_applied: datetime.date,
+    schedule_anchor: datetime.date,
+) -> bool:
+    """Move a template's schedule forward, but only if nobody else already has.
+
+    This is a compare-and-swap on ``last_applied``: the UPDATE matches only while the
+    row still holds the value this request read. Of several requests that read the
+    same state (two tabs, a retried request) exactly one gets True and may post the
+    expenses; the others get False and must post nothing. Without it each of them
+    would insert its own copy of the same expenses. The claim and the expense inserts
+    commit together, so a failure after the claim leaves no half-applied schedule.
+    """
+    seen = template.last_applied
+    unchanged = (
+        models.RecurringTemplate.last_applied.is_(None)
+        if seen is None
+        else models.RecurringTemplate.last_applied == seen
+    )
+    result = db.execute(
+        update(models.RecurringTemplate)
+        .where(models.RecurringTemplate.id == template.id, unchanged)
+        .values(last_applied=last_applied, schedule_anchor=schedule_anchor)
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1
+
+
 @router.get("/recurring")
 def list_recurring(
     db: Session = Depends(get_db),
@@ -177,9 +209,13 @@ def apply_recurring(
     """Apply one template once, dated today, and advance last_applied."""
     today = datetime.date.today()
     t = _get_owned_or_404(db, template_id, user.id)
+    if not _claim(db, t, last_applied=today, schedule_anchor=today):
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This recurring item was just applied by another request. Refresh to see the latest.",
+        )
     _post_expense(db, user.id, t, today)
-    t.last_applied = today
-    t.schedule_anchor = today
     db.commit()
     return {"applied": 1, "item": t.item}
 
@@ -236,6 +272,9 @@ def apply_due_recurring(
     templates = (
         db.query(models.RecurringTemplate)
         .filter(models.RecurringTemplate.user_id == user.id)
+        # A fixed order, so two overlapping runs take their row locks in the same
+        # sequence and can't deadlock each other.
+        .order_by(models.RecurringTemplate.id)
         .all()
     )
     applied: list[str] = []
@@ -243,11 +282,13 @@ def apply_due_recurring(
         dates = rec.due_dates(t.last_applied, t.frequency, today, t.schedule_anchor)
         if not dates:
             continue
-        if t.schedule_anchor is None:
-            t.schedule_anchor = t.last_applied or dates[0]
+        anchor = t.schedule_anchor or t.last_applied or dates[0]
+        # If another request already applied this template, it posted these dates;
+        # skip it rather than post them a second time.
+        if not _claim(db, t, last_applied=dates[-1], schedule_anchor=anchor):
+            continue
         for when in dates:
             _post_expense(db, user.id, t, when)
             applied.append(t.item)
-        t.last_applied = dates[-1]
     db.commit()
     return {"applied": len(applied), "items": applied}

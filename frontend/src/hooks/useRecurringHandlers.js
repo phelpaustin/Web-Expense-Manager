@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createRecurring, updateRecurring, deleteRecurring, backfillRecurring, applyRecurring, applyDueRecurring } from '../api/client.js'
 
 const EMPTY_RECURRING = { item: '', category: '', amount: '', currency: '', frequency: 'Monthly', auto_post: false }
@@ -6,6 +6,23 @@ const EMPTY_RECURRING = { item: '', category: '', amount: '', currency: '', freq
 export function useRecurringHandlers(loadAll, setError) {
   const [recurringForm, setRecurringForm] = useState(EMPTY_RECURRING)
   const [savingRecurring, setSavingRecurring] = useState(false)
+  // Applies still running. Each one posts real expenses, so a second click (or a
+  // double click) while one is in flight must not start another. A ref, not state,
+  // because two clicks can land before React re-renders.
+  const applying = useRef(new Set())
+
+  async function runOnce(key, action) {
+    if (applying.current.has(key)) return
+    applying.current.add(key)
+    try {
+      await action()
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      applying.current.delete(key)
+    }
+  }
 
   async function handleAddRecurring(e) {
     e.preventDefault()
@@ -28,22 +45,12 @@ export function useRecurringHandlers(loadAll, setError) {
     }
   }
 
-  async function handleApplyRecurring(id) {
-    try {
-      await applyRecurring(id)
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
+  function handleApplyRecurring(id) {
+    return runOnce(`apply:${id}`, () => applyRecurring(id))
   }
 
-  async function handleApplyDue() {
-    try {
-      await applyDueRecurring()
-      await loadAll()
-    } catch (err) {
-      setError(err.message)
-    }
+  function handleApplyDue() {
+    return runOnce('apply-due', () => applyDueRecurring())
   }
 
   async function handleDeleteRecurring(id) {
