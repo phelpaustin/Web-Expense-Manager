@@ -297,7 +297,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                               <th>Date</th>
                               <th>Category</th>
                               <th>Shop</th>
-                              <th>Description</th>
+                              <th>Item name</th>
                               <th className="right">Amount</th>
                             </tr>
                           </thead>

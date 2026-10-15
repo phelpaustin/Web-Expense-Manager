@@ -386,3 +386,17 @@ describe('names of bill groups on the Expenses page', () => {
     expect(second.textContent).toMatch(/1 item ·/)
   })
 })
+
+
+describe('Add expense form labels', () => {
+  it('calls the description "Item name" and offers Unit as a dropdown', async () => {
+    client.fetchExpenses.mockResolvedValue({ items: [], total: 0 })
+    renderAt()
+    expect(screen.getByPlaceholderText('Item name')).toBeTruthy()
+    expect(screen.queryByPlaceholderText('Description')).toBeNull()
+    expect(screen.queryAllByText('Description')).toHaveLength(0)
+    const unit = screen.getAllByRole('combobox', { name: 'Unit' })[0]
+    expect([...unit.options].map((o) => o.value)).toEqual(expect.arrayContaining(['Count', 'Kg', 'Litre']))
+    expect(screen.getByText('Quantity')).toBeTruthy()
+  })
+})

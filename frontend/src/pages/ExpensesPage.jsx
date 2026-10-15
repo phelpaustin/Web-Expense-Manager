@@ -1,3 +1,4 @@
+import UnitSelect from '../components/UnitSelect.jsx'
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -555,13 +556,7 @@ export default function ExpensesPage({
             />
           </td>
           <td>
-            <input
-              type="text"
-              list="unit-options"
-              className="unit-input"
-              value={editForm.unit}
-              onChange={(ev) => setEditForm({ ...editForm, unit: ev.target.value })}
-            />
+            <UnitSelect value={editForm.unit} units={options.units} onChange={(u) => setEditForm({ ...editForm, unit: u })} />
           </td>
           <td className="right">
             <input
@@ -696,7 +691,7 @@ export default function ExpensesPage({
                 <th>Category</th>
                 <th>Subcat</th>
                 <th>Shop</th>
-                <th>Description</th>
+                <th>Item name</th>
                 <th className="right">Qty</th>
                 <th>Unit</th>
                 <th>Cur</th>
@@ -727,7 +722,7 @@ export default function ExpensesPage({
                     <input type="number" className="amount-input" value={r.quantity} onChange={(e) => updateSkipped(i, 'quantity', e.target.value)} />
                   </td>
                   <td>
-                    <input type="text" list="unit-options" className="unit-input" value={r.unit} onChange={(e) => updateSkipped(i, 'unit', e.target.value)} />
+                    <UnitSelect value={r.unit} units={options.units} onChange={(u) => updateSkipped(i, 'unit', u)} />
                   </td>
                   <td>
                     <input type="text" className="unit-input" value={r.currency} onChange={(e) => updateSkipped(i, 'currency', e.target.value)} />
@@ -834,27 +829,27 @@ export default function ExpensesPage({
           />
           <input
             type="text"
-            placeholder="Description"
+            placeholder="Item name"
+            aria-label="Item name"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Qty"
-            className="qty-input"
-            value={form.quantity}
-            onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-          />
-          <input
-            type="text"
-            list="unit-options"
-            placeholder="Unit"
-            className="unit-input"
-            value={form.unit}
-            onChange={(e) => setForm({ ...form, unit: e.target.value })}
-          />
+          <label className="field-label">
+            <span>Quantity</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="Qty"
+              className="qty-input"
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+            />
+          </label>
+          <label className="field-label">
+            <span>Unit</span>
+            <UnitSelect value={form.unit} units={options.units} onChange={(u) => setForm({ ...form, unit: u })} />
+          </label>
           <CurrencySelect
             value={form.currency}
             onChange={(c) => setForm({ ...form, currency: c })}
@@ -902,7 +897,7 @@ export default function ExpensesPage({
                   <thead>
                     <tr>
                       <th>Category</th>
-                      <th>Description</th>
+                      <th>Item name</th>
                       <th className="right">Qty</th>
                       <th>Unit</th>
                       <th className="right">Amount</th>
@@ -984,11 +979,6 @@ export default function ExpensesPage({
             <option key={s} value={s} />
           ))}
         </datalist>
-        <datalist id="unit-options">
-          {options.units.map((u) => (
-            <option key={u} value={u} />
-          ))}
-        </datalist>
         <datalist id="shop-options">
           {(options.shops || []).map((s) => (
             <option key={s} value={s} />
@@ -1002,7 +992,7 @@ export default function ExpensesPage({
           <div className="add-form">
             <input
               type="text"
-              placeholder="Search description, shop, brand…"
+              placeholder="Search item, shop, brand…"
               value={search}
               onChange={(e) => resetToFirstPage(setSearch)(e.target.value)}
             />
@@ -1075,7 +1065,7 @@ export default function ExpensesPage({
               <th>Category</th>
               <th>Subcat</th>
               <th>Shop</th>
-              <th>Description</th>
+              <th>Item name</th>
               <th>Group</th>
               <th className="right">Qty</th>
               <th>Unit</th>
