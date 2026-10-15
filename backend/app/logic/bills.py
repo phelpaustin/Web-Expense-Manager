@@ -16,7 +16,7 @@ import io
 import pandas as pd
 
 from app.core.money import quantize_money
-from app.core.parsing import parse_amount, read_csv_bytes
+from app.core.parsing import parse_amount, read_csv_bytes, unescape_formula
 from app.core.import_limits import MAX_IMPORT_ROWS
 
 SOURCE_EXPENSE = "Expense"
@@ -172,7 +172,7 @@ def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]
     for i, raw in enumerate(df.to_dict("records"), start=2):  # row 1 is the header
         try:
             date_val = pd.to_datetime(raw[date_col]).date()
-            shop_val = str(raw[shop_col]).strip()
+            shop_val = str(unescape_formula(raw[shop_col])).strip()
             if not shop_val or shop_val.lower() == "nan":
                 raise ValueError("missing shop name")
             amount_val = quantize_money(parse_amount(raw[amount_col]))

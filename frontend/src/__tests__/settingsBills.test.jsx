@@ -54,3 +54,23 @@ describe('Settings: bills', () => {
     expect(props.onOptionsUpdated).not.toHaveBeenCalled()
   })
 })
+
+describe('Settings: alert emails', () => {
+  it('shows the switch (on by default) and reflects an opt-out', () => {
+    renderSettings()
+    expect(screen.getByRole('switch', { name: /Budget alert emails/ }).checked).toBe(true)
+  })
+
+  it('shows off when unsubscribed', () => {
+    renderSettings({ ...OPTIONS, alert_digest_enabled: false })
+    expect(screen.getByRole('switch', { name: /Budget alert emails/ }).checked).toBe(false)
+  })
+
+  it('saves the change', async () => {
+    client.saveAlertDigest.mockResolvedValueOnce({ ...OPTIONS, alert_digest_enabled: false })
+    const props = renderSettings()
+    fireEvent.click(screen.getByRole('switch', { name: /Budget alert emails/ }))
+    await waitFor(() => expect(props.onOptionsUpdated).toHaveBeenCalled())
+    expect(client.saveAlertDigest).toHaveBeenCalledWith(false)
+  })
+})

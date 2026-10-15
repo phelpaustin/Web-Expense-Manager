@@ -1,6 +1,6 @@
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import Switch from '../components/Switch.jsx'
-import { saveCountBillsAsSpending } from '../api/client.js'
+import { saveAlertDigest, saveCountBillsAsSpending } from '../api/client.js'
 import { useState } from 'react'
 import {
   changePassword,
@@ -255,6 +255,22 @@ export default function SettingsPage({
               }}
               label="Count new bills as spending right away"
               description="When on, uploaded, imported and added bills are recorded as a total-only expense, so they count towards your budgets straight away. Itemise them whenever you like; the items then replace the total. When off, bills wait in “To itemise” until you record or itemise them."
+            />
+          </section>
+
+          <section className="panel">
+            <h2>Email</h2>
+            <Switch
+              checked={options.alert_digest_enabled !== false}
+              onChange={async (enabled) => {
+                try {
+                  onOptionsUpdated(await saveAlertDigest(enabled))
+                } catch (err) {
+                  onError(err.message)
+                }
+              }}
+              label="Budget alert emails"
+              description="A digest email when a budget is close to or over its limit. Every email also has an unsubscribe link."
             />
           </section>
 

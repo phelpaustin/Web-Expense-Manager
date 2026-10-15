@@ -106,3 +106,23 @@ def decode_email_verification_token(token: str) -> tuple[str, int] | None:
     if not isinstance(subject, str) or not isinstance(version, int) or isinstance(version, bool):
         return None
     return subject, version
+
+
+
+def create_unsubscribe_token(subject: str) -> str:
+    """Signed token for the unsubscribe link in digest emails (long-lived: old emails keep working)."""
+    expire = datetime.now(timezone.utc) + timedelta(days=365)
+    payload = {"sub": subject, "exp": expire, "purpose": "unsubscribe_digest"}
+    return jwt.encode(payload, settings.secret_key, algorithm=_ALGORITHM)
+
+
+def decode_unsubscribe_token(token: str) -> str | None:
+    """Return the user id (as a string) for a valid unsubscribe token, else None."""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    subject = payload.get("sub")
+    if payload.get("purpose") != "unsubscribe_digest" or not isinstance(subject, str):
+        return None
+    return subject

@@ -2,6 +2,7 @@ import CurrencySelect from '../components/CurrencySelect.jsx'
 import { useState } from 'react'
 import { STATUS_COLORS } from '../constants.js'
 import { money } from '../format.js'
+import TrendMeta from '../components/TrendMeta.jsx'
 import { SpendingTrendChart, CashFlowChart, CategoryDonut } from '../components/Charts.jsx'
 
 const CHOOSE_SPACES = '__choose__'
@@ -259,15 +260,7 @@ export default function DashboardPage({
               }}
             />
           </div>
-          <div className="trend-meta">
-            <span>
-              <strong style={{ color: STATUS_COLORS[periodStatus.status] }}>{periodStatus.pct}%</strong> used
-            </span>
-            <span>{money(periodStatus.remaining)} remaining</span>
-            {periodStatus.rollover !== 0 && <span>rollover: {money(periodStatus.rollover)}</span>}
-            <span>projected: {money(periodStatus.projected)}</span>
-            <span>{periodStatus.days_remaining} days left</span>
-          </div>
+          <TrendMeta trends={trends} />
         </section>
       )}
 

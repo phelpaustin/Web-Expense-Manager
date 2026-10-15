@@ -179,3 +179,29 @@ npm test
 ```
 
 GitHub Actions runs both on every push to `main` and on pull requests.
+
+## Dashboard numbers
+
+- Month-over-month change, the forecast and volatility use **finished months only**. The in-progress month is shown in the chart but left out of those figures (the dashboard says so). Months with no spend between finished months count as zero.
+- The forecast needs at least three finished months and is never negative.
+- The category suggester matches **whole words** (plural allowed), not substrings, so "Pizza slice" is Dining rather than Transport.
+
+## Email addresses
+
+Emails are case-insensitive: they are trimmed and lowercased on sign-up, sign-in, Google sign-in, password reset, resend-verification and group invites. Migration `0019_lowercase_emails` lowercases existing rows. If two accounts already differ only by case they are left as they are (each may own data); lookups still resolve them, oldest account first, so you may want to merge those by hand.
+
+## Leaving or removing a member, deleting a space
+
+- When someone leaves a space or trip (or is removed), their own expenses in it go back to personal, so they stay editable and a trip settlement no longer counts payments from a person who is gone. Other members' expenses are untouched, and the leaver's mappings into that space are cleared.
+- Deleting a space keeps every member's expenses (made personal) and un-nests child spaces/trips.
+- Migration `0020_rescue_orphaned_expenses` fixes expenses already stranded this way.
+
+## Budget alert emails: unsubscribe
+
+- Every digest email ends with an unsubscribe link (also sent as a `List-Unsubscribe` header). It opens `/unsubscribe?token=…` on the frontend, which works without signing in; clicking the button turns the digest off for that account. The link is signed with `SECRET_KEY` and valid for a year; it can only do this one thing.
+- Users can also turn the emails on or off in Settings → Data → Email. Existing users keep receiving the digest until they opt out (migration `0021_alert_digest_enabled`).
+- The link uses `FRONTEND_URL`, so make sure it is set to your Vercel URL in production.
+
+## Exports and spreadsheet formulas
+
+Text cells in the CSV/XLSX export that start with `=`, `+`, `-` or `@` (or a tab/line break) get a leading `'`, so Excel, Sheets and LibreOffice show them as text instead of running them as formulas (a shop named `=HYPERLINK(...)` is harmless). Amounts, quantities and dates stay real numbers/dates. Importing one of our own exports (expenses or bills) removes that quote again, so the original text comes back.

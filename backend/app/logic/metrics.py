@@ -37,7 +37,8 @@ def summary(expenses: list[dict], income: list[dict]) -> dict:
     daily_burn = round(this_spent / days_elapsed, 2)
     monthly_projection = round(daily_burn * days_in_month, 2)
 
-    vals = [m["total"] for m in exp_monthly]
+    # Volatility is across finished months; a part-way current month would skew it.
+    vals = [m["total"] for m in analytics.complete_months(exp_monthly)]
     if len(vals) >= 2:
         mean = sum(vals, quantize_money(0)) / len(vals)
         variance = sum((value - mean) ** 2 for value in vals) / (len(vals) - 1)

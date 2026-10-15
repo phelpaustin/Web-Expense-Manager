@@ -25,6 +25,8 @@ def analytics_trends(
         "change": analytics_logic.month_over_month_change(monthly),
         "forecast_next_month": analytics_logic.forecast_next_month(monthly),
         "forecast_available": analytics_logic.HAS_STATS,
+        # Month still in progress: excluded from change/forecast above.
+        "current_month": analytics_logic.current_month_key(),
     }
 
 

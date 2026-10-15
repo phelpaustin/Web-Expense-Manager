@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -8,6 +9,7 @@ from app.api.deps import (
     require_role_at_least,
 )
 from app.api.options import default_currency_for
+from app.core.emails import NormalizedEmail, normalize_email, user_by_email
 from app.core.fx import normalize_convertible_currency
 from app.core.rate_limit import limiter
 from app.db.database import get_db
@@ -48,7 +50,7 @@ class GroupUpdate(BaseModel):
 
 
 class InviteIn(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
     role: str = "editor"  # admin | editor | viewer (owner is not invitable)
 
 
@@ -190,6 +192,28 @@ def delete_group(
     db.commit()
 
 
+def detach_member(db: Session, group_id: int, user_id: int) -> int:
+    """Take a user out of a space/trip without orphaning their data.
+
+    Their expenses in the space go back to being personal (they stay theirs and stay
+    editable; otherwise they would be tagged to a space they can no longer open, and a
+    trip's settlement would count them with no payer). Their own mappings into this
+    space as a local parent are cleared. Returns how many expenses were moved.
+    """
+    moved = (
+        db.query(models.Expense)
+        .filter(models.Expense.group_id == group_id, models.Expense.user_id == user_id)
+        .update({"group_id": None}, synchronize_session=False)
+    )
+    db.query(models.GroupMember).filter(
+        models.GroupMember.user_id == user_id, models.GroupMember.local_parent_group_id == group_id
+    ).update({"local_parent_group_id": None}, synchronize_session=False)
+    db.query(models.GroupMember).filter(
+        models.GroupMember.group_id == group_id, models.GroupMember.user_id == user_id
+    ).delete(synchronize_session=False)
+    return moved
+
+
 def cascade_delete_group(db: Session, group: models.Group) -> None:
     """Detach the group's expenses (kept, just un-tagged), un-nest any child trips/spaces,
     clear any member's local mapping pointing at it, and remove its members/invites/self."""
@@ -236,7 +260,7 @@ def invite_member(
 
     role = payload.role if payload.role in ("admin", "editor", "viewer") else "editor"
 
-    invitee = db.query(models.User).filter(models.User.email == payload.email).first()
+    invitee = user_by_email(db, payload.email)
     if invitee:
         if is_group_member(db, group_id, invitee.id):
             raise HTTPException(status_code=409, detail="That user is already a member")
@@ -246,7 +270,7 @@ def invite_member(
 
     existing_invite = (
         db.query(models.GroupInvite)
-        .filter(models.GroupInvite.group_id == group_id, models.GroupInvite.email == payload.email)
+        .filter(models.GroupInvite.group_id == group_id, func.lower(models.GroupInvite.email) == payload.email)
         .first()
     )
     if existing_invite:
@@ -300,7 +324,7 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Member not found")
     if target.role == "owner":
         raise HTTPException(status_code=400, detail="Cannot remove the group owner")
-    db.delete(target)
+    detach_member(db, group_id, user_id)
     db.commit()
 
 
@@ -314,7 +338,8 @@ def cancel_invite(
     _group_or_404(db, group_id)
     _require_owner(db, group_id, user.id)
     db.query(models.GroupInvite).filter(
-        models.GroupInvite.group_id == group_id, models.GroupInvite.email == email
+        models.GroupInvite.group_id == group_id,
+        func.lower(models.GroupInvite.email) == normalize_email(email),
     ).delete()
     db.commit()
 
@@ -328,5 +353,5 @@ def leave_group(
     member = _require_member(db, group_id, user.id)
     if member.role == "owner":
         raise HTTPException(status_code=400, detail="The owner can't leave — delete the group instead")
-    db.delete(member)
+    detach_member(db, group_id, user.id)
     db.commit()

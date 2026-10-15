@@ -118,7 +118,7 @@ def test_digest_continues_past_failing_user(client, make_user, monkeypatch):
         return real(db, user_id)
 
     monkeypatch.setattr(alerts, "_alerts_for_user", flaky)
-    monkeypatch.setattr(alerts, "send_email", lambda to, subj, body: sent.append(to) or True)
+    monkeypatch.setattr(alerts, "send_email", lambda to, subj, body, **kw: sent.append(to) or True)
 
     client.put("/api/budgets", json={"category": "__total_monthly__", "amount": "1"}, headers=h_ok)
     client.post("/api/expenses", json={"date": TODAY, "category": "Food", "amount": "999", "currency": "SEK"}, headers=h_ok)

@@ -3,7 +3,8 @@ import hmac
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -12,6 +13,8 @@ from app.api.options import get_or_create_options
 from app.api.expenses import fetch_expenses_in_reporting_currency
 from app.core.config import settings
 from app.core.email import send_email
+from app.core.rate_limit import limiter
+from app.core.security import create_unsubscribe_token, decode_unsubscribe_token
 from app.db.database import get_db
 from app.db import models
 from app.logic import alerts as alerts_logic
@@ -42,9 +45,35 @@ def get_alerts(
     return _alerts_for_user(db, user.id)
 
 
-def _digest_body(alerts: list[dict]) -> str:
+def unsubscribe_link(user_id: int) -> str:
+    return f"{settings.frontend_url.rstrip('/')}/unsubscribe?token={create_unsubscribe_token(str(user_id))}"
+
+
+def _digest_body(alerts: list[dict], unsubscribe_url: str = "") -> str:
     lines = [f"- [{a['severity'].upper()}] {a['message']}" for a in alerts]
-    return "Your budget alerts:\n\n" + "\n".join(lines)
+    body = "Your budget alerts:\n\n" + "\n".join(lines)
+    if unsubscribe_url:
+        body += f"\n\n--\nDon't want these emails? Unsubscribe: {unsubscribe_url}"
+    return body
+
+
+class UnsubscribeIn(BaseModel):
+    token: str
+
+
+@router.post("/alerts/unsubscribe")
+@limiter.limit("30/hour")
+def unsubscribe_digest(request: Request, payload: UnsubscribeIn, db: Session = Depends(get_db)):
+    """One-click unsubscribe from the digest email. Authenticated by the signed link
+    token alone (the person clicking may not be signed in). Safe to repeat."""
+    subject = decode_unsubscribe_token(payload.token)
+    user = db.get(models.User, int(subject)) if subject and subject.isdigit() else None
+    if user is None:
+        raise HTTPException(status_code=400, detail="This unsubscribe link is invalid or has expired.")
+    opts = get_or_create_options(db, user.id)
+    opts.alert_digest_enabled = False
+    db.commit()
+    return {"message": "You will no longer receive budget alert emails."}
 
 
 def _digest_signature(alerts: list[dict]) -> str:
@@ -73,6 +102,9 @@ def send_alert_digest(
         # One user's problem (bad data, FX outage, email error) must not stop
         # the digest for everyone else.
         try:
+            if not get_or_create_options(db, user.id).alert_digest_enabled:
+                skipped += 1
+                continue
             alerts = _alerts_for_user(db, user.id)
             if not alerts:
                 if user.alert_digest_signature is not None:
@@ -84,7 +116,13 @@ def send_alert_digest(
             if signature == user.alert_digest_signature:
                 skipped += 1
                 continue
-            if send_email(user.email, "Your budget alerts", _digest_body(alerts)):
+            link = unsubscribe_link(user.id)
+            if send_email(
+                user.email,
+                "Your budget alerts",
+                _digest_body(alerts, link),
+                headers={"List-Unsubscribe": f"<{link}>"},
+            ):
                 user.alert_digest_signature = signature
                 db.commit()
                 sent += 1

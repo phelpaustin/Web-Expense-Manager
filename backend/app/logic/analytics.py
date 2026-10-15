@@ -7,6 +7,8 @@ API, by tests, and by a future mobile app — none of which know about Streamlit
 """
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 
 from app.core.money import as_decimal, quantize_money
@@ -40,30 +42,71 @@ def monthly_totals(expenses: list[dict]) -> list[dict]:
     return [{"month": row.month, "total": quantize_money(row.amount)} for row in monthly.itertuples()]
 
 
-def month_over_month_change(monthly: list[dict]) -> dict | None:
-    """% change of the latest month vs the previous one (was the pct_change block)."""
-    if len(monthly) < 2:
+def current_month_key(today: date | None = None) -> str:
+    today = today or date.today()
+    return f"{today.year:04d}-{today.month:02d}"
+
+
+def complete_months(monthly: list[dict], today: date | None = None) -> list[dict]:
+    """Monthly totals for finished calendar months only.
+
+    The in-progress month is dropped (a part-month total is not comparable to
+    full months), and calendar gaps between the first and last finished month
+    are filled with zero so "previous month" really means the previous month,
+    not "the previous month that had data".
+    """
+    current = current_month_key(today)
+    done = {m["month"]: m["total"] for m in monthly if m["month"] < current}
+    if not done:
+        return []
+    first = pd.Period(min(done), freq="M")
+    last = pd.Period(current, freq="M") - 1
+    return [
+        {"month": str(p), "total": done.get(str(p), quantize_money(0))}
+        for p in pd.period_range(first, last, freq="M")
+    ]
+
+
+def month_over_month_change(monthly: list[dict], today: date | None = None) -> dict | None:
+    """% change of the last finished month vs the one before it.
+
+    Never includes the current, partial month. pct_change is None when the
+    earlier month had no spend (a percentage would be meaningless).
+    """
+    done = complete_months(monthly, today)
+    if len(done) < 2:
         return None
-    last = monthly[-1]["total"]
-    prev = monthly[-2]["total"]
-    pct = ((last - prev) / prev * 100) if prev else 0.0
+    last, prev = done[-1], done[-2]
+    delta = last["total"] - prev["total"]
+    pct = round(float(delta / prev["total"] * 100), 1) if prev["total"] else None
     return {
-        "last": last,
-        "previous": prev,
-        "pct_change": round(pct, 1),
-        "direction": "up" if pct > 0 else "down" if pct < 0 else "flat",
+        "last": last["total"],
+        "previous": prev["total"],
+        "last_month": last["month"],
+        "previous_month": prev["month"],
+        "pct_change": pct,
+        "direction": "up" if delta > 0 else "down" if delta < 0 else "flat",
     }
 
 
-def forecast_next_month(monthly: list[dict]) -> float | None:
-    """One-step Holt-Winters forecast (was the ExponentialSmoothing block)."""
-    if not HAS_STATS or len(monthly) < 2:
+MIN_FORECAST_MONTHS = 3
+
+
+def forecast_next_month(monthly: list[dict], today: date | None = None) -> float | None:
+    """One-step Holt-Winters forecast of the month after the last finished one.
+
+    Fitted on finished months only (so the part-way current month cannot drag
+    the trend down), needs at least MIN_FORECAST_MONTHS of them, and is never
+    negative.
+    """
+    done = complete_months(monthly, today)
+    if not HAS_STATS or len(done) < MIN_FORECAST_MONTHS:
         return None
     # Totals are Decimal (Numeric columns); statsmodels needs a float series.
-    series = pd.Series([float(m["total"]) for m in monthly], dtype="float64")
+    series = pd.Series([float(m["total"]) for m in done], dtype="float64")
     try:
         fit = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
-        return quantize_money(fit.forecast(1).iloc[0])
+        return quantize_money(max(float(fit.forecast(1).iloc[0]), 0.0))
     except Exception:
         return None
 

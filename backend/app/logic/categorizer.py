@@ -7,6 +7,7 @@ used there most.
 """
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 # Keyword → category rules, ported from the Streamlit app's ml_categorizer.py.
@@ -62,14 +63,28 @@ DEFAULT_RULES: dict[str, list[str]] = {
 }
 
 
+_WORD = "a-z0-9åäöéü"
+
+
+def _keyword_pattern(keyword: str) -> re.Pattern:
+    # Whole word / phrase only, with an optional plural ("egg" -> "eggs"), so
+    # "pizza slice" no longer hits "sl", "steak" no longer hits "tea", etc.
+    return re.compile(rf"(?<![{_WORD}]){re.escape(keyword)}(?:e?s)?(?![{_WORD}])")
+
+
+_PATTERNS: dict[str, list[re.Pattern]] = {
+    category: [_keyword_pattern(kw) for kw in keywords] for category, keywords in DEFAULT_RULES.items()
+}
+
+
 def categorize_by_rules(description: str, shop: str = "") -> str | None:
-    """Score keyword matches across categories and return the best match, if any."""
+    """Score whole-word keyword matches across categories; return the best, if any."""
     text = f"{description} {shop}".lower().strip()
     if not text:
         return None
     scores: dict[str, int] = {}
-    for category, keywords in DEFAULT_RULES.items():
-        score = sum(1 for kw in keywords if kw in text)
+    for category, patterns in _PATTERNS.items():
+        score = sum(1 for pat in patterns if pat.search(text))
         if score > 0:
             scores[category] = score
     return max(scores, key=scores.get) if scores else None

@@ -1,6 +1,7 @@
 from datetime import date
 
 from app.core.config import settings
+from app.core.emails import normalize_email, user_by_email
 from app.db.database import SessionLocal
 from app.db import models
 from app.core.security import hash_password
@@ -54,10 +55,10 @@ def init_db() -> None:
 
     db = SessionLocal()
     try:
-        demo = db.query(models.User).filter(models.User.email == settings.demo_email).first()
+        demo = user_by_email(db, settings.demo_email)
         if demo is None:
             demo = models.User(
-                email=settings.demo_email,
+                email=normalize_email(settings.demo_email),
                 hashed_password=hash_password(password),
             )
             db.add(demo)

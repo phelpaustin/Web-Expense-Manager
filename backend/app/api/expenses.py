@@ -23,7 +23,7 @@ from app.core.fx import normalize_convertible_currency
 from app.core.file_upload import read_upload_limited
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS
 from app.api import bill_sync
-from app.core.parsing import parse_amount, read_csv_bytes
+from app.core.parsing import escape_formula, parse_amount, read_csv_bytes, unescape_formula
 from app.core.validation import PartialUpdate
 from app.core.money import as_decimal, quantize_money, MAX_MONEY
 from app.db.database import get_db
@@ -572,7 +572,8 @@ def _cell(row, col):
     if col is None:
         return None
     value = row[col]
-    return None if pd.isna(value) else value
+    # Undo the quote our export adds in front of formula-looking text, so a re-import round-trips.
+    return None if pd.isna(value) else unescape_formula(value)
 
 
 @router.post("/expenses/import")
@@ -761,20 +762,23 @@ def export_expenses(
     user: models.User = Depends(get_current_user),
 ):
     rows = fetch_expenses(db, user.id)
+    # Free-text columns are neutralised so a shop/item like "=HYPERLINK(...)" cannot run as a
+    # formula when the file is opened; numbers and dates are left as real values.
+    text = escape_formula
     df = pd.DataFrame(
         [
             {
                 "Date": r["date"],
-                "Category": r["category"],
-                "Subcategory": r["subcategory"],
-                "Item": r["description"],
-                "Shop": r["shop"],
-                "Brand": r["brand"],
+                "Category": text(r["category"]),
+                "Subcategory": text(r["subcategory"]),
+                "Item": text(r["description"]),
+                "Shop": text(r["shop"]),
+                "Brand": text(r["brand"]),
                 "PricePaid": r["amount"],
                 "Quantity": r["quantity"],
-                "QuantityUnit": r["unit"],
+                "QuantityUnit": text(r["unit"]),
                 "PricePerUnit": r["price_per_unit"],
-                "Currency": r["currency"],
+                "Currency": text(r["currency"]),
             }
             for r in rows
         ]

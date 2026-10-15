@@ -555,6 +555,24 @@ export function saveCountBillsAsSpending(enabled) {
   })
 }
 
+// Budget-alert digest email on/off (Settings).
+export function saveAlertDigest(enabled) {
+  return request('/api/options/alert-digest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
+}
+
+// One-click unsubscribe from the link in a digest email (no login needed).
+export function unsubscribeDigest(token) {
+  return request('/api/alerts/unsubscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+}
+
 export async function exportExpenses(format) {
   const token = getToken()
   const res = await fetch(`${API_BASE}/api/expenses/export?format=${format}`, {

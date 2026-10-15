@@ -25,10 +25,11 @@ def _from_address() -> str:
     return settings.email_from or settings.smtp_from or "onboarding@resend.dev"
 
 
-def _send_via_resend(to: str, subject: str, body: str) -> bool:
-    payload = json.dumps(
-        {"from": _from_address(), "to": [to], "subject": subject, "text": body}
-    ).encode()
+def _send_via_resend(to: str, subject: str, body: str, headers: dict | None = None) -> bool:
+    message = {"from": _from_address(), "to": [to], "subject": subject, "text": body}
+    if headers:
+        message["headers"] = headers
+    payload = json.dumps(message).encode()
     req = urllib.request.Request(
         _RESEND_ENDPOINT,
         data=payload,
@@ -52,11 +53,13 @@ def _send_via_resend(to: str, subject: str, body: str) -> bool:
         return False
 
 
-def _send_via_smtp(to: str, subject: str, body: str) -> bool:
+def _send_via_smtp(to: str, subject: str, body: str, headers: dict | None = None) -> bool:
     msg = EmailMessage()
     msg["From"] = _from_address()
     msg["To"] = to
     msg["Subject"] = subject
+    for name, value in (headers or {}).items():
+        msg[name] = value
     msg.set_content(body)
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
@@ -70,11 +73,11 @@ def _send_via_smtp(to: str, subject: str, body: str) -> bool:
         return False
 
 
-def send_email(to: str, subject: str, body: str) -> bool:
+def send_email(to: str, subject: str, body: str, headers: dict | None = None) -> bool:
     if settings.resend_api_key:
-        return _send_via_resend(to, subject, body)
+        return _send_via_resend(to, subject, body, headers)
     if settings.smtp_host:
-        return _send_via_smtp(to, subject, body)
+        return _send_via_smtp(to, subject, body, headers)
     log.warning("Email not configured — message to %s not sent.\nSubject: %s\n%s", to, subject, body)
     return False
 

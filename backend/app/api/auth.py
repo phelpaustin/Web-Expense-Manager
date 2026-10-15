@@ -3,12 +3,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, BeforeValidator, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.email import send_email
+from app.core.emails import NormalizedEmail, normalize_email, user_by_email
 from app.core.rate_limit import limiter
 from app.core.security import (
     create_access_token,
@@ -29,7 +31,7 @@ PasswordInput = Annotated[str, BeforeValidator(validate_bcrypt_password)]
 
 
 class RegisterIn(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class TokenOut(BaseModel):
@@ -60,7 +62,7 @@ class PasswordChange(BaseModel):
 
 
 class ForgotPasswordIn(BaseModel):
-    email: EmailStr
+    email: NormalizedEmail
 
 
 class VerifyEmailIn(BaseModel):
@@ -80,7 +82,7 @@ class DeleteAccountIn(BaseModel):
 
 def _claim_group_invites(db: Session, user: models.User) -> None:
     """Add a newly-registered user to any groups they were invited to by email."""
-    invites = db.query(models.GroupInvite).filter(models.GroupInvite.email == user.email).all()
+    invites = db.query(models.GroupInvite).filter(func.lower(models.GroupInvite.email) == normalize_email(user.email)).all()
     for invite in invites:
         already_member = (
             db.query(models.GroupMember)
@@ -108,7 +110,7 @@ def _send_verification_email(user: models.User) -> bool:
 @router.post("/auth/register", response_model=RegistrationOut, status_code=201)
 @limiter.limit("10/hour")
 def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
-    exists = db.query(models.User).filter(models.User.email == payload.email).first()
+    exists = user_by_email(db, payload.email)
     if exists:
         raise HTTPException(status_code=409, detail="Email already registered")
     user = models.User(
@@ -135,7 +137,7 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
 @router.post("/auth/login", response_model=TokenOut)
 @limiter.limit("10/minute")
 def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == form.username).first()
+    user = user_by_email(db, form.username)
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.email_verified:
@@ -166,8 +168,9 @@ def google_login(payload: GoogleIn, db: Session = Depends(get_db)):
     email = info.get("email")
     if not email or not info.get("email_verified"):
         raise HTTPException(status_code=401, detail="Google account email not verified")
+    email = normalize_email(email)
 
-    user = db.query(models.User).filter(models.User.email == email).first()
+    user = user_by_email(db, email)
     if user is None:
         user = models.User(
             email=email,
@@ -229,7 +232,7 @@ def change_password(
 @limiter.limit("5/hour")
 def forgot_password(request: Request, payload: ForgotPasswordIn, db: Session = Depends(get_db)):
     """Email a reset link. Always returns the same response (no user enumeration)."""
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    user = user_by_email(db, payload.email)
     if user:
         token = create_reset_token(str(user.id), user.password_reset_version)
         link = f"{settings.frontend_url}/reset-password?token={token}"
@@ -247,7 +250,7 @@ def forgot_password(request: Request, payload: ForgotPasswordIn, db: Session = D
 @limiter.limit("5/hour")
 def resend_verification(request: Request, payload: ForgotPasswordIn, db: Session = Depends(get_db)):
     """Resend a verification link without revealing whether the account exists."""
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    user = user_by_email(db, payload.email)
     if user is not None and not user.email_verified:
         user.email_verification_version += 1
         db.commit()
@@ -398,7 +401,8 @@ def delete_account(
             synchronize_session=False
         )
         db.query(models.GroupInvite).filter(
-            (models.GroupInvite.invited_by == user.id) | (models.GroupInvite.email == user.email)
+            (models.GroupInvite.invited_by == user.id)
+            | (func.lower(models.GroupInvite.email) == normalize_email(user.email))
         ).delete(synchronize_session=False)
 
         # Receipts must be removed before their pending bills because the FK is

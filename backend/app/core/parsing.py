@@ -95,3 +95,27 @@ def read_csv_bytes(raw: bytes, nrows: int | None = None) -> pd.DataFrame:
     except csv.Error:
         delimiter = ","
     return pd.read_csv(io.StringIO(text), sep=delimiter, dtype=str, nrows=nrows, skipinitialspace=True)
+
+
+# ── Spreadsheet formula injection ─────────────────────────────────────────
+# A text cell that starts with one of these is run as a formula by Excel / Sheets /
+# LibreOffice when an exported file is opened (e.g. a shop named "=HYPERLINK(...)").
+_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+
+def escape_formula(value):
+    """Make a text value safe to put in an exported CSV/XLSX cell.
+
+    Prefixes a single quote when the text would be read as a formula; spreadsheets show
+    the text unchanged and treat it as plain text. Non-strings (numbers, dates) pass through.
+    """
+    if isinstance(value, str) and value.lstrip(" ").startswith(_FORMULA_TRIGGERS):
+        return "'" + value
+    return value
+
+
+def unescape_formula(value):
+    """Undo escape_formula for values read back from one of our own exports."""
+    if isinstance(value, str) and len(value) > 1 and value[0] == "'" and value[1:].lstrip(" ").startswith(_FORMULA_TRIGGERS):
+        return value[1:]
+    return value
