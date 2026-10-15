@@ -5,6 +5,9 @@ user gets their own editable taxonomy, seeded with sensible defaults.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -49,24 +52,48 @@ DEFAULT_SHOPS = [
 ]
 
 
+def _find_options(db: Session, user_id: int) -> models.UserOptions | None:
+    return db.query(models.UserOptions).filter(models.UserOptions.user_id == user_id).first()
+
+
 def get_or_create_options(db: Session, user_id: int) -> models.UserOptions:
-    opts = (
-        db.query(models.UserOptions)
-        .filter(models.UserOptions.user_id == user_id)
-        .first()
-    )
-    if opts is None:
-        opts = models.UserOptions(
-            user_id=user_id,
-            categories=list(DEFAULT_CATEGORIES),
-            subcategories={k: list(v) for k, v in DEFAULT_SUBCATEGORIES.items()},
-            units=list(DEFAULT_UNITS),
-            shops=list(DEFAULT_SHOPS),
-            base_currency="SEK",
-        )
-        db.add(opts)
+    """The user's options row, created with defaults on first use.
+
+    The dashboard fires many requests in parallel on a new user's first load, and
+    each one calls this. A plain select-then-insert lets several of them insert the
+    same row and all but one fail on the unique user_id constraint (a 500). The
+    insert is therefore ``ON CONFLICT DO NOTHING``, after which every caller simply
+    reads the one row that exists. It needs no rollback, so it cannot discard
+    anything else the caller has pending in the session.
+    """
+    opts = _find_options(db, user_id)
+    if opts is not None:
+        return opts
+
+    values = {
+        "user_id": user_id,
+        "categories": list(DEFAULT_CATEGORIES),
+        "subcategories": {k: list(v) for k, v in DEFAULT_SUBCATEGORIES.items()},
+        "units": list(DEFAULT_UNITS),
+        "shops": list(DEFAULT_SHOPS),
+        "base_currency": "SEK",
+    }
+    dialect = db.get_bind().dialect.name
+    if dialect in ("postgresql", "sqlite"):
+        insert = postgresql_insert if dialect == "postgresql" else sqlite_insert
+        db.execute(insert(models.UserOptions.__table__).values(**values).on_conflict_do_nothing(index_elements=["user_id"]))
         db.commit()
-        db.refresh(opts)
+    else:
+        # Other databases: fall back to insert-and-recover.
+        try:
+            db.add(models.UserOptions(**values))
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+
+    opts = _find_options(db, user_id)
+    if opts is None:  # the row is gone again (e.g. account deleted meanwhile)
+        raise HTTPException(status_code=404, detail="User not found")
     return opts
 
 
