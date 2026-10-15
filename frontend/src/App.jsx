@@ -57,7 +57,16 @@ export default function App() {
           path="*"
           element={
             <div className="container">
-              <AuthScreen onAuthed={auth.handleAuthed} />
+              {auth.authError ? (
+                <div className="auth-form">
+                  <div className="auth-error">{auth.authError}</div>
+                  <button type="button" onClick={auth.retryAuth} disabled={auth.loading}>
+                    {auth.loading ? 'Trying…' : 'Try again'}
+                  </button>
+                </div>
+              ) : (
+                <AuthScreen onAuthed={auth.handleAuthed} sessionNotice={auth.sessionNotice} />
+              )}
             </div>
           }
         />

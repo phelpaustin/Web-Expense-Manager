@@ -14,6 +14,14 @@ function setToken(token) {
   localStorage.setItem(TOKEN_KEY, token)
 }
 
+// Lets the UI react when the server rejects the session mid-use (token expired,
+// or revoked by a logout on another device). Returns an unsubscribe function.
+const sessionExpiredListeners = new Set()
+export function onSessionExpired(listener) {
+  sessionExpiredListeners.add(listener)
+  return () => sessionExpiredListeners.delete(listener)
+}
+
 export async function logout() {
   const token = getToken()
   localStorage.removeItem(TOKEN_KEY)
@@ -45,6 +53,14 @@ function errorMessage(data, fallback) {
   return fallback
 }
 
+// Errors carry the HTTP status so callers can tell "session rejected" (401) from
+// "server unavailable" (5xx) or "unreachable" (a fetch TypeError, no status).
+function requestError(message, status) {
+  const err = new Error(message)
+  err.status = status
+  return err
+}
+
 // Central fetch wrapper: attaches the auth header and normalizes errors.
 async function request(path, options = {}) {
   const token = getToken()
@@ -53,9 +69,18 @@ async function request(path, options = {}) {
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
 
-  if (res.status === 401) {
-    logout()
-    throw new Error('Session expired — please log in again.')
+  // A 401 on a request that carried our token means the session is over. (A 401 on
+  // a request without a token, e.g. a public endpoint, is just an ordinary error.)
+  if (res.status === 401 && token) {
+    // Many requests fire at once, so the first 401 does the work. If the stored token
+    // is no longer the one this request sent, it was already cleared, or the user has
+    // signed in again since; leave that newer session alone. The server already
+    // rejected this token, so there is nothing to revoke: don't call /auth/logout.
+    if (getToken() === token) {
+      localStorage.removeItem(TOKEN_KEY)
+      sessionExpiredListeners.forEach((listener) => listener())
+    }
+    throw requestError('Session expired — please log in again.', 401)
   }
   if (!res.ok) {
     let message = 'Request failed'
@@ -65,7 +90,7 @@ async function request(path, options = {}) {
     } catch {
       // ignore non-JSON error bodies
     }
-    throw new Error(message)
+    throw requestError(message, res.status)
   }
   if (res.status === 204) return null
   return res.json()

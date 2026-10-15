@@ -3,7 +3,7 @@ import { login, register, forgotPassword, googleLogin, resendVerification } from
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
-export default function AuthScreen({ onAuthed }) {
+export default function AuthScreen({ onAuthed, sessionNotice = null }) {
   const [mode, setMode] = useState('login') // 'login' | 'register' | 'forgot'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -129,6 +129,7 @@ export default function AuthScreen({ onAuthed }) {
           {mode === 'register' && (
             <p className="subtitle">We’ll email you a link. You’ll choose your name and password there.</p>
           )}
+          {sessionNotice && !error && !notice && <div className="ok-note">{sessionNotice}</div>}
           {error && <div className="auth-error">{error}</div>}
           {notice && <div className="ok-note">{notice}</div>}
           <button type="submit" disabled={busy}>

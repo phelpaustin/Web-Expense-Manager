@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   fetchSummary,
   fetchTrends,
@@ -41,12 +41,17 @@ export function useAppData() {
   const [groups, setGroups] = useState([])
   const [dashboardScope, setDashboardScopeState] = useState('all')
   const [dashboardSpaceIds, setDashboardSpaceIdsState] = useState([])
+  // Bumped by resetData. A fetch that was already in flight when the user logged out
+  // must not write its results into the next user's session.
+  const sessionEpoch = useRef(0)
 
   // Runs each loader independently. One failing endpoint (e.g. an FX problem
   // affecting only the converted dashboards) must not blank pages that don't
   // depend on it, so successful results are applied and failures are reported.
   function applySettled(tasks) {
+    const epoch = sessionEpoch.current
     return Promise.allSettled(tasks.map((t) => t.load())).then((results) => {
+      if (epoch !== sessionEpoch.current) return
       const failures = []
       results.forEach((res, i) => {
         if (res.status === 'fulfilled') tasks[i].apply(res.value)
@@ -111,9 +116,10 @@ export function useAppData() {
     ])
   }
 
-  // Clears every fetched data slice on logout (mirrors the pre-split behaviour —
-  // alerts/trips/groups/dashboard scope are intentionally left as-is here too).
+  // Clears everything that belongs to the signed-in user, on logout or when the
+  // session is rejected, so the next person to sign in on this browser starts clean.
   function resetData() {
+    sessionEpoch.current += 1
     setSummary(null)
     setTrends(null)
     setCategories([])
@@ -124,6 +130,13 @@ export function useAppData() {
     setOptions(EMPTY_OPTIONS)
     setMetrics(null)
     setPeriodStatus(null)
+    setBudgetConfigState({ period: 'Monthly', rollover: false })
+    setAlerts([])
+    setTrips([])
+    setGroups([])
+    setDashboardScopeState('all')
+    setDashboardSpaceIdsState([])
+    setError(null)
   }
 
   // Switch the currency totals are shown in (null = follow the base currency).
