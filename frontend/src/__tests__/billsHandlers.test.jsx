@@ -109,48 +109,23 @@ describe('selection', () => {
 describe('uploading a receipt', () => {
   const file = new File(['x'], 'lidl.pdf', { type: 'application/pdf' })
 
-  it('attaches it to the matching bill when you agree (no double counting)', async () => {
-    const match = BILL(7, { shop: 'LIDL145MALMOBA', amount: 35.91 })
-    client.uploadBill
-      .mockResolvedValueOnce({ result: 'match_found', matches: [match] })
-      .mockResolvedValueOnce({ result: 'attached', bill: match })
-    const { result } = await setup()
-    const dialog = await withDialog(result, () => result.current.actions.uploadBill(file), 'attach')
-    expect(dialog.kind).toBe('choose')
-    expect(dialog.detail).toMatch(/LIDL145MALMOBA/)
-    expect(dialog.choices.map((c) => c.key)).toEqual(['attach', 'new'])
-    expect(client.uploadBill).toHaveBeenNthCalledWith(2, file, { attachTo: 7 })
-    expect(result.current.notice.text).toMatch(/attached to LIDL145MALMOBA/)
-    expect(loadAll).toHaveBeenCalled()
-  })
-
-  it('creates a separate bill when you choose that', async () => {
-    client.uploadBill
-      .mockResolvedValueOnce({ result: 'match_found', matches: [BILL(7)] })
-      .mockResolvedValueOnce({ result: 'created', bill: BILL(8, { status: 'total_only' }) })
-    const { result } = await setup()
-    await withDialog(result, () => result.current.actions.uploadBill(file), 'new')
-    expect(client.uploadBill).toHaveBeenNthCalledWith(2, file, { createNew: true })
-  })
-
-  it('creates nothing when you cancel the question', async () => {
-    client.uploadBill.mockResolvedValueOnce({ result: 'match_found', matches: [BILL(7)] })
-    const { result } = await setup()
-    await withDialog(result, () => result.current.actions.uploadBill(file), null)
-    expect(client.uploadBill).toHaveBeenCalledTimes(1) // no second request: neither attached nor created
-    expect(result.current.notice).toBeNull()
-  })
-
-  it.each([
-    [{ result: 'created', bill: BILL(1, { status: 'total_only', amount: 12 }) }, /counted as spending/],
-    [{ result: 'created', bill: BILL(1, { status: 'pending', amount: 12 }) }, /to itemise/],
-    [{ result: 'created', bill: BILL(1, { status: 'pending', amount: 0 }) }, /could not be read/],
-  ])('explains what happened to a new bill', async (response, text) => {
-    client.uploadBill.mockResolvedValueOnce(response)
+  it('only stores the file: no questions, no values read from it', async () => {
+    client.uploadBill.mockResolvedValueOnce({ result: 'created', bill: BILL(8, { status: 'pending', amount: 0 }) })
     const { result } = await setup()
     await act(async () => { await result.current.actions.uploadBill(file) })
-    expect(result.current.notice.text).toMatch(text)
     expect(client.uploadBill).toHaveBeenCalledTimes(1)
+    expect(client.uploadBill).toHaveBeenCalledWith(file)
+    expect(result.current.dialog).toBeFalsy()
+    expect(result.current.notice.text).toMatch(/under “To itemise”/)
+    expect(result.current.notice.text).toMatch(/Nothing is counted as spending/)
+    expect(result.current.query.status).toBe('pending')
+  })
+
+  it('still says so when the bill was recorded as a total', async () => {
+    client.uploadBill.mockResolvedValueOnce({ result: 'created', bill: BILL(1, { status: 'total_only', amount: 12 }) })
+    const { result } = await setup()
+    await act(async () => { await result.current.actions.uploadBill(file) })
+    expect(result.current.notice.text).toMatch(/counted as spending/)
   })
 
   it('reports a failed upload', async () => {

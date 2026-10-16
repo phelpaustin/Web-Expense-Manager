@@ -25,7 +25,6 @@ from app.db.database import get_db
 from app.core.money import MAX_MONEY
 from app.db import models
 from app.logic import bills as bills_logic
-from app.logic import receipt_ocr
 from app.logic.search import LIKE_ESCAPE, like_pattern
 
 router = APIRouter()
@@ -311,17 +310,17 @@ async def upload_pending(
     shop: str = Form(""),
     amount: Decimal = Form(Decimal("0"), ge=0, le=MAX_MONEY),
     attach_to: int | None = Form(None),
-    create_new: bool = Form(False),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     """Upload a receipt (PDF/photo), to itemise whenever you like.
 
+    The receipt is only stored: nothing is read from it. Everything is filled in by you.
+
     * ``attach_to`` puts the receipt on an existing bill (e.g. one from a bank statement).
-    * Otherwise the receipt is read; if it matches a bill you already have (same date and
-      amount) nothing is created and the matches are returned so you can choose to attach
-      it instead of double counting. Send ``create_new=true`` to create a bill anyway.
-    * With "count bills as spending" on, a new bill is recorded as a total right away.
+    * Otherwise a new bill is created, dated today, named after the file unless ``shop`` is
+      given, with the amount you give (default 0 = not known yet). It waits under "To itemise";
+      nothing counts as spending until you record its total or itemise it.
     """
     data = await file.read(_MAX_RECEIPT_BYTES + 1)
     if len(data) > _MAX_RECEIPT_BYTES:
@@ -338,43 +337,12 @@ async def upload_pending(
         response.status_code = 200
         return {"result": "attached", "bill": _serialize_one(db, user.id, bill)}
 
-    # Autofill whatever the caller left blank by best-effort parsing the receipt
-    # itself (see app/logic/receipt_ocr.py — degrades gracefully if unavailable).
-    parsed = None
-    if not shop.strip() or amount <= Decimal("0"):
-        parsed = receipt_ocr.extract_fields(data, content_type)
-
-    bill_date = (parsed and parsed["date"]) or datetime.date.today()
-    bill_amount = amount or (parsed and parsed["amount"]) or Decimal("0")
-    currency = default_currency_for(db, user.id)
-
-    if not create_new and parsed and parsed.get("date") and bill_amount > 0:
-        matches = (
-            db.query(models.PendingBill)
-            .filter(
-                models.PendingBill.user_id == user.id,
-                models.PendingBill.status.in_((STATUS_PENDING, STATUS_TOTAL_ONLY, STATUS_ITEMISED)),
-                models.PendingBill.date == bill_date,
-                models.PendingBill.amount == bill_amount,
-                models.PendingBill.currency == currency,
-            )
-            .order_by(models.PendingBill.id)
-            .all()
-        )
-        if matches:
-            response.status_code = 200
-            return {
-                "result": "match_found",
-                "matches": [_serialize_one(db, user.id, m) for m in matches],
-                "parsed": {"date": bill_date.isoformat(), "amount": bill_amount, "shop": parsed.get("shop") or ""},
-            }
-
     b = models.PendingBill(
         user_id=user.id,
-        date=bill_date,
-        shop=(shop.strip() or (parsed and parsed["shop"]) or safe_filename(file.filename, "Uploaded bill")),
-        amount=bill_amount,
-        currency=currency,
+        date=datetime.date.today(),
+        shop=(shop.strip() or safe_filename(file.filename, "Uploaded bill")),
+        amount=amount,
+        currency=default_currency_for(db, user.id),
         note="",
         status=STATUS_PENDING,
     )

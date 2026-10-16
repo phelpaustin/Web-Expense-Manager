@@ -379,18 +379,12 @@ def test_reverting_such_a_bill_hands_it_to_the_user(client, make_user):
     assert len(again) == 1 and again[0]["status"] == "total_only"
 
 
-def test_a_receipt_for_a_purchase_entered_as_expenses_offers_to_attach(client, make_user, monkeypatch):
-    from app.logic import receipt_ocr
-
+def test_a_receipt_can_be_attached_to_a_purchase_entered_as_expenses(client, make_user):
     _, h = make_user()
     _add(client, h, amount="35.91", shop="Lidl", date=JULY.format(21))
     [bill] = _all_bills(client, h)
-    monkeypatch.setattr(receipt_ocr, "extract_fields", lambda d, c: {"date": dt.date(2026, 7, 21), "amount": D("35.91"), "shop": "LIDL"})
-    r = client.post("/api/pending-bills/upload", files={"file": ("l.pdf", PDF, "application/pdf")}, headers=h)
-    assert r.status_code == 200 and r.json()["result"] == "match_found"
-    assert [m["id"] for m in r.json()["matches"]] == [bill["id"]]
     attached = client.post("/api/pending-bills/upload", files={"file": ("l.pdf", PDF, "application/pdf")}, data={"attach_to": str(bill["id"])}, headers=h)
-    assert attached.json()["bill"]["has_receipt"] is True
+    assert attached.status_code == 200 and attached.json()["bill"]["has_receipt"] is True
     assert _spent(client, h) == D("35.91") and len(_all_bills(client, h)) == 1  # nothing counted twice
 
 

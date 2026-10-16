@@ -9,7 +9,6 @@ import pytest
 
 from app.db import models
 from app.db.database import SessionLocal
-from app.logic import receipt_ocr
 from tests.test_migration_0015 import _alembic
 
 TODAY = dt.date.today().isoformat()
@@ -318,52 +317,76 @@ def test_expenses_list_filters_total_only_and_exposes_the_link(client, make_user
     assert len(_expenses(client, h)) == 2
 
 
-# ── receipts: attach / match / create ────────────────────────────────────
-def _ocr(monkeypatch, date, amount, shop="LIDL MALMO"):
-    monkeypatch.setattr(receipt_ocr, "extract_fields", lambda data, ct: {"date": date, "amount": amount, "shop": shop})
+# ── receipts: attach / create (nothing is read from the file) ───────────
+def _upload(client, h, name="lidl.pdf", **data):
+    return client.post("/api/pending-bills/upload", files={"file": (name, PDF, "application/pdf")}, data=data, headers=h)
 
 
-def test_receipt_matching_a_statement_bill_is_offered_not_double_counted(client, make_user, monkeypatch):
+def test_receipt_creates_an_empty_bill_to_itemise_and_counts_nothing(client, make_user):
     _, h = make_user()
-    existing = _bill(client, h, shop="LIDL145MALMOBA", amount="35.91", date="2026-07-21")  # from the statement
-    _ocr(monkeypatch, dt.date(2026, 7, 21), D("35.91"))
-    r = client.post("/api/pending-bills/upload", files={"file": ("lidl.pdf", PDF, "application/pdf")}, headers=h)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["result"] == "match_found" and [m["id"] for m in body["matches"]] == [existing["id"]]
-    assert _bills(client, h, status="all")["total"] == 1 and _spent(client, h) == D("35.91")  # nothing created
-
-    attached = client.post(
-        "/api/pending-bills/upload", files={"file": ("lidl.pdf", PDF, "application/pdf")}, data={"attach_to": str(existing["id"])}, headers=h
-    )
-    assert attached.status_code == 200 and attached.json()["result"] == "attached"
-    assert attached.json()["bill"]["has_receipt"] is True and _spent(client, h) == D("35.91")
+    r = _upload(client, h, name="IMG_2031.pdf")
+    assert r.status_code == 201 and r.json()["result"] == "created"
+    bill = r.json()["bill"]
+    assert bill["status"] == "pending" and bill["has_receipt"] is True
+    assert bill["shop"] == "IMG_2031.pdf" and D(str(bill["amount"])) == 0 and bill["date"] == TODAY
+    assert _spent(client, h) == 0
 
 
-def test_receipt_can_still_create_a_new_bill_when_the_user_says_so(client, make_user, monkeypatch):
+def test_receipt_never_matches_or_merges_with_an_existing_bill(client, make_user):
     _, h = make_user()
-    _bill(client, h, shop="LIDL", amount="35.91", date="2026-07-21")
-    _ocr(monkeypatch, dt.date(2026, 7, 21), D("35.91"))
-    r = client.post("/api/pending-bills/upload", files={"file": ("l.pdf", PDF, "application/pdf")}, data={"create_new": "true"}, headers=h)
+    _bill(client, h, shop="LIDL145MALMOBA", amount="35.91", date=TODAY)
+    r = _upload(client, h)
     assert r.status_code == 201 and r.json()["result"] == "created"
     assert _bills(client, h, status="all")["total"] == 2
+    assert _spent(client, h) == D("35.91")  # the empty receipt bill adds nothing
 
 
-def test_receipt_without_a_match_creates_a_total_only_bill(client, make_user, monkeypatch):
+def test_receipt_uses_what_you_type_and_nothing_else(client, make_user):
     _, h = make_user()
-    _ocr(monkeypatch, dt.date(2026, 7, 22), D("12.00"))
-    r = client.post("/api/pending-bills/upload", files={"file": ("l.pdf", PDF, "application/pdf")}, headers=h)
-    assert r.status_code == 201
+    r = _upload(client, h, shop="Corner shop", amount="12.50")
     bill = r.json()["bill"]
-    assert bill["status"] == "total_only" and bill["has_receipt"] is True and _spent(client, h) == D("12")
+    assert bill["shop"] == "Corner shop" and D(str(bill["amount"])) == D("12.50")
+    assert bill["status"] == "total_only" and _spent(client, h) == D("12.50")  # "count bills as spending" is on
 
 
-def test_receipt_with_no_readable_amount_waits_for_you(client, make_user, monkeypatch):
+def test_receipt_can_be_attached_to_an_existing_bill(client, make_user):
     _, h = make_user()
-    _ocr(monkeypatch, dt.date(2026, 7, 22), D("0"))
-    r = client.post("/api/pending-bills/upload", files={"file": ("l.pdf", PDF, "application/pdf")}, headers=h)
-    assert r.json()["bill"]["status"] == "pending" and _spent(client, h) == 0
-    assert client.post(f"/api/bills/{r.json()['bill']['id']}/record-total", json={"amount": "8"}, headers=h).status_code == 200
+    existing = _bill(client, h, shop="LIDL145MALMOBA", amount="35.91", date="2026-07-21")
+    attached = _upload(client, h, attach_to=str(existing["id"]))
+    assert attached.status_code == 200 and attached.json()["result"] == "attached"
+    assert attached.json()["bill"]["has_receipt"] is True and _spent(client, h) == D("35.91")
+    assert _bills(client, h, status="all")["total"] == 1
+
+
+def test_itemising_an_empty_receipt_bill_fills_in_what_you_typed(client, make_user):
+    _, h = make_user()
+    bill = _upload(client, h, name="IMG_9.pdf").json()["bill"]
+    items = [
+        {"date": "2026-07-22", "category": "Food", "description": "Milk", "shop": "Lidl", "amount": "20", "currency": "SEK"},
+        {"date": "2026-07-22", "category": "Food", "description": "Bread", "shop": "Lidl", "amount": "30", "currency": "SEK"},
+    ]
+    r = client.post("/api/expenses/bulk", json={"items": items, "bill_id": bill["id"]}, headers=h)
+    assert r.status_code in (200, 201), r.text
+    after = client.get(f"/api/bills/{bill['id']}", headers=h).json()
+    assert after["status"] == "itemised" and D(str(after["amount"])) == D("50")
+    assert after["shop"] == "Lidl" and after["date"] == "2026-07-22"
+    assert _spent(client, h) == D("50")
+
+
+def test_itemising_a_bill_with_a_known_total_keeps_its_details(client, make_user):
+    _, h = make_user()
+    bill = _bill(client, h, shop="LIDL145MALMOBA", amount="35.91", date="2026-07-21")
+    items = [{"date": "2026-07-22", "category": "Food", "description": "Milk", "shop": "Lidl", "amount": "20", "currency": "SEK"}]
+    client.post("/api/expenses/bulk", json={"items": items, "bill_id": bill["id"]}, headers=h)
+    after = client.get(f"/api/bills/{bill['id']}", headers=h).json()
+    assert after["shop"] == "LIDL145MALMOBA" and D(str(after["amount"])) == D("35.91")
+
+
+def test_receipt_bill_can_have_its_total_recorded_by_hand(client, make_user):
+    _, h = make_user()
+    bill = _upload(client, h).json()["bill"]
+    assert client.post(f"/api/bills/{bill['id']}/record-total", json={"amount": "8"}, headers=h).status_code == 200
+    assert _spent(client, h) == D("8")
 
 
 # ── other users' bills ───────────────────────────────────────────────────

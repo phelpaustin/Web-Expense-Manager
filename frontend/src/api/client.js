@@ -449,16 +449,15 @@ export function undoBillTotal(id) {
   return request(`/api/bills/${id}/undo`, { method: 'POST' })
 }
 
-// Upload a receipt. The server answers { result: 'created' | 'attached' | 'match_found', ... }:
-// 'match_found' means it matches a bill you already have; resend with attachTo (add the
-// receipt to that bill) or createNew (make a separate bill anyway).
-export function uploadBill(file, { shop = '', amount = '', attachTo, createNew } = {}) {
+// Upload a receipt. Nothing is read from the file: it creates a bill to itemise (or, with
+// attachTo, adds the receipt to an existing bill). The server answers
+// { result: 'created' | 'attached', bill }.
+export function uploadBill(file, { shop = '', amount = '', attachTo } = {}) {
   const body = new FormData()
   body.append('file', file)
   if (shop) body.append('shop', shop)
   if (amount !== '' && amount != null) body.append('amount', amount)
   if (attachTo != null) body.append('attach_to', attachTo)
-  if (createNew) body.append('create_new', 'true')
   return request('/api/pending-bills/upload', { method: 'POST', body })
 }
 

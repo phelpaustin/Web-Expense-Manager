@@ -438,6 +438,17 @@ def create_expenses_bulk(
         # shop/date, and let its amount follow the new items.
         bill.origin_key = bill_sync.new_explicit_key()
         bill.amount = sum((e.amount for e in created), Decimal("0"))
+    elif bill is not None and (bill.amount is None or bill.amount <= 0) and created:
+        # A receipt uploaded with nothing filled in (amount 0, named after its file, dated the
+        # day it was uploaded): the items you typed are what say what the bill was.
+        bill.amount = sum((e.amount for e in created), Decimal("0"))
+        if len({e.date for e in created}) == 1:
+            bill.date = created[0].date
+        if len({e.currency for e in created}) == 1:
+            bill.currency = created[0].currency
+        shops = {(e.shop or "").strip() for e in created}
+        if len(shops) == 1 and next(iter(shops)):
+            bill.shop = next(iter(shops))
     elif bill is None and payload.as_bill and created:
         same_day = {e.date for e in created}
         same_currency = {e.currency for e in created}

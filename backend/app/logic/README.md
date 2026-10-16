@@ -7,7 +7,7 @@ one feature at a time. Good candidates:
 - budget_manager.py, financial_metrics.py
 - ml_categorizer.py, recurring_manager.py, income_manager.py
 - currency_manager.py, spending_intelligence.py, tax_export.py
-- models.py, validators.py, date_utils.py, receipt_ocr.py
+- models.py, validators.py, date_utils.py
 
 Do NOT copy Streamlit-bound files (views/, ui_components.py, theme.py,
 page_helpers.py, Main_Dashboard_App.py) or secrets/data files.

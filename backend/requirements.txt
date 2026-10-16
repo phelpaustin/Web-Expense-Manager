@@ -16,6 +16,3 @@ python-multipart
 slowapi
 google-auth
 requests
-pypdf
-pytesseract
-Pillow

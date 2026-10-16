@@ -135,33 +135,17 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     }
   }
 
+  // The receipt is only stored; nothing is read from it. It lands in "To itemise" with no
+  // amount, and you itemise it (or record its total) when you are ready.
   async function handleUploadBill(file) {
     await run(async () => {
-      let res = await uploadBill(file)
-      if (res.result === 'match_found') {
-        const m = res.matches[0]
-        const choice = await dialogs.choose({
-          title: 'This looks like a bill you already have',
-          detail: `${m.date} · ${m.shop} · ${money(m.amount, m.currency)}`,
-          message:
-            'It has the same date and amount. Attaching the receipt to it avoids counting the same purchase twice. ' +
-            'You can still itemise it later.',
-          choices: [
-            { key: 'attach', label: 'Attach receipt to this bill', primary: true },
-            { key: 'new', label: 'Create a separate bill' },
-          ],
-        })
-        if (!choice) return // cancelled: nothing is created
-        res = await uploadBill(file, choice === 'attach' ? { attachTo: m.id } : { createNew: true })
-      }
-      if (res.result === 'attached') setNotice({ text: `Receipt attached to ${res.bill.shop} (${res.bill.date}).` })
-      else if (Number(res.bill.amount) <= 0) {
-        setNotice({ text: 'Receipt added, but its total could not be read. Record the total once you know it.' })
-      } else if (res.bill.status === 'total_only') {
+      const res = await uploadBill(file)
+      if (res.bill.status === 'total_only') {
         setNotice({ text: `Receipt added and its total of ${money(res.bill.amount, res.bill.currency)} is counted as spending. Itemise it whenever you like.` })
       } else {
-        setNotice({ text: 'Receipt added to your bills to itemise.' })
+        setNotice({ text: 'Receipt added under “To itemise”. Itemise it, or record its total, when you are ready. Nothing is counted as spending until you do.' })
       }
+      setQuery({ status: 'pending' })
       await refresh()
     })
   }
