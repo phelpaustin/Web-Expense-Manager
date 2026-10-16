@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { STATUS_COLORS } from '../constants.js'
 import { money } from '../format.js'
 import TrendMeta from '../components/TrendMeta.jsx'
+import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
 import { SpendingTrendChart, CashFlowChart, CategoryDonut } from '../components/Charts.jsx'
 
 const CHOOSE_SPACES = '__choose__'
@@ -406,6 +407,13 @@ export default function DashboardPage({
           </div>
         </section>
       )}
+
+      <CategoryChangePanel
+        key={`${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`}
+        scope={dashboardScope}
+        spaceIds={dashboardSpaceIds}
+        refreshKey={trends}
+      />
 
       {metrics && metrics.cash_flow && metrics.cash_flow.length > 0 && (
         <section className="panel">

@@ -233,6 +233,15 @@ export function fetchTrends(scope, spaceIds) {
   return request(`/api/analytics/trends${scopeQuery(scope, spaceIds)}`)
 }
 
+// What explains the change in spending versus the month before. `month` is 'YYYY-MM'; leave it
+// out for the last finished month.
+export function fetchCategoryChange({ month, scope, spaceIds } = {}) {
+  const query = scopeQuery(scope, spaceIds)
+  const extra = month ? `month=${encodeURIComponent(month)}` : ''
+  const joined = [query.replace(/^\?/, ''), extra].filter(Boolean).join('&')
+  return request(`/api/analytics/category-change${joined ? `?${joined}` : ''}`)
+}
+
 export function fetchCategories(scope, spaceIds) {
   return request(`/api/analytics/categories${scopeQuery(scope, spaceIds)}`)
 }
