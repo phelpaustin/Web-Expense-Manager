@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
+from app.api.aliases import load_alias_maps
 from app.api.expenses import fetch_expenses_in_reporting_currency
 from app.logic import analytics as analytics_logic
-from app.logic import price_tracker
+from app.logic import names, price_tracker
 
 router = APIRouter()
 
@@ -40,12 +41,20 @@ def analytics_categories(
     return analytics_logic.category_breakdown(fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids))
 
 
+def _price_rows(db: Session, user: models.User) -> tuple[list[dict], dict[str, str]]:
+    """The user's expenses with their saved item/shop merges applied, plus the item
+    aliases (so a request naming an old spelling still finds its merged item)."""
+    item_aliases, shop_aliases = load_alias_maps(db, user.id)
+    rows = names.canonicalise(fetch_expenses_in_reporting_currency(db, user.id), item_aliases, shop_aliases)
+    return rows, item_aliases
+
+
 @router.get("/analytics/price-trends")
 def analytics_price_trends(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.price_trends(fetch_expenses_in_reporting_currency(db, user.id))
+    return price_tracker.price_trends(_price_rows(db, user)[0])
 
 
 @router.get("/analytics/price-trends/shops")
@@ -53,12 +62,13 @@ def analytics_price_shop_comparison(
     item: str,
     unit: str | None = None,
     category: str | None = None,
+    brand: str | None = None,
+    shop: list[str] | None = Query(default=None),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.shop_comparison(
-        fetch_expenses_in_reporting_currency(db, user.id), item, unit, category
-    )
+    rows, item_aliases = _price_rows(db, user)
+    return price_tracker.shop_comparison(rows, names.resolve_name(item, item_aliases), unit, category, brand, shop)
 
 
 @router.get("/analytics/price-trends/history")
@@ -66,9 +76,29 @@ def analytics_price_history(
     item: str,
     unit: str | None = None,
     category: str | None = None,
+    brand: str | None = None,
+    shop: list[str] | None = Query(default=None),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return price_tracker.price_history(
-        fetch_expenses_in_reporting_currency(db, user.id), item, unit, category
-    )
+    rows, item_aliases = _price_rows(db, user)
+    return price_tracker.price_history(rows, names.resolve_name(item, item_aliases), unit, category, brand, shop)
+
+
+@router.get("/analytics/price-trends/detail")
+def analytics_price_detail(
+    item: str,
+    unit: str | None = None,
+    category: str | None = None,
+    brand: str | None = None,
+    shop: list[str] | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """One item's comparison, optionally narrowed to a brand and to the shops to include.
+
+    Leave `brand` out for every brand (`brand=` alone means "no brand recorded") and
+    leave `shop` out for every shop (repeat it to include only those shops).
+    """
+    rows, item_aliases = _price_rows(db, user)
+    return price_tracker.price_detail(rows, names.resolve_name(item, item_aliases), unit, category, brand, shop)

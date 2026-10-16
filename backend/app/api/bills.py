@@ -26,6 +26,7 @@ from app.core.money import MAX_MONEY
 from app.db import models
 from app.logic import bills as bills_logic
 from app.logic import receipt_ocr
+from app.logic.search import LIKE_ESCAPE, like_pattern
 
 router = APIRouter()
 
@@ -207,8 +208,10 @@ def list_bills(
     if date_to:
         base = base.filter(models.PendingBill.date <= date_to)
     if q and q.strip():
-        like = f"%{q.strip()}%"
-        base = base.filter(or_(models.PendingBill.shop.ilike(like), models.PendingBill.note.ilike(like)))
+        like = like_pattern(q)
+        base = base.filter(
+            or_(models.PendingBill.shop.ilike(like, escape=LIKE_ESCAPE), models.PendingBill.note.ilike(like, escape=LIKE_ESCAPE))
+        )
 
     counts = {STATUS_PENDING: 0, STATUS_TOTAL_ONLY: 0, STATUS_ITEMISED: 0}
     for st, n in base.with_entities(models.PendingBill.status, func.count(models.PendingBill.id)).group_by(

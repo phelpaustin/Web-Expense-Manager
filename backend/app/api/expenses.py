@@ -6,7 +6,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_group_ids, is_group_member, require_role_at_least
@@ -29,6 +29,8 @@ from app.core.money import as_decimal, quantize_money, MAX_MONEY
 from app.db.database import get_db
 from app.db import models
 from app.logic import categorizer
+from app.logic.search import LIKE_ESCAPE, like_pattern
+from app.logic.taxonomy import CategoryResolver
 from app.logic import currency as currency_logic
 
 router = APIRouter()
@@ -293,25 +295,26 @@ def list_expenses(
     if q is None:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
-    if category:
-        q = q.filter(models.Expense.category == category)
-    if shop:
-        q = q.filter(models.Expense.shop == shop)
+    # Case does not matter: "milk" finds what was entered as "Milk" or "MILK".
+    if category and category.strip():
+        q = q.filter(func.lower(models.Expense.category) == category.strip().lower())
+    if shop and shop.strip():
+        q = q.filter(func.lower(models.Expense.shop) == shop.strip().lower())
     if date_from:
         q = q.filter(models.Expense.date >= date_from)
     if date_to:
         q = q.filter(models.Expense.date <= date_to)
     if total_only is not None:
         q = q.filter(models.Expense.bill_total_only == total_only)
-    if search:
-        like = f"%{search.strip()}%"
+    if search and search.strip():
+        like = like_pattern(search)
         q = q.filter(
             or_(
-                models.Expense.description.ilike(like),
-                models.Expense.shop.ilike(like),
-                models.Expense.brand.ilike(like),
-                models.Expense.category.ilike(like),
-                models.Expense.subcategory.ilike(like),
+                models.Expense.description.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.shop.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.brand.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.category.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.subcategory.ilike(like, escape=LIKE_ESCAPE),
             )
         )
 
@@ -649,6 +652,9 @@ async def import_expenses(
     errors: list[str] = []
     skipped_rows: list[dict] = []
     learned: set[tuple] = set()
+    # "milk" in the file becomes "Milk" if that is how the user's list spells it, and
+    # variants new to the list agree with the first one seen.
+    categories = CategoryResolver(list(get_or_create_options(db, user.id).categories or []))
 
     def raw_row(row, reason: str, line: int) -> dict:
         def s(col):
@@ -689,7 +695,7 @@ async def import_expenses(
                 record_skip(row, "Missing category", line)
                 continue
             when = parsed.date()
-            category = str(category).strip()
+            category = categories.resolve(category)
             try:
                 amount = quantize_money(parse_amount(amount_raw))
             except (TypeError, ValueError, ArithmeticError):

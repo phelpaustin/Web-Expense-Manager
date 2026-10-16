@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.api.options import get_or_create_options, get_reporting_currency
+from app.api.options import canonical_category, get_or_create_options, get_reporting_currency
 from app.core.fx import normalize_convertible_currency
 from app.core import fx
 from app.core.money import quantize_money, MAX_MONEY
@@ -90,15 +90,17 @@ def set_budget(
     user: models.User = Depends(get_current_user),
 ):
     """Create or update a category budget (upsert). Use the sentinel for the total."""
+    # "milk" updates the budget of "Milk" instead of failing on the one-budget-per-category rule.
+    category = canonical_category(db, user.id, payload.category)
     budget = (
         db.query(models.Budget)
-        .filter(models.Budget.user_id == user.id, models.Budget.category == payload.category)
+        .filter(models.Budget.user_id == user.id, models.Budget.category == category)
         .first()
     )
     # Unless the user picked one, the amount they typed is in the currency budgets are shown in.
     currency = payload.currency or get_reporting_currency(db, user.id)
     if budget is None:
-        budget = models.Budget(user_id=user.id, category=payload.category, amount=payload.amount, currency=currency)
+        budget = models.Budget(user_id=user.id, category=category, amount=payload.amount, currency=currency)
         db.add(budget)
     else:
         budget.amount = payload.amount
@@ -115,7 +117,10 @@ def delete_budget(
 ):
     budget = (
         db.query(models.Budget)
-        .filter(models.Budget.user_id == user.id, models.Budget.category == category)
+        .filter(
+            models.Budget.user_id == user.id,
+            models.Budget.category.in_({category, canonical_category(db, user.id, category)}),
+        )
         .first()
     )
     if budget is None:

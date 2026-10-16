@@ -642,6 +642,40 @@ export function fetchPriceHistory(item, unit, category) {
   )
 }
 
+// One item's comparison for a chosen selection. `brand`: null = every brand, '' = purchases
+// with no brand, otherwise that brand. `shops`: null = every shop, otherwise only those.
+export function fetchPriceDetail({ item, unit, category, brand = null, shops = null }) {
+  const params = new URLSearchParams({ item })
+  if (unit) params.set('unit', unit)
+  if (category) params.set('category', category)
+  if (brand !== null) params.set('brand', brand)
+  if (shops !== null) shops.forEach((shop) => params.append('shop', shop))
+  return request(`/api/analytics/price-trends/detail?${params}`)
+}
+
+// ── Item / shop name merges ───────────────────────────
+// A merge tells the price tracker to treat several spellings as one name. It never
+// edits expenses, and deleting the rule undoes it.
+export function fetchAliases() {
+  return request('/api/aliases')
+}
+
+export function fetchAliasSuggestions(kind) {
+  return request(`/api/aliases/suggestions?kind=${encodeURIComponent(kind)}`)
+}
+
+export function mergeNames(kind, names, canonical) {
+  return request('/api/aliases/merge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, names, canonical }),
+  })
+}
+
+export function deleteAlias(id) {
+  return request(`/api/aliases/${id}`, { method: 'DELETE' })
+}
+
 // ── Trips ─────────────────────────────────────────────
 export function fetchTrips() {
   return request('/api/trips')

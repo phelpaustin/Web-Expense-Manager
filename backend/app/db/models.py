@@ -257,3 +257,26 @@ class FxRate(Base):
     rate = Column(Numeric(20, 8), nullable=False)
 
     __table_args__ = (UniqueConstraint("rate_date", "currency", name="uq_fx_date_currency"),)
+
+
+class NameAlias(Base):
+    """A user's own "treat these as the same" rule for item or shop names.
+
+    Applied only when analysing (price tracker, shop comparison); the expenses
+    themselves are never rewritten, so a rule can be undone by deleting it.
+    `alias_key` is the normalised form of `alias` (see app.logic.names.name_key).
+    Rules never chain: `canonical` is always a final name, not another alias.
+    """
+    __tablename__ = "name_aliases"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "alias_key", name="uq_name_alias_user_kind_key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String(8), nullable=False)  # "item" | "shop"
+    alias = Column(String(200), nullable=False)
+    alias_key = Column(String(200), nullable=False)
+    canonical = Column(String(200), nullable=False)
+
+
+# Registers the listener that keeps category spelling consistent (see that module).
+from app.db import category_events  # noqa: E402,F401

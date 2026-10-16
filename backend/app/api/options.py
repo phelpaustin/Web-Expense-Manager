@@ -16,6 +16,7 @@ from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.db import models
 from app.logic import currency as currency_logic
+from app.logic.taxonomy import clean_category, find_existing
 
 router = APIRouter()
 
@@ -173,9 +174,13 @@ def ensure_options(
     shops = list(opts.shops or [])
     changed = False
 
-    if category and category not in categories:
-        categories.append(category)
-        changed = True
+    if category:
+        listed = find_existing(categories, category)
+        if listed is None:
+            categories.append(clean_category(category))
+            changed = True
+        else:
+            category = listed  # a case variant of a listed category: file under the listed spelling
     if category and subcategory:
         subs = list(subcats.get(category, []))
         if subcategory not in subs:
@@ -234,6 +239,12 @@ class DisplayCurrencyIn(BaseModel):
         return normalize_convertible_currency(value) if value is not None else None
 
 
+def canonical_category(db: Session, user_id: int, name: str) -> str:
+    """`name` spelled the way the user's category list spells it (or just tidied, if new)."""
+    opts = get_or_create_options(db, user_id)
+    return find_existing(list(opts.categories or []), name) or clean_category(name)
+
+
 @router.get("/options")
 def get_options(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     return _serialize(get_or_create_options(db, user.id))
@@ -247,10 +258,16 @@ def add_category(
 ):
     opts = get_or_create_options(db, user.id)
     cats = list(opts.categories or [])
-    if payload.name not in cats:
-        cats.append(payload.name)
-        opts.categories = sorted(cats)
-        db.commit()
+    name = clean_category(payload.name)
+    if not name:
+        raise HTTPException(status_code=400, detail="Category name can't be blank.")
+    existing = find_existing(cats, name)
+    if existing is not None:
+        # "milk" or "MILK" when "Milk" exists: say so rather than make a near-duplicate.
+        raise HTTPException(status_code=409, detail=f"“{existing}” is already present.")
+    cats.append(name)
+    opts.categories = sorted(cats)
+    db.commit()
     return _serialize(opts)
 
 
@@ -263,13 +280,15 @@ def add_subcategory(
     opts = get_or_create_options(db, user.id)
     cats = list(opts.categories or [])
     subs = dict(opts.subcategories or {})
-    if payload.category not in cats:
-        cats.append(payload.category)
+    category = find_existing(cats, payload.category)  # a case variant files under the listed one
+    if category is None:
+        category = clean_category(payload.category)
+        cats.append(category)
         opts.categories = sorted(cats)
-    entries = list(subs.get(payload.category, []))
+    entries = list(subs.get(category, []))
     if payload.name not in entries:
         entries.append(payload.name)
-        subs[payload.category] = sorted(entries)
+        subs[category] = sorted(entries)
         opts.subcategories = subs
     db.commit()
     return _serialize(opts)
