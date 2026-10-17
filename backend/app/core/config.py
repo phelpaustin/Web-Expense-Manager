@@ -1,7 +1,24 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The insecure fallback used for local dev. Production must override SECRET_KEY.
 DEFAULT_SECRET = "dev-secret-change-me-0123456789abcdef"
+
+MIN_SECRET_LENGTH = 32
+# Placeholder prefixes seen in docs/.env.example; a real secret never starts with these.
+_PLACEHOLDER_PREFIXES = ("dev-", "change-me", "changeme", "your-", "secret")
+
+
+def insecure_secret_reason(secret: str) -> str | None:
+    """Why `secret` is unfit to sign tokens in production, or None if it is fine."""
+    value = (secret or "").strip()
+    if not value or value == DEFAULT_SECRET:
+        return "it is empty or the built-in development default"
+    if value.lower().startswith(_PLACEHOLDER_PREFIXES):
+        return "it looks like a placeholder copied from an example file"
+    if len(value) < MIN_SECRET_LENGTH:
+        return f"it is shorter than {MIN_SECRET_LENGTH} characters"
+    return None
 
 
 class Settings(BaseSettings):
@@ -16,6 +33,12 @@ class Settings(BaseSettings):
 
     # Auth. OVERRIDE secret_key in production via the environment / .env.
     secret_key: str = DEFAULT_SECRET
+    # How many reverse proxies sit between the internet and this app (Render, a CDN, ...).
+    # 0 = none: rate limits use the connection's address. When behind proxies, set the
+    # real count so limits are per visitor, not per proxy. A wrong (too high) value lets
+    # clients spoof their IP via X-Forwarded-For; too low makes all visitors share a limit.
+    trusted_proxy_count: int = Field(default=0, ge=0, le=10)
+
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
     # Google Sign-In (OAuth). Set to your Google OAuth client ID to enable it.

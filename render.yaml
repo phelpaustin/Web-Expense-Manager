@@ -17,3 +17,5 @@ services:
         sync: false # set manually to your Supabase connection string
       - key: CORS_ORIGINS
         sync: false # set to your frontend URL, e.g. https://your-app.vercel.app
+      - key: TRUSTED_PROXY_COUNT
+        sync: false # proxies in front of the app, so rate limits are per visitor; see backend/.env.example

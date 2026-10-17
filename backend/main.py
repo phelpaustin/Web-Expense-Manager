@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.core.config import DEFAULT_SECRET, settings
+from app.core.config import insecure_secret_reason, settings
 from app.core.rate_limit import limiter
 from app.api import expenses, analytics, budgets, auth, income, recurring, bills, options, metrics, alerts, trips, groups, aliases
 from app.db.migrate import run_migrations
@@ -14,10 +14,11 @@ from app.db.seed import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Never run in production with the insecure default secret.
-    if settings.is_production and settings.secret_key == DEFAULT_SECRET:
+    # Never run in production with a weak, default or placeholder secret.
+    reason = insecure_secret_reason(settings.secret_key) if settings.is_production else None
+    if reason:
         raise RuntimeError(
-            "Refusing to start: SECRET_KEY is the insecure default. "
+            f"Refusing to start: SECRET_KEY is not safe for production ({reason}). "
             "Set a strong SECRET_KEY (e.g. `openssl rand -hex 32`)."
         )
     # Apply schema migrations, then seed sample data on an empty DB.
