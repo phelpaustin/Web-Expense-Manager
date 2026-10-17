@@ -15,6 +15,7 @@ import io
 
 import pandas as pd
 
+from app.core.file_upload import ensure_xlsx_within_limits
 from app.core.money import quantize_money
 from app.core.parsing import parse_amount, read_csv_bytes, unescape_formula
 from app.core.import_limits import MAX_IMPORT_ROWS
@@ -148,6 +149,7 @@ def parse_bill_rows(data: bytes, filename: str) -> tuple[list[dict], list[dict]]
     if name.endswith(".csv"):
         df = read_csv_bytes(data, nrows=MAX_IMPORT_ROWS + 1)
     elif name.endswith(".xlsx"):
+        ensure_xlsx_within_limits(data)
         df = pd.read_excel(io.BytesIO(data), nrows=MAX_IMPORT_ROWS + 1)
     else:
         raise ValueError("Only .xlsx or .csv files are allowed")

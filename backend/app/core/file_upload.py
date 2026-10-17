@@ -1,11 +1,13 @@
+import io
 import os
 import re
 import unicodedata
+import zipfile
 from urllib.parse import quote
 
 from fastapi import HTTPException, UploadFile
 
-from app.core.import_limits import UPLOAD_READ_CHUNK_BYTES
+from app.core.import_limits import MAX_XLSX_ENTRIES, MAX_XLSX_UNCOMPRESSED_BYTES, UPLOAD_READ_CHUNK_BYTES
 
 
 async def read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
@@ -26,6 +28,40 @@ async def read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
         chunks.append(chunk)
 
     return b"".join(chunks)
+
+
+def read_upload_limited_sync(file: UploadFile, max_bytes: int, status_code: int = 413) -> bytes:
+    """Blocking twin of read_upload_limited, for plain `def` endpoints.
+
+    FastAPI runs a plain `def` endpoint in a worker thread, so reading, parsing and database
+    work no longer freeze the event loop (an `async def` endpoint doing that stalls every
+    other request until it finishes). The upload is already spooled to disk by the framework.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(min(UPLOAD_READ_CHUNK_BYTES, max_bytes - total + 1))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=status_code, detail="File too large (max 10 MB)")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def ensure_xlsx_within_limits(data: bytes) -> None:
+    """Reject an .xlsx that is not a real zip or would expand to an unreasonable size.
+
+    Uses the sizes declared in the zip directory, so nothing is decompressed. Raises ValueError.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            entries = archive.infolist()
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Not a valid .xlsx file") from exc
+    if len(entries) > MAX_XLSX_ENTRIES or sum(e.file_size for e in entries) > MAX_XLSX_UNCOMPRESSED_BYTES:
+        raise ValueError("This spreadsheet is too large when unpacked; export fewer rows and try again")
 
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")

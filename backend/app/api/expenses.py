@@ -20,7 +20,7 @@ from app.api.options import (
 from app.core import fx
 from app.core.currency import normalize_currency
 from app.core.fx import normalize_convertible_currency
-from app.core.file_upload import read_upload_limited
+from app.core.file_upload import ensure_xlsx_within_limits, read_upload_limited_sync
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS
 from app.api import bill_sync
 from app.core.parsing import escape_formula, parse_amount, read_csv_bytes, unescape_formula
@@ -592,7 +592,7 @@ def _cell(row, col):
 
 
 @router.post("/expenses/import")
-async def import_expenses(
+def import_expenses(
     file: UploadFile = File(...),
     currency_override: str = Form(""),
     db: Session = Depends(get_db),
@@ -614,9 +614,10 @@ async def import_expenses(
     name = (file.filename or "").lower()
     if not name.endswith((".csv", ".xlsx")):
         raise HTTPException(status_code=400, detail="Only .csv or .xlsx files are allowed")
-    raw = await read_upload_limited(file, MAX_IMPORT_FILE_BYTES)
+    raw = read_upload_limited_sync(file, MAX_IMPORT_FILE_BYTES)
     try:
         if name.endswith(".xlsx"):
+            ensure_xlsx_within_limits(raw)
             df = pd.read_excel(io.BytesIO(raw), nrows=MAX_IMPORT_ROWS + 1)
         else:
             df = read_csv_bytes(raw, nrows=MAX_IMPORT_ROWS + 1)

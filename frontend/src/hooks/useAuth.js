@@ -86,8 +86,8 @@ export function useAuth(loadAll, resetData, setError) {
     resetData()
   }
 
-  async function handleDeleteAccount(password) {
-    await deleteAccount(password)
+  async function handleDeleteAccount(confirmation) {
+    await deleteAccount(confirmation)
     handleLogout()
   }
 

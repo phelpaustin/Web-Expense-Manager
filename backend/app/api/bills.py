@@ -17,7 +17,7 @@ from app.api.options import (
 )
 from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
-from app.core.file_upload import content_disposition, read_upload_limited, safe_filename
+from app.core.file_upload import content_disposition, read_upload_limited_sync, safe_filename
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
 from app.api import bill_sync
 from app.api.expenses import ExpenseOut, fetch_expenses, fetch_expenses_in_reporting_currency
@@ -304,7 +304,7 @@ def _store_receipt(db: Session, user_id: int, bill_id: int, filename: str | None
 
 
 @router.post("/pending-bills/upload")
-async def upload_pending(
+def upload_pending(
     response: Response,
     file: UploadFile = File(...),
     shop: str = Form(""),
@@ -322,9 +322,7 @@ async def upload_pending(
       given, with the amount you give (default 0 = not known yet). It waits under "To itemise";
       nothing counts as spending until you record its total or itemise it.
     """
-    data = await file.read(_MAX_RECEIPT_BYTES + 1)
-    if len(data) > _MAX_RECEIPT_BYTES:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+    data = read_upload_limited_sync(file, _MAX_RECEIPT_BYTES, status_code=400)
     try:
         content_type = detect_receipt_content_type(data)
     except ValueError as exc:
@@ -359,7 +357,7 @@ async def upload_pending(
 
 
 @router.post("/pending-bills/bulk-upload", status_code=201)
-async def bulk_upload_pending(
+def bulk_upload_pending(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
@@ -374,7 +372,7 @@ async def bulk_upload_pending(
     name = file.filename or ""
     if not name.lower().endswith((".xlsx", ".csv")):
         raise HTTPException(status_code=400, detail="Only .xlsx or .csv files are allowed")
-    data = await read_upload_limited(file, _MAX_RECEIPT_BYTES)
+    data = read_upload_limited_sync(file, _MAX_RECEIPT_BYTES)
 
     try:
         rows, skipped = bills_logic.parse_bill_rows(data, name)
@@ -642,7 +640,7 @@ def undo_record_total(
 
 # ── Receipts (attached to pending bills) ──────────────────────
 @router.post("/pending-bills/{bill_id}/receipt")
-async def upload_receipt(
+def upload_receipt(
     bill_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -650,9 +648,7 @@ async def upload_receipt(
 ):
     """Attach (or replace) a receipt on a bill of any status."""
     bill = _pending_or_404(db, bill_id, user.id)
-    data = await file.read(_MAX_RECEIPT_BYTES + 1)
-    if len(data) > _MAX_RECEIPT_BYTES:
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+    data = read_upload_limited_sync(file, _MAX_RECEIPT_BYTES, status_code=400)
     try:
         content_type = detect_receipt_content_type(data)
     except ValueError as exc:

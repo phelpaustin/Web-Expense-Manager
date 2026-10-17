@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,7 @@ from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.email import send_email
 from app.core.emails import NormalizedEmail, normalize_email, user_by_email
-from app.core.rate_limit import limiter
+from app.core.rate_limit import google_limit, limiter, login_limit, register_limit, sensitive_limit
 from app.core.security import (
     create_access_token,
     create_email_verification_token,
@@ -77,7 +77,16 @@ class ResetPasswordIn(BaseModel):
 
 
 class DeleteAccountIn(BaseModel):
-    password: PasswordInput
+    # Confirm with the account password, or, for an account that signs in with Google (it
+    # has a random password nobody knows), with a fresh Google credential for the same email.
+    password: PasswordInput | None = None
+    google_credential: str | None = None
+
+    @model_validator(mode="after")
+    def _one_confirmation(self):
+        if not self.password and not self.google_credential:
+            raise ValueError("Provide your password or confirm with Google")
+        return self
 
 
 def _claim_group_invites(db: Session, user: models.User) -> None:
@@ -108,7 +117,7 @@ def _send_verification_email(user: models.User) -> bool:
 
 
 @router.post("/auth/register", response_model=RegistrationOut, status_code=201)
-@limiter.limit("10/hour")
+@limiter.limit(register_limit)
 def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
     exists = user_by_email(db, payload.email)
     if exists:
@@ -135,7 +144,7 @@ def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db
 
 
 @router.post("/auth/login", response_model=TokenOut)
-@limiter.limit("10/minute")
+@limiter.limit(login_limit)
 def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = user_by_email(db, form.username)
     if not user or not verify_password(form.password, user.hashed_password):
@@ -150,8 +159,8 @@ def me(user: models.User = Depends(get_current_user)):
     return user
 
 
-@router.post("/auth/google", response_model=TokenOut)
-def google_login(payload: GoogleIn, db: Session = Depends(get_db)):
+def _verify_google_credential(credential: str) -> tuple[dict, str]:
+    """Validate a Google ID token; return its claims and the (normalised) verified email."""
     if not settings.google_client_id:
         raise HTTPException(status_code=503, detail="Google sign-in is not configured")
     # Imported lazily so the app runs without google-auth installed locally.
@@ -159,16 +168,20 @@ def google_login(payload: GoogleIn, db: Session = Depends(get_db)):
     from google.oauth2 import id_token
 
     try:
-        info = id_token.verify_oauth2_token(
-            payload.credential, google_requests.Request(), settings.google_client_id
-        )
+        info = id_token.verify_oauth2_token(credential, google_requests.Request(), settings.google_client_id)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid Google token")
 
     email = info.get("email")
     if not email or not info.get("email_verified"):
         raise HTTPException(status_code=401, detail="Google account email not verified")
-    email = normalize_email(email)
+    return info, normalize_email(email)
+
+
+@router.post("/auth/google", response_model=TokenOut)
+@limiter.limit(google_limit)
+def google_login(request: Request, payload: GoogleIn, db: Session = Depends(get_db)):
+    info, email = _verify_google_credential(payload.credential)
 
     user = user_by_email(db, email)
     if user is None:
@@ -213,7 +226,9 @@ def logout(
 
 
 @router.post("/auth/change-password")
+@limiter.limit(sensitive_limit)
 def change_password(
+    request: Request,
     payload: PasswordChange,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
@@ -359,13 +374,21 @@ def reset_password(request: Request, payload: ResetPasswordIn, db: Session = Dep
 
 
 @router.post("/auth/delete-account", status_code=204)
+@limiter.limit(sensitive_limit)
 def delete_account(
+    request: Request,
     payload: DeleteAccountIn,
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    if not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Password is incorrect")
+    if payload.password:
+        if not verify_password(payload.password, user.hashed_password):
+            raise HTTPException(status_code=400, detail="Password is incorrect")
+    else:
+        # Google-only accounts have no password to type: a fresh Google sign-in proves it is them.
+        _, google_email = _verify_google_credential(payload.google_credential)
+        if google_email != normalize_email(user.email):
+            raise HTTPException(status_code=400, detail="That Google account does not match this account")
     try:
         # Shared expenses are financial history: keep them but remove the deleted
         # account reference so they display as "Deleted user".

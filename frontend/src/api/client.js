@@ -196,11 +196,14 @@ export function resetPassword(token, new_password) {
   })
 }
 
-export function deleteAccount(password) {
+// Confirm with the account password, or ({ googleCredential }) with a fresh Google sign-in for
+// accounts that signed up with Google.
+export function deleteAccount(confirmation) {
+  const body = typeof confirmation === 'string' ? { password: confirmation } : { google_credential: confirmation.googleCredential }
   return request('/api/auth/delete-account', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify(body),
   })
 }
 

@@ -1,5 +1,6 @@
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import Switch from '../components/Switch.jsx'
+import GoogleConfirmButton, { GOOGLE_CLIENT_ID } from '../components/GoogleConfirmButton.jsx'
 import { saveAlertDigest, saveCountBillsAsSpending } from '../api/client.js'
 import { useState } from 'react'
 import {
@@ -110,13 +111,13 @@ export default function SettingsPage({
 
   const subcats = (options.subcategories && options.subcategories[selectedCat]) || []
 
-  async function handleDelete(e) {
-    e.preventDefault()
+  async function handleDelete(e, googleCredential) {
+    if (e) e.preventDefault()
     setDelError(null)
     if (!window.confirm('This permanently deletes your account and all data. Continue?')) return
     setDelBusy(true)
     try {
-      await onDeleteAccount(delPassword)
+      await onDeleteAccount(googleCredential ? { googleCredential } : delPassword)
     } catch (err) {
       setDelError(err.message)
       setDelBusy(false)
@@ -192,6 +193,14 @@ export default function SettingsPage({
               {delBusy ? 'Deleting…' : 'Delete my account'}
             </button>
           </form>
+          {GOOGLE_CLIENT_ID && (
+            <>
+              <p className="muted-note" style={{ marginTop: '0.8rem' }}>
+                Signed up with Google and have no password? Confirm with Google instead:
+              </p>
+              <GoogleConfirmButton disabled={delBusy} onCredential={(credential) => handleDelete(null, credential)} />
+            </>
+          )}
           {delError && <div className="auth-error" style={{ marginTop: '0.6rem' }}>{delError}</div>}
         </section>
       )}

@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     # clients spoof their IP via X-Forwarded-For; too low makes all visitors share a limit.
     trusted_proxy_count: int = Field(default=0, ge=0, le=10)
 
+    # Rate limits, per visitor IP (see TRUSTED_PROXY_COUNT). Same format as slowapi:
+    # "5/minute;60/hour" means both apply. Override via env, e.g. RATE_LIMIT_LOGIN.
+    rate_limit_login: str = "5/minute;60/hour"
+    rate_limit_register: str = "5/hour;20/day"
+    rate_limit_google: str = "10/minute;60/hour"
+    # Endpoints that confirm with a password while already signed in: stops a stolen token
+    # from being used to guess the password.
+    rate_limit_sensitive: str = "10/hour"
+
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
     # Google Sign-In (OAuth). Set to your Google OAuth client ID to enable it.

@@ -39,3 +39,20 @@ def client_ip(request: Request) -> str:
 
 # Rate limiting keyed by client IP. Applied per-endpoint via @limiter.limit(...).
 limiter = Limiter(key_func=client_ip)
+
+
+# Limit strings are read at request time (callables), so env overrides and tests can change them.
+def login_limit() -> str:
+    return settings.rate_limit_login
+
+
+def register_limit() -> str:
+    return settings.rate_limit_register
+
+
+def google_limit() -> str:
+    return settings.rate_limit_google
+
+
+def sensitive_limit() -> str:
+    return settings.rate_limit_sensitive
