@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(./frontend/package-lock.json)",
+      "Read(./frontend/src/styles/index.css)",
+      "Read(**/dist/**)",
+      "Read(**/node_modules/**)"
+    ],
+    "ask": [
+      "Read(./backend/alembic/versions/**)"
+    ]
+  }
+}
