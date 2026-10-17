@@ -9,6 +9,7 @@ from app.api.expenses import fetch_expenses_in_reporting_currency, fetch_expense
 from app.api.options import get_reporting_currency
 from app.logic import analytics as analytics_logic
 from app.logic import category_change as category_change_logic
+from app.logic import shop_scorecard as shop_scorecard_logic
 from app.logic import names, price_tracker
 
 router = APIRouter()
@@ -63,6 +64,30 @@ def analytics_category_change(
     result = category_change_logic.category_change(expenses, chosen, top=top)
     result["currency"] = get_reporting_currency(db, user.id)
     # Expenses left out because their currency has no exchange rate (same as the other totals).
+    result["unconverted_count"] = unconverted
+    return result
+
+
+@router.get("/analytics/shops")
+def analytics_shop_scorecard(
+    months: int = Query(default=shop_scorecard_logic.DEFAULT_MONTHS, ge=0, le=60),
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Spend, visits and relative price level per shop over the last `months` months.
+
+    `months=0` means all time. Shop and item names follow the user's saved merges, and
+    names that differ only by case or spacing are one name.
+    """
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+    item_aliases, shop_aliases = load_alias_maps(db, user.id)
+    # Bill totals name their shop in the description; make that the shop before the user's
+    # shop merges are applied, so a merge covers them too.
+    rows = names.canonicalise(shop_scorecard_logic.with_bill_shops(expenses), item_aliases, shop_aliases)
+    result = shop_scorecard_logic.shop_scorecard(rows, months=months)
+    result["currency"] = get_reporting_currency(db, user.id)
     result["unconverted_count"] = unconverted
     return result
 

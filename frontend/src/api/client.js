@@ -650,6 +650,11 @@ export function fetchPriceHistory(item, unit, category) {
   )
 }
 
+// Spend, visits and relative price level per shop. `months` 0 means all time.
+export function fetchShopScorecard({ months = 6 } = {}) {
+  return request(`/api/analytics/shops?months=${encodeURIComponent(months)}`)
+}
+
 // One item's comparison for a chosen selection. `brand`: null = every brand, '' = purchases
 // with no brand, otherwise that brand. `shops`: null = every shop, otherwise only those.
 export function fetchPriceDetail({ item, unit, category, brand = null, shops = null }) {

@@ -9,6 +9,7 @@ import BillsPage from './pages/BillsPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
 import TripsPage from './pages/TripsPage.jsx'
 import PriceTrackerPage from './pages/PriceTrackerPage.jsx'
+import ShopsPage from './pages/ShopsPage.jsx'
 import GroupsPage from './pages/GroupsPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
@@ -215,6 +216,7 @@ export default function App() {
           }
         />
         <Route path="prices" element={<PriceTrackerPage onError={data.setError} />} />
+        <Route path="shops" element={<ShopsPage onError={data.setError} />} />
         <Route
           path="groups"
           element={

@@ -215,6 +215,7 @@ def fetch_expenses(
             "brand": r.brand,
             "currency": r.currency,
             "price_per_unit": r.price_per_unit,
+            "bill_total_only": bool(r.bill_total_only),
             "group_id": r.group_id,
             "user_id": r.user_id,
         }

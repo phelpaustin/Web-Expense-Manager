@@ -11,6 +11,7 @@ const LINKS = [
   { to: '/trips', label: 'Trips', icon: '🧳' },
   { to: '/groups', label: 'Expense Spaces', icon: '🗂️' },
   { to: '/prices', label: 'Prices', icon: '📈' },
+  { to: '/shops', label: 'Shops', icon: '🏪' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
