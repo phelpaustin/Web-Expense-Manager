@@ -1,17 +1,11 @@
 import { useRef, useState } from 'react'
 import {
-  fetchSummary,
-  fetchTrends,
-  fetchCategories,
-  fetchBudgetStatus,
+  fetchDashboard,
   fetchIncome,
   fetchIncomeSummary,
   fetchRecurring,
   fetchOptions,
-  fetchMetrics,
   fetchBudgetConfig,
-  fetchPeriodStatus,
-  fetchAlerts,
   fetchTrips,
   fetchGroups,
   saveDisplayCurrency,
@@ -62,14 +56,23 @@ export function useAppData() {
     })
   }
 
+  // Spread one /api/dashboard response over the pieces of state the dashboard reads.
+  // `alerts` is null when the request left them out (a scope change doesn't affect them).
+  function applyDashboard(d) {
+    setSummary(d.summary)
+    setTrends(d.trends)
+    setCategories(d.categories)
+    setBudgets(d.budgets)
+    setMetrics(d.metrics)
+    setPeriodStatus(d.period_status)
+    if (d.alerts) setAlerts(d.alerts)
+  }
+
   function loadAll() {
     const scope = dashboardScope
     const ids = dashboardSpaceIds
     return applySettled([
-      { load: () => fetchSummary(scope, ids), apply: setSummary },
-      { load: () => fetchTrends(scope, ids), apply: setTrends },
-      { load: () => fetchCategories(scope, ids), apply: setCategories },
-      { load: () => fetchBudgetStatus(scope, ids), apply: setBudgets },
+      { load: () => fetchDashboard(scope, ids), apply: applyDashboard },
       { load: () => fetchIncome(), apply: setIncome },
       { load: () => fetchIncomeSummary(), apply: setIncomeSummary },
       { load: () => fetchRecurring(), apply: setRecurring },
@@ -80,10 +83,7 @@ export function useAppData() {
           setDisplayCurrency(opts.display_currency || opts.base_currency)
         },
       },
-      { load: () => fetchMetrics(scope, ids), apply: setMetrics },
       { load: () => fetchBudgetConfig(), apply: setBudgetConfigState },
-      { load: () => fetchPeriodStatus(scope, ids), apply: setPeriodStatus },
-      { load: () => fetchAlerts(), apply: setAlerts },
       { load: () => fetchTrips(), apply: setTrips },
       { load: () => fetchGroups(), apply: setGroups },
     ])
@@ -94,12 +94,7 @@ export function useAppData() {
     setDashboardScopeState(scope)
     setDashboardSpaceIdsState([])
     return applySettled([
-      { load: () => fetchSummary(scope), apply: setSummary },
-      { load: () => fetchTrends(scope), apply: setTrends },
-      { load: () => fetchCategories(scope), apply: setCategories },
-      { load: () => fetchBudgetStatus(scope), apply: setBudgets },
-      { load: () => fetchMetrics(scope), apply: setMetrics },
-      { load: () => fetchPeriodStatus(scope), apply: setPeriodStatus },
+      { load: () => fetchDashboard(scope, [], { includeAlerts: false }), apply: applyDashboard },
     ])
   }
 
@@ -107,12 +102,7 @@ export function useAppData() {
   function handleSetDashboardSpaceIds(spaceIds) {
     setDashboardSpaceIdsState(spaceIds)
     return applySettled([
-      { load: () => fetchSummary(null, spaceIds), apply: setSummary },
-      { load: () => fetchTrends(null, spaceIds), apply: setTrends },
-      { load: () => fetchCategories(null, spaceIds), apply: setCategories },
-      { load: () => fetchBudgetStatus(null, spaceIds), apply: setBudgets },
-      { load: () => fetchMetrics(null, spaceIds), apply: setMetrics },
-      { load: () => fetchPeriodStatus(null, spaceIds), apply: setPeriodStatus },
+      { load: () => fetchDashboard(null, spaceIds, { includeAlerts: false }), apply: applyDashboard },
     ])
   }
 

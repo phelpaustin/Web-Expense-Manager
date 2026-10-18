@@ -11,19 +11,19 @@ vi.mock('../api/client.js', async (importOriginal) => {
 import * as client from '../api/client.js'
 import { useAppData } from '../hooks/useAppData.js'
 
+const EMPTY_DASHBOARD = { summary: null, trends: null, categories: [], budgets: [], metrics: null, period_status: null, alerts: [] }
 const OPTIONS = { categories: [], subcategories: {}, units: [], shops: [], base_currency: 'SEK', display_currency: 'SEK', currencies: [] }
 
 beforeEach(() => {
   client.fetchOptions.mockImplementation(async () => ({ ...OPTIONS }))
-  for (const name of ['fetchSummary', 'fetchTrends', 'fetchMetrics', 'fetchPeriodStatus', 'fetchIncomeSummary']) {
-    client[name].mockImplementation(async () => null)
-  }
+  client.fetchIncomeSummary.mockImplementation(async () => null)
+  client.fetchDashboard.mockImplementation(async () => ({ ...EMPTY_DASHBOARD }))
   client.fetchBudgetConfig.mockImplementation(async () => ({ period: 'Monthly', rollover: false }))
 })
 
 describe('useAppData.resetData', () => {
   it('clears alerts, trips, groups and the dashboard scope along with the rest', async () => {
-    client.fetchAlerts.mockImplementation(async () => [{ id: 1 }])
+    client.fetchDashboard.mockImplementation(async () => ({ ...EMPTY_DASHBOARD, alerts: [{ id: 1 }] }))
     client.fetchTrips.mockImplementation(async () => [{ id: 2 }])
     client.fetchGroups.mockImplementation(async () => [{ id: 3 }])
     const { result } = renderHook(() => useAppData())
@@ -80,5 +80,40 @@ describe('useAppData.resetData', () => {
     })
 
     await waitFor(() => expect(result.current.trips).toEqual([{ id: 5 }]))
+  })
+})
+
+describe('useAppData dashboard loading', () => {
+  it('loads the whole dashboard with ONE request and spreads it over the state', async () => {
+    client.fetchDashboard.mockImplementation(async () => ({
+      summary: { total: 5 }, trends: { monthly: [] }, categories: [{ category: 'A' }], budgets: [{ category: 'Total' }],
+      metrics: { savings_rate: 1 }, period_status: { label: 'x' }, alerts: [{ id: 7 }],
+    }))
+    client.fetchDashboard.mockClear()
+    const { result } = renderHook(() => useAppData())
+    await act(async () => { await result.current.loadAll() })
+
+    expect(client.fetchDashboard).toHaveBeenCalledTimes(1)
+    expect(result.current.summary).toEqual({ total: 5 })
+    expect(result.current.categories).toEqual([{ category: 'A' }])
+    expect(result.current.budgets).toEqual([{ category: 'Total' }])
+    expect(result.current.metrics).toEqual({ savings_rate: 1 })
+    expect(result.current.periodStatus).toEqual({ label: 'x' })
+    expect(result.current.alerts).toEqual([{ id: 7 }])
+  })
+
+  it('changing the scope fetches once, without alerts, and keeps the current alerts', async () => {
+    client.fetchDashboard.mockImplementationOnce(async () => ({ ...EMPTY_DASHBOARD, alerts: [{ id: 7 }] }))
+    const { result } = renderHook(() => useAppData())
+    await act(async () => { await result.current.loadAll() })
+
+    client.fetchDashboard.mockClear()
+    client.fetchDashboard.mockImplementation(async () => ({ ...EMPTY_DASHBOARD, summary: { total: 1 }, alerts: null }))
+    await act(async () => { await result.current.handleSetDashboardScope('personal') })
+
+    expect(client.fetchDashboard).toHaveBeenCalledTimes(1)
+    expect(client.fetchDashboard).toHaveBeenCalledWith('personal', [], { includeAlerts: false })
+    expect(result.current.summary).toEqual({ total: 1 })
+    expect(result.current.alerts).toEqual([{ id: 7 }])
   })
 })

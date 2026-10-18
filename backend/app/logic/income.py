@@ -8,16 +8,14 @@ from __future__ import annotations
 
 import pandas as pd
 
+from app.logic.frame import frame
 from app.core.money import as_decimal, quantize_money
 
 
 def _to_frame(income: list[dict]) -> pd.DataFrame:
     if not income:
         return pd.DataFrame(columns=["date", "amount"])
-    df = pd.DataFrame(income)
-    df["amount"] = df["amount"].map(lambda value: as_decimal(value) if not pd.isna(value) else as_decimal(0))
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    return df.dropna(subset=["date"])
+    return frame(income, ["date", "amount"]).dropna(subset=["date"])
 
 
 def monthly_totals(income: list[dict]) -> list[dict]:

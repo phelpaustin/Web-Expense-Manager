@@ -11,6 +11,7 @@ from datetime import date
 
 import pandas as pd
 
+from app.logic.frame import frame
 from app.core.money import as_decimal, quantize_money
 
 # statsmodels is optional — forecasting degrades gracefully without it,
@@ -26,10 +27,7 @@ except Exception:
 def _to_frame(expenses: list[dict]) -> pd.DataFrame:
     if not expenses:
         return pd.DataFrame(columns=["date", "category", "amount"])
-    df = pd.DataFrame(expenses)
-    df["amount"] = df["amount"].map(lambda value: as_decimal(value) if not pd.isna(value) else as_decimal(0))
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    return df
+    return frame(expenses, ["date", "category", "amount"])
 
 
 def monthly_totals(expenses: list[dict]) -> list[dict]:

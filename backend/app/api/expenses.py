@@ -189,6 +189,13 @@ def _visible_expenses_query(db: Session, user_id: int, scope: str | None = None,
         return db.query(models.Expense).filter(visibility)
 
 
+_FETCH_KEYS = (
+    "id", "date", "category", "subcategory", "description", "amount", "quantity", "unit",
+    "shop", "brand", "currency", "price_per_unit", "bill_total_only", "group_id", "user_id",
+)
+_FETCH_COLUMNS = tuple(getattr(models.Expense, k) for k in _FETCH_KEYS)
+
+
 def fetch_expenses(
     db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None
 ) -> list[dict]:
@@ -200,27 +207,13 @@ def fetch_expenses(
     q = _visible_expenses_query(db, user_id, scope, space_ids)
     if q is None:
         return []
-    rows = q.order_by(models.Expense.date).all()
-    return [
-        {
-            "id": r.id,
-            "date": r.date,
-            "category": r.category,
-            "subcategory": r.subcategory,
-            "description": r.description,
-            "amount": r.amount,
-            "quantity": r.quantity,
-            "unit": r.unit,
-            "shop": r.shop,
-            "brand": r.brand,
-            "currency": r.currency,
-            "price_per_unit": r.price_per_unit,
-            "bill_total_only": bool(r.bill_total_only),
-            "group_id": r.group_id,
-            "user_id": r.user_id,
-        }
-        for r in rows
-    ]
+    # Plain column rows, not ORM objects: the aggregations only need values, and building
+    # an ORM entity per row was the larger half of the cost on big accounts.
+    rows = q.with_entities(*_FETCH_COLUMNS).order_by(models.Expense.date, models.Expense.id).all()
+    items = [dict(zip(_FETCH_KEYS, r)) for r in rows]
+    for item in items:
+        item["bill_total_only"] = bool(item["bill_total_only"])
+    return items
 
 
 def fetch_expenses_in_reporting_currency_ex(
@@ -538,7 +531,11 @@ def expenses_summary(
     user: models.User = Depends(get_current_user),
 ):
     expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
-    reporting = get_reporting_currency(db, user.id)
+    return summary_payload(expenses, unconverted, get_reporting_currency(db, user.id))
+
+
+def summary_payload(expenses: list[dict], unconverted: int, reporting: str) -> dict:
+    """Totals for already-converted expenses (shared with the combined /dashboard endpoint)."""
     total = sum(e["amount"] for e in expenses)
     by_category: dict[str, Decimal] = {}
     for e in expenses:

@@ -13,6 +13,7 @@ Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supa
 ## Map
 - `backend/main.py` – app setup, CORS, router registration; runs Alembic migrations + seed on startup.
 - `backend/app/api/` – one router per area (auth, expenses, bills, groups, trips, budgets, income, recurring, options, alerts, aliases, analytics, metrics). Thin: validation, permissions, DB access.
+- `backend/app/api/dashboard.py` – ONE endpoint that returns everything the dashboard shows (summary, trends, categories, budgets, metrics, period status, alerts), loading and converting expenses once. Reuse its helpers (`summary_payload`, `trends_payload`) instead of adding another endpoint that re-scans all expenses.
 - `backend/app/api/bill_sync.py` – keeps every expense represented on the Bills page by "adopting" unlinked expenses into derived bills (`origin='expenses'`) and reconciling them when items change. Idempotent; unique index (user, origin_key) makes races safe.
 - `backend/app/api/deps.py` – `get_current_user` (JWT + session_version + email_verified) and group role helpers (owner > admin > editor > viewer).
 - `backend/app/logic/` – pure functions on plain dicts (no DB, no FastAPI): analytics, budgets, alerts, bills parsing/ledger, price tracker, categorizer, names/aliases, taxonomy, trips/settlement, currency conversion. Put business rules here and test them directly.

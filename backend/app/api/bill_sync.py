@@ -32,12 +32,16 @@ _CHUNK = 400  # keep IN (...) lists well under every database's parameter limit
 _RETRIES = 3
 
 
+def _implicit_key(expense_id, date, shop, currency, group_id) -> str:
+    shop = (shop or "").strip().lower()
+    if shop:
+        return f"s|{date.isoformat()}|{shop}|{currency}|{group_id or 0}"
+    return f"e|{expense_id}"  # no shop: not enough to say it belongs with anything else
+
+
 def implicit_key(e: models.Expense) -> str:
     """Which derived bill an expense belongs to, by its own fields."""
-    shop = (e.shop or "").strip().lower()
-    if shop:
-        return f"s|{e.date.isoformat()}|{shop}|{e.currency}|{e.group_id or 0}"
-    return f"e|{e.id}"  # no shop: not enough to say it belongs with anything else
+    return _implicit_key(e.id, e.date, e.shop, e.currency, e.group_id)
 
 
 def bill_name(e: models.Expense) -> str:
@@ -144,8 +148,71 @@ def _adopt(db: Session, user_id: int) -> bool:
     return True
 
 
+def _stale_bill_ids(db: Session, user_id: int, bill_ids: list[int] | None = None) -> list[int]:
+    """Ids of derived bills that no longer match their items, found with plain column reads.
+
+    This is the check a page load runs every time; on an account where nothing changed it must
+    not build an ORM object per bill and per expense. It applies the same rules as _reconcile_ids
+    (which does the actual fixing, only for the bills returned here): a bill with no items, an
+    item that no longer belongs to its implicit bill, or an amount that is not the items' sum.
+    """
+    q = db.query(models.PendingBill.id, models.PendingBill.amount, models.PendingBill.origin_key).filter(
+        models.PendingBill.user_id == user_id,
+        models.PendingBill.origin == ORIGIN_EXPENSES,
+        models.PendingBill.status == "itemised",
+    )
+    if bill_ids is not None:
+        if not bill_ids:
+            return []
+        q = q.filter(models.PendingBill.id.in_(bill_ids))
+    bills = {bill_id: (amount, key) for bill_id, amount, key in q.all()}
+    if not bills:
+        return []
+
+    items_by_bill: dict[int, list[tuple]] = defaultdict(list)
+    for part in _chunks(bills):
+        for row in db.query(
+            models.Expense.source_bill_id,
+            models.Expense.id,
+            models.Expense.amount,
+            models.Expense.date,
+            models.Expense.shop,
+            models.Expense.currency,
+            models.Expense.group_id,
+            models.Expense.bill_total_only,
+        ).filter(models.Expense.source_bill_id.in_(part), models.Expense.user_id == user_id):
+            items_by_bill[row[0]].append(row[1:])
+
+    stale = []
+    for bill_id, (amount, key) in bills.items():
+        items = items_by_bill.get(bill_id, [])
+        if not items:
+            stale.append(bill_id)
+            continue
+        if key and not is_explicit(key):
+            keep = [it for it in items if _implicit_key(it[0], it[2], it[3], it[4], it[5]) == key and not it[6]]
+            if len(keep) != len(items):
+                stale.append(bill_id)
+                continue
+        if amount != sum((it[1] for it in items), Decimal("0")):
+            stale.append(bill_id)
+    return stale
+
+
 def _reconcile(db: Session, user_id: int, bill_ids: list[int] | None = None) -> bool:
     """Bring derived bills back in line with their expenses. Caller commits.
+
+    Looks for stale bills first (cheap, read-only) and only loads and fixes those.
+    """
+    changed = False
+    stale = _stale_bill_ids(db, user_id, bill_ids)
+    for part in _chunks(stale):
+        changed = _reconcile_ids(db, user_id, part) or changed
+    return changed
+
+
+def _reconcile_ids(db: Session, user_id: int, bill_ids: list[int]) -> bool:
+    """Fix the given derived bills. Caller commits.
 
     * Items that no longer match their (implicit) bill, because their date, shop, currency or space
       was edited, are detached; adoption then files them in the right bill.
@@ -156,11 +223,8 @@ def _reconcile(db: Session, user_id: int, bill_ids: list[int] | None = None) -> 
         models.PendingBill.user_id == user_id,
         models.PendingBill.origin == ORIGIN_EXPENSES,
         models.PendingBill.status == "itemised",
+        models.PendingBill.id.in_(bill_ids),
     )
-    if bill_ids is not None:
-        if not bill_ids:
-            return False
-        q = q.filter(models.PendingBill.id.in_(bill_ids))
     bills = q.all()
     if not bills:
         return False

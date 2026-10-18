@@ -522,3 +522,87 @@ def test_0018_adds_the_columns_and_index_and_downgrades_safely():
     con.close()
     assert _alembic(path, "upgrade", "head").returncode == 0  # and back up again
     assert _alembic(path, "upgrade", "head").returncode == 0  # idempotent
+
+
+# ── the read-only staleness check used by every page load ────────────────
+def _stale(uid):
+    db = SessionLocal()
+    try:
+        return set(bill_sync._stale_bill_ids(db, uid))
+    finally:
+        db.close()
+
+
+def _db_edit(expense_id, **fields):
+    db = SessionLocal()
+    db.query(models.Expense).filter(models.Expense.id == expense_id).update(fields)
+    db.commit()
+    db.close()
+
+
+def test_nothing_is_stale_after_a_sync(client, make_user):
+    uid, h = make_user()
+    _insert(uid, [{"shop": "Coop", "amount": 10}, {"shop": "Coop", "amount": 5}, {"shop": "", "amount": 7}])
+    _all_bills(client, h)  # a bills page load adopts them
+    assert _stale(uid) == set()
+
+
+def test_an_item_whose_shop_changed_behind_our_back_makes_its_bill_stale(client, make_user):
+    uid, h = make_user()
+    ids = _insert(uid, [{"shop": "Coop", "amount": 10}, {"shop": "Coop", "amount": 5}])
+    _all_bills(client, h)
+    bill_id = _bill_of(client, h, ids[0])["id"]
+    _db_edit(ids[0], shop="Lidl")
+    assert _stale(uid) == {bill_id}
+    # and the normal page load repairs it
+    bills = _all_bills(client, h)
+    assert sorted((b["shop"], float(b["amount"])) for b in bills) == [("Coop", 5.0), ("Lidl", 10.0)]
+    assert _stale(uid) == set()
+
+
+def test_an_amount_that_is_no_longer_the_sum_of_its_items_is_stale(client, make_user):
+    uid, h = make_user()
+    ids = _insert(uid, [{"shop": "Coop", "amount": 10}, {"shop": "Coop", "amount": 5}])
+    _all_bills(client, h)
+    bill_id = _bill_of(client, h, ids[0])["id"]
+    _db_edit(ids[1], amount=6)
+    assert _stale(uid) == {bill_id}
+    assert [float(b["amount"]) for b in _all_bills(client, h)] == [16.0]
+    assert _stale(uid) == set()
+
+
+def test_a_derived_bill_with_no_items_left_is_stale(client, make_user):
+    uid, h = make_user()
+    [eid] = _insert(uid, [{"shop": "Coop", "amount": 10}])
+    _all_bills(client, h)
+    bill_id = _bill_of(client, h, eid)["id"]
+    db = SessionLocal()
+    db.query(models.Expense).filter(models.Expense.id == eid).delete()
+    db.commit()
+    db.close()
+    assert _stale(uid) == {bill_id}
+    assert _all_bills(client, h) == []
+
+
+def test_items_of_a_hand_grouped_bill_may_differ_in_shop_without_being_stale(client, make_user):
+    uid, h = make_user()
+    r = client.post(
+        "/api/expenses/bulk",
+        json={"as_bill": True, "items": [
+            {"date": JULY.format(10), "category": "Food", "amount": "10", "currency": "SEK", "shop": "Coop"},
+            {"date": JULY.format(10), "category": "Food", "amount": "5", "currency": "SEK", "shop": "Lidl"},
+        ]},
+        headers=h,
+    )
+    assert r.status_code == 201, r.text
+    _all_bills(client, h)
+    assert _stale(uid) == set()
+
+
+def test_the_check_and_the_orm_agree_on_which_bill_an_expense_belongs_to(client, make_user):
+    uid, _ = make_user()
+    ids = _insert(uid, [{"shop": " Coop ", "amount": 1, "currency": "USD"}, {"shop": "", "amount": 2}])
+    db = SessionLocal()
+    for e in db.query(models.Expense).filter(models.Expense.id.in_(ids)):
+        assert bill_sync.implicit_key(e) == bill_sync._implicit_key(e.id, e.date, e.shop, e.currency, e.group_id)
+    db.close()

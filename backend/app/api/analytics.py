@@ -22,7 +22,11 @@ def analytics_trends(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    expenses = fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids)
+    return trends_payload(fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids))
+
+
+def trends_payload(expenses: list[dict]) -> dict:
+    """Monthly totals, change and forecast for converted expenses (shared with /dashboard)."""
     monthly = analytics_logic.monthly_totals(expenses)
     return {
         "monthly": monthly,

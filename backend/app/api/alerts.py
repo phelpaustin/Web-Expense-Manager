@@ -25,9 +25,15 @@ router = APIRouter()
 log = logging.getLogger("alerts")
 
 
-def _alerts_for_user(db: Session, user_id: int) -> list[dict]:
-    expenses = fetch_expenses_in_reporting_currency(db, user_id)
-    budgets = fetch_budgets(db, user_id)
+def _alerts_for_user(
+    db: Session, user_id: int, expenses: list[dict] | None = None, budgets: dict | None = None
+) -> list[dict]:
+    """Current budget alerts. `expenses` (all spaces, converted) and `budgets` may be passed in
+    when the caller already has them, to avoid loading and converting everything again."""
+    if expenses is None:
+        expenses = fetch_expenses_in_reporting_currency(db, user_id)
+    if budgets is None:
+        budgets = fetch_budgets(db, user_id)
     opts = get_or_create_options(db, user_id)
 
     category_statuses = budgets_logic.calculate_budget_status(expenses, budgets)

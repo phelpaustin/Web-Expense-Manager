@@ -228,6 +228,17 @@ function scopeQuery(scope, spaceIds) {
   return scope && scope !== 'all' ? `?scope=${encodeURIComponent(scope)}` : ''
 }
 
+// Everything the dashboard shows in ONE request (summary, trends, categories, budget status,
+// metrics, period status and, unless includeAlerts is false, alerts). The server loads and
+// converts the expenses once instead of once per endpoint. Returns
+// { summary, trends, categories, budgets, metrics, period_status, alerts }.
+export function fetchDashboard(scope, spaceIds, { includeAlerts = true } = {}) {
+  const query = scopeQuery(scope, spaceIds)
+  const extra = includeAlerts ? '' : 'include_alerts=false'
+  const joined = [query.replace(/^\?/, ''), extra].filter(Boolean).join('&')
+  return request(`/api/dashboard${joined ? `?${joined}` : ''}`)
+}
+
 export function fetchSummary(scope, spaceIds) {
   return request(`/api/expenses/summary${scopeQuery(scope, spaceIds)}`)
 }

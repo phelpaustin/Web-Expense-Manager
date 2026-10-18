@@ -17,6 +17,7 @@ import Layout from '../Layout.jsx'
 import SettingsPage from '../pages/SettingsPage.jsx'
 import { money } from '../format.js'
 
+const EMPTY_DASHBOARD = { summary: null, trends: null, categories: [], budgets: [], metrics: null, period_status: null, alerts: [] }
 const OPTIONS = {
   categories: [], subcategories: {}, units: [], shops: [],
   base_currency: 'SEK', display_currency: 'SEK', display_currency_is_custom: false,
@@ -26,10 +27,7 @@ const OPTIONS = {
 beforeEach(() => {
   server.options = { ...OPTIONS }
   client.fetchOptions.mockImplementation(async () => ({ ...server.options }))
-  client.fetchSummary.mockImplementation(async () => null)
-  client.fetchTrends.mockImplementation(async () => null)
-  client.fetchMetrics.mockImplementation(async () => null)
-  client.fetchPeriodStatus.mockImplementation(async () => null)
+  client.fetchDashboard.mockImplementation(async () => EMPTY_DASHBOARD)
   client.fetchIncomeSummary.mockImplementation(async () => null)
   client.fetchBudgetConfig.mockImplementation(async () => ({ period: 'Monthly', rollover: false }))
   client.saveDisplayCurrency.mockImplementation(async (code) => {
@@ -50,7 +48,7 @@ describe('display currency switching', () => {
     const { result } = renderHook(() => useAppData())
     await act(async () => { await result.current.loadAll() })
     expect(result.current.options.display_currency).toBe('SEK')
-    const callsBefore = client.fetchSummary.mock.calls.length
+    const callsBefore = client.fetchDashboard.mock.calls.length
 
     await act(async () => { await result.current.changeDisplayCurrency('EUR') })
 
@@ -58,7 +56,7 @@ describe('display currency switching', () => {
     expect(result.current.options.display_currency).toBe('EUR')
     expect(result.current.options.display_currency_is_custom).toBe(true)
     expect(money(10)).toContain('€')                       // money() now formats in the display currency
-    expect(client.fetchSummary.mock.calls.length).toBeGreaterThan(callsBefore)  // converted views reloaded
+    expect(client.fetchDashboard.mock.calls.length).toBeGreaterThan(callsBefore)  // converted views reloaded
     expect(result.current.error).toBeNull()
 
     await act(async () => { await result.current.changeDisplayCurrency(null) })   // reset -> follow base

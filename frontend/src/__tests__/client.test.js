@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createExpense, updateExpense } from '../api/client.js'
+import { createExpense, updateExpense, fetchDashboard } from '../api/client.js'
 
 function respond(status, body) {
   global.fetch = vi.fn(async () => ({
@@ -42,5 +42,31 @@ describe('API error messages', () => {
   it('falls back to a generic message for a non-JSON error body', async () => {
     respond(500, undefined)
     await expect(updateExpense(1, {})).rejects.toThrow('Request failed')
+  })
+})
+
+describe('fetchDashboard', () => {
+  function url() {
+    return global.fetch.mock.calls[0][0]
+  }
+
+  it('asks for the whole dashboard, alerts included, with no query by default', async () => {
+    respond(200, {})
+    await fetchDashboard()
+    expect(url()).toBe('/api/dashboard')
+  })
+
+  it('passes the scope or the chosen spaces, and can leave alerts out', async () => {
+    respond(200, {})
+    await fetchDashboard('personal', [], { includeAlerts: false })
+    expect(url()).toBe('/api/dashboard?scope=personal&include_alerts=false')
+
+    respond(200, {})
+    await fetchDashboard(null, ['personal', 4])
+    expect(url()).toBe('/api/dashboard?space_ids=personal%2C4')
+
+    respond(200, {})
+    await fetchDashboard('all', [], { includeAlerts: false })
+    expect(url()).toBe('/api/dashboard?include_alerts=false')
   })
 })
