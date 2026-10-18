@@ -5,8 +5,8 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
 from app.api.aliases import load_alias_maps
-from app.api.expenses import fetch_expenses_in_reporting_currency, fetch_expenses_in_reporting_currency_ex
-from app.api.options import get_reporting_currency
+from app.api.expenses import fetch_expenses, fetch_expenses_in_reporting_currency, fetch_expenses_in_reporting_currency_ex
+from app.api.options import convert_rows, get_reporting_currency
 from app.logic import analytics as analytics_logic
 from app.logic import category_change as category_change_logic
 from app.logic import shop_scorecard as shop_scorecard_logic
@@ -96,11 +96,21 @@ def analytics_shop_scorecard(
     return result
 
 
-def _price_rows(db: Session, user: models.User) -> tuple[list[dict], dict[str, str]]:
+def _price_rows(db: Session, user: models.User, item: str | None = None) -> tuple[list[dict], dict[str, str]]:
     """The user's expenses with their saved item/shop merges applied, plus the item
-    aliases (so a request naming an old spelling still finds its merged item)."""
+    aliases (so a request naming an old spelling still finds its merged item).
+
+    With `item`, only that item's purchases are converted and returned (the detail views
+    need one item, not every expense). Merged names are still decided from everything, so
+    the result for that item is exactly what the full list would contain for it.
+    """
     item_aliases, shop_aliases = load_alias_maps(db, user.id)
-    rows = names.canonicalise(fetch_expenses_in_reporting_currency(db, user.id), item_aliases, shop_aliases)
+    rows, _ = convert_rows(
+        db,
+        user.id,
+        fetch_expenses(db, user.id),
+        select=lambda usable: names.canonicalise(usable, item_aliases, shop_aliases, only_item=item),
+    )
     return rows, item_aliases
 
 
@@ -122,7 +132,7 @@ def analytics_price_shop_comparison(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    rows, item_aliases = _price_rows(db, user)
+    rows, item_aliases = _price_rows(db, user, item)
     return price_tracker.shop_comparison(rows, names.resolve_name(item, item_aliases), unit, category, brand, shop)
 
 
@@ -136,7 +146,7 @@ def analytics_price_history(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    rows, item_aliases = _price_rows(db, user)
+    rows, item_aliases = _price_rows(db, user, item)
     return price_tracker.price_history(rows, names.resolve_name(item, item_aliases), unit, category, brand, shop)
 
 
@@ -155,5 +165,5 @@ def analytics_price_detail(
     Leave `brand` out for every brand (`brand=` alone means "no brand recorded") and
     leave `shop` out for every shop (repeat it to include only those shops).
     """
-    rows, item_aliases = _price_rows(db, user)
+    rows, item_aliases = _price_rows(db, user, item)
     return price_tracker.price_detail(rows, names.resolve_name(item, item_aliases), unit, category, brand, shop)

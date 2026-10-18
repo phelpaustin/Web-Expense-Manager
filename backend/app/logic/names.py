@@ -14,14 +14,26 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
+from functools import lru_cache
 
 _SPACES = re.compile(r"\s+")
 _EDGE_PUNCT = " .,;:"
 
 
+@lru_cache(maxsize=1 << 16)
+def _clean(text: str) -> str:
+    return _SPACES.sub(" ", text).strip()
+
+
+@lru_cache(maxsize=1 << 16)
+def _key(text: str) -> str:
+    return _clean(text).casefold().strip(_EDGE_PUNCT)
+
+
 def clean_name(value) -> str:
     """The name as shown: trimmed with inner whitespace collapsed (case is kept)."""
-    return _SPACES.sub(" ", str(value or "")).strip()
+    # Cached: a few hundred distinct names recur across tens of thousands of expenses.
+    return _clean(str(value or ""))
 
 
 def name_key(value) -> str:
@@ -29,7 +41,7 @@ def name_key(value) -> str:
 
     Accents are deliberately kept: in Swedish, a/å/ä and o/ö are different letters.
     """
-    return clean_name(value).casefold().strip(_EDGE_PUNCT)
+    return _key(str(value or ""))
 
 
 def resolve_name(name, aliases: dict[str, str]) -> str:
@@ -38,19 +50,32 @@ def resolve_name(name, aliases: dict[str, str]) -> str:
     return aliases.get(name_key(cleaned), cleaned)
 
 
-def canonicalise(expenses: list[dict], item_aliases: dict[str, str], shop_aliases: dict[str, str]) -> list[dict]:
+def canonicalise(
+    expenses: list[dict],
+    item_aliases: dict[str, str],
+    shop_aliases: dict[str, str],
+    only_item: str | None = None,
+) -> list[dict]:
     """Copies of the expenses with `description` and `shop` replaced by their canonical names.
 
     `*_aliases` map a name key to the canonical name it should become. Names that share
     a key after aliasing are one name; it is shown as the alias target if there is one,
     otherwise as the spelling used most often (ties go to alphabetical order).
+
+    With `only_item`, only the expenses of that one item (after aliasing) are returned.
+    Every name is still decided from ALL the expenses given, so the spellings shown are
+    the same as in the full result; only the copying is skipped for the rest.
     """
     item_names = _canonical_names([e.get("description") for e in expenses], item_aliases)
     shop_names = _canonical_names([e.get("shop") for e in expenses], shop_aliases)
+    wanted = name_key(resolve_name(only_item, item_aliases)) if only_item is not None else None
     out = []
     for e in expenses:
+        description = item_names.get(name_key(e.get("description")), clean_name(e.get("description")))
+        if wanted is not None and name_key(description) != wanted:
+            continue
         row = dict(e)
-        row["description"] = item_names.get(name_key(e.get("description")), clean_name(e.get("description")))
+        row["description"] = description
         row["shop"] = shop_names.get(name_key(e.get("shop")), clean_name(e.get("shop")))
         out.append(row)
     return out

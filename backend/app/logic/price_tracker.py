@@ -16,11 +16,30 @@ also apply the user's aliases do so first, with names.canonicalise().
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from statistics import mean, pstdev
+from decimal import Decimal
+from statistics import mean as _mean_any, pstdev as _pstdev_any
 
 from app.core.money import quantize_money
 from app.logic.names import clean_name, name_key
 from app.logic.units import to_base_price, unit_label
+
+
+def mean(values):
+    """Mean of prices. For Decimals this is the same exact result as statistics.mean (the sum
+    of 4-decimal prices is exact, so one division gives the same digits) without its slow
+    per-value Fraction arithmetic, which dominated the page's time."""
+    values = list(values)
+    if values and all(isinstance(v, Decimal) for v in values):
+        return sum(values, Decimal(0)) / len(values)
+    return _mean_any(values)
+
+
+def pstdev(values):
+    values = list(values)
+    if len(values) > 1 and all(isinstance(v, Decimal) for v in values):
+        mu = sum(values, Decimal(0)) / len(values)
+        return (sum(((v - mu) ** 2 for v in values), Decimal(0)) / len(values)).sqrt()
+    return _pstdev_any(values)
 
 
 def _price(e: dict):

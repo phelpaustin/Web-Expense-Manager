@@ -4,6 +4,7 @@ import { fetchPriceTrends } from '../api/client.js'
 import PriceDetail from '../components/PriceDetail.jsx'
 import TidyNames from '../components/TidyNames.jsx'
 
+const PAGE_SIZE = 200
 const TREND_ICON = { Increasing: '📈', Decreasing: '📉', Stable: '➡️' }
 
 export default function PriceTrackerPage({ onError }) {
@@ -11,6 +12,7 @@ export default function PriceTrackerPage({ onError }) {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
   const [query, setQuery] = useState('')
+  const [shown, setShown] = useState(PAGE_SIZE)
 
   function loadTrends() {
     return fetchPriceTrends()
@@ -65,7 +67,10 @@ export default function PriceTrackerPage({ onError }) {
             placeholder="Search items or categories"
             aria-label="Search items"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setShown(PAGE_SIZE)
+            }}
             style={{ marginBottom: '0.75rem' }}
           />
           {visible.length === 0 && <p className="subtitle">No items match “{query.trim()}”.</p>}
@@ -83,7 +88,7 @@ export default function PriceTrackerPage({ onError }) {
               </tr>
             </thead>
             <tbody>
-              {visible.map((t) => {
+              {visible.slice(0, shown).map((t) => {
                 const key = `${t.item}::${t.unit}::${t.category}`
                 return (
                   <Fragment key={key}>
@@ -115,6 +120,13 @@ export default function PriceTrackerPage({ onError }) {
               })}
             </tbody>
           </table>
+          {visible.length > shown && (
+            <p style={{ textAlign: 'center' }}>
+              <button type="button" className="link-btn" onClick={() => setShown((n) => n + PAGE_SIZE)}>
+                Show more ({visible.length - shown} remaining)
+              </button>
+            </p>
+          )}
         </>
       )}
     </>

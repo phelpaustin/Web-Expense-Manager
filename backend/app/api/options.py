@@ -122,18 +122,26 @@ def get_reporting_currency(db: Session, user_id: int) -> str:
 
 
 def convert_rows(
-    db: Session, user_id: int, rows: list[dict], target: str | None = None
+    db: Session, user_id: int, rows: list[dict], target: str | None = None, select=None
 ) -> tuple[list[dict], int]:
     """Convert dict rows (date/amount/currency) into ``target`` (default: the
     user's reporting currency).
 
     Uses each row's own date for the exchange rate. Rows whose currency can't be
     converted are left out and counted instead of failing the whole request.
+
+    ``select``, if given, is called with the rows that CAN be converted and returns the ones
+    to convert and return (e.g. one item's purchases): the rest are never converted, which
+    is most of the work when only a few rows are wanted. The skipped count still covers
+    every row, as without it.
     """
     target = target or get_reporting_currency(db, user_id)
     fx.ensure_rates_for(rows, target)
     try:
-        return currency_logic.convert_expenses_partial(rows, target, fx.get_rate)
+        if select is None:
+            return currency_logic.convert_expenses_partial(rows, target, fx.get_rate)
+        usable, unusable = currency_logic.partition_convertible(rows, target, fx.get_rate)
+        return currency_logic.convert_expenses(select(usable), target, fx.get_rate), len(unusable)
     except currency_logic.CurrencyConversionUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

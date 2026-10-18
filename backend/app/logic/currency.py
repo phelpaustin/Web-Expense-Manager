@@ -84,13 +84,22 @@ def partition_convertible(
         raise CurrencyConversionUnavailable(str(exc)) from exc
     ok: list[dict] = []
     bad: list[dict] = []
+    rates: dict = {}
+    codes: dict = {}
     for e in expenses:
-        try:
-            currency = normalize_currency(e.get("currency") or target)
-        except ValueError:
-            bad.append(e)
-            continue
-        (ok if get_rate(currency, target, e.get("date")) is not None else bad).append(e)
+        raw = e.get("currency") or target
+        currency = codes.get(raw)
+        if currency is None:
+            try:
+                currency = codes[raw] = normalize_currency(raw)
+            except ValueError:
+                bad.append(e)
+                continue
+        key = (currency, e.get("date"))
+        rate = rates.get(key, _MISSING)
+        if rate is _MISSING:
+            rate = rates[key] = get_rate(currency, target, e.get("date"))
+        (ok if rate is not None else bad).append(e)
     return ok, bad
 
 
