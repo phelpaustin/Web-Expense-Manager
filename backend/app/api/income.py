@@ -9,8 +9,8 @@ from app.api.deps import get_current_user
 from app.api.options import convert_rows, default_currency_for
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
-from app.core.validation import PartialUpdate
-from app.core.money import MAX_MONEY
+from app.core.validation import Name, PartialUpdate, Text
+from app.core.money import MAX_MONEY, JsonDecimal
 from app.db import models
 from app.logic import income as income_logic
 
@@ -22,7 +22,7 @@ class IncomeOut(BaseModel):
 
     id: int
     date: datetime.date
-    amount: Decimal
+    amount: JsonDecimal
     source: str
     note: str
     currency: str
@@ -35,8 +35,8 @@ def _valid_currency(value: str | None) -> str | None:
 class IncomeCreate(BaseModel):
     date: datetime.date
     amount: Decimal = Field(gt=0, le=MAX_MONEY)
-    source: str = Field(min_length=1)
-    note: str = ""
+    source: Name
+    note: Text = ""
     currency: str | None = None  # None = the user's base currency
 
     check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
@@ -46,8 +46,8 @@ class IncomeUpdate(PartialUpdate):
     not_nullable = frozenset({"date", "amount", "source", "note", "currency"})
     date: datetime.date | None = None
     amount: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
-    source: str | None = Field(default=None, min_length=1)
-    note: str | None = None
+    source: Name | None = None
+    note: Text | None = None
     currency: str | None = None
 
     check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))

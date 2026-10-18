@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core import fx
 from app.core.fx import normalize_convertible_currency
+from app.core.validation import Name
 from app.db.database import get_db
 from app.db import models
 from app.logic import currency as currency_logic
@@ -212,20 +213,20 @@ def ensure_options(
 
 
 class CategoryIn(BaseModel):
-    name: str = Field(min_length=1)
+    name: Name
 
 
 class SubcategoryIn(BaseModel):
-    category: str = Field(min_length=1)
-    name: str = Field(min_length=1)
+    category: Name
+    name: Name
 
 
 class UnitIn(BaseModel):
-    name: str = Field(min_length=1)
+    name: Name
 
 
 class ShopIn(BaseModel):
-    name: str = Field(min_length=1)
+    name: Name
 
 
 class CurrencyIn(BaseModel):

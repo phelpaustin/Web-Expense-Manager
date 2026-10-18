@@ -24,8 +24,8 @@ from app.core.file_upload import ensure_xlsx_within_limits, read_upload_limited_
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS
 from app.api import bill_sync
 from app.core.parsing import escape_formula, parse_amount, read_csv_bytes, unescape_formula
-from app.core.validation import PartialUpdate
-from app.core.money import as_decimal, quantize_money, MAX_MONEY
+from app.core.validation import Name, OptionalName, PartialUpdate, Text
+from app.core.money import as_decimal, quantize_money, MAX_MONEY, JsonDecimal
 from app.db.database import get_db
 from app.db import models
 from app.logic import categorizer
@@ -59,13 +59,13 @@ class ExpenseOut(BaseModel):
     category: str
     subcategory: str
     description: str
-    amount: Decimal
+    amount: JsonDecimal
     quantity: float
     unit: str
     shop: str
     brand: str
     currency: str
-    price_per_unit: Decimal
+    price_per_unit: JsonDecimal
     group_id: int | None = None
     # Set when the expense came from a bill; bill_total_only marks the one-line "Record total".
     source_bill_id: int | None = None
@@ -74,14 +74,14 @@ class ExpenseOut(BaseModel):
 
 class ExpenseCreate(BaseModel):
     date: datetime.date
-    category: str = Field(min_length=1)
-    subcategory: str = ""
-    description: str = ""
+    category: Name
+    subcategory: OptionalName = ""
+    description: Text = ""
     amount: Decimal = Field(gt=0, le=MAX_MONEY)
     quantity: float = Field(default=1.0, gt=0)
-    unit: str = "Count"
-    shop: str = ""
-    brand: str = ""
+    unit: OptionalName = "Count"
+    shop: OptionalName = ""
+    brand: OptionalName = ""
     # None = use the default: the space's currency, else the user's base currency.
     currency: str | None = None
     group_id: int | None = None
@@ -98,14 +98,14 @@ class ExpenseUpdate(PartialUpdate):
         {"date", "category", "subcategory", "description", "amount", "quantity", "unit", "shop", "brand", "currency"}
     )
     date: datetime.date | None = None
-    category: str | None = Field(default=None, min_length=1)
-    subcategory: str | None = None
-    description: str | None = None
+    category: Name | None = None
+    subcategory: OptionalName | None = None
+    description: Text | None = None
     amount: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
     quantity: float | None = Field(default=None, gt=0)
-    unit: str | None = None
-    shop: str | None = None
-    brand: str | None = None
+    unit: OptionalName | None = None
+    shop: OptionalName | None = None
+    brand: OptionalName | None = None
     currency: str | None = None
     group_id: int | None = None
 
@@ -116,7 +116,7 @@ class ExpenseUpdate(PartialUpdate):
 
 
 class ExpenseBulkCreate(BaseModel):
-    items: list[ExpenseCreate] = Field(min_length=1)
+    items: list[ExpenseCreate] = Field(min_length=1, max_length=1000)
     # Itemising a bill: the bill these line items break down. Once saved the bill is
     # "itemised" and any single "total only" expense it had is replaced by the items.
     bill_id: int | None = None

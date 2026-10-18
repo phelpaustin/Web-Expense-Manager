@@ -19,10 +19,11 @@ from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
 from app.core.file_upload import content_disposition, read_upload_limited_sync, safe_filename
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
+from app.core.validation import MAX_NAME, Name, Text
 from app.api import bill_sync
 from app.api.expenses import ExpenseOut, fetch_expenses, fetch_expenses_in_reporting_currency
 from app.db.database import get_db
-from app.core.money import MAX_MONEY
+from app.core.money import MAX_MONEY, JsonDecimal
 from app.db import models
 from app.logic import bills as bills_logic
 from app.logic.search import LIKE_ESCAPE, like_pattern
@@ -38,9 +39,9 @@ def _valid_currency(value: str | None) -> str | None:
 
 class PendingCreate(BaseModel):
     date: datetime.date
-    shop: str = Field(min_length=1)
+    shop: Name
     amount: Decimal = Field(gt=0, le=MAX_MONEY)
-    note: str = ""
+    note: Text = ""
     currency: str | None = None  # None = the user's base currency
 
     check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
@@ -307,7 +308,7 @@ def _store_receipt(db: Session, user_id: int, bill_id: int, filename: str | None
 def upload_pending(
     response: Response,
     file: UploadFile = File(...),
-    shop: str = Form(""),
+    shop: str = Form("", max_length=MAX_NAME),
     amount: Decimal = Form(Decimal("0"), ge=0, le=MAX_MONEY),
     attach_to: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -696,16 +697,16 @@ class ManualOut(BaseModel):
     id: int
     date: datetime.date
     shop: str
-    amount: Decimal
+    amount: JsonDecimal
     note: str
     currency: str
 
 
 class ManualCreate(BaseModel):
     date: datetime.date
-    shop: str = Field(min_length=1)
+    shop: Name
     amount: Decimal = Field(gt=0, le=MAX_MONEY)
-    note: str = ""
+    note: Text = ""
     currency: str | None = None  # None = the user's base currency
 
     check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))

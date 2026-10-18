@@ -12,6 +12,7 @@ from app.api.options import default_currency_for
 from app.core.emails import NormalizedEmail, normalize_email, user_by_email
 from app.core.fx import normalize_convertible_currency
 from app.core.rate_limit import limiter
+from app.core.validation import Name, OptionalName
 from app.db.database import get_db
 from app.db import models
 
@@ -32,7 +33,7 @@ def _validate_optional_currency(value: str | None) -> str | None:
 
 
 class GroupCreate(BaseModel):
-    name: str = Field(min_length=1)
+    name: Name
     space_type: str = "custom"
     # Default currency for new expenses in this space; None = the creator's base currency.
     currency: str | None = None
@@ -41,7 +42,7 @@ class GroupCreate(BaseModel):
 
 
 class GroupUpdate(BaseModel):
-    name: str = Field(min_length=1)
+    name: Name
     space_type: str | None = None
     # Only changes the default for *new* expenses; existing expenses keep their own currency.
     currency: str | None = None
@@ -59,7 +60,7 @@ class RoleChangeIn(BaseModel):
 
 
 class MyMappingIn(BaseModel):
-    local_name: str | None = None
+    local_name: OptionalName | None = None
     local_parent_group_id: int | None = None
 
 

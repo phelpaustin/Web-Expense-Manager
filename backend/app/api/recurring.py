@@ -10,7 +10,7 @@ from app.api.deps import get_current_user
 from app.api.options import default_currency_for
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
-from app.core.validation import PartialUpdate
+from app.core.validation import Name, OptionalName, PartialUpdate, Text
 from app.core.money import MAX_MONEY
 from app.db import models
 from app.logic import recurring as rec
@@ -21,11 +21,11 @@ FREQUENCIES = list(rec.FREQUENCIES.keys())
 
 
 class RecurringCreate(BaseModel):
-    item: str = Field(min_length=1)
-    category: str = ""
+    item: Name
+    category: OptionalName = ""
     amount: Decimal = Field(gt=0, le=MAX_MONEY)
     frequency: str = "Monthly"
-    note: str = ""
+    note: Text = ""
     auto_post: bool = False
     # Currency of `amount` (and of the expenses it posts); None = the user's base currency.
     currency: str | None = None
@@ -51,11 +51,11 @@ class RecurringBackfill(BaseModel):
 
 class RecurringUpdate(PartialUpdate):
     not_nullable = frozenset({"item", "category", "amount", "frequency", "note", "auto_post", "currency"})
-    item: str | None = Field(default=None, min_length=1)
-    category: str | None = None
+    item: Name | None = None
+    category: OptionalName | None = None
     amount: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
     frequency: str | None = None
-    note: str | None = None
+    note: Text | None = None
     auto_post: bool | None = None
     currency: str | None = None
 

@@ -68,7 +68,7 @@ def test_new_categories_are_tidied_and_blank_ones_refused(client, make_user):
     _, h = make_user()
     assert add_category(client, h, "  Fast    food ").status_code == 200
     assert "Fast food" in categories(client, h)
-    assert add_category(client, h, "   ").status_code == 400
+    assert add_category(client, h, "   ").status_code == 422
 
 
 def test_a_subcategory_added_under_a_case_variant_goes_under_the_listed_category(client, make_user):

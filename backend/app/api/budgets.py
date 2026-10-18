@@ -10,6 +10,7 @@ from app.api.options import canonical_category, get_or_create_options, get_repor
 from app.core.fx import normalize_convertible_currency
 from app.core import fx
 from app.core.money import quantize_money, MAX_MONEY
+from app.core.validation import Name
 from app.db.database import get_db
 from app.db import models
 from app.api.expenses import fetch_expenses_in_reporting_currency
@@ -20,7 +21,7 @@ router = APIRouter()
 
 
 class BudgetSet(BaseModel):
-    category: str = Field(min_length=1)
+    category: Name
     amount: Decimal = Field(gt=0, le=MAX_MONEY)
     # Currency of `amount`; None = the currency budgets are currently shown in.
     currency: str | None = None

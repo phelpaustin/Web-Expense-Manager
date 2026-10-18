@@ -1,7 +1,17 @@
 """Shared request-validation helpers."""
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, StringConstraints, field_validator
+
+# Names people type: surrounding spaces are removed and the result must not be empty,
+# so "   " is rejected (422) instead of being saved as a blank category or shop.
+MAX_NAME = 200
+MAX_TEXT = 1000
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_NAME)]
+# The same, but the field may be empty (subcategory, shop, brand, unit ...).
+OptionalName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_NAME)]
+# Free text (descriptions, notes), capped so a single row cannot be megabytes.
+Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_TEXT)]
 
 
 class PartialUpdate(BaseModel):

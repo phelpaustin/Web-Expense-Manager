@@ -12,7 +12,7 @@ from app.core import fx
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
 from app.core.money import MAX_MONEY
-from app.core.validation import PartialUpdate
+from app.core.validation import Name, OptionalName, PartialUpdate
 from app.db import models
 from app.logic import currency as currency_logic
 from app.logic import trips as trips_logic
@@ -23,8 +23,8 @@ STATUSES = ["Planned", "Active", "Completed"]
 
 
 class TripCreate(BaseModel):
-    name: str = Field(min_length=1)
-    destination: str = ""
+    name: Name
+    destination: OptionalName = ""
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
     budget: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
@@ -42,7 +42,7 @@ class TripCreate(BaseModel):
 class TripUpdate(PartialUpdate):
     # destination, dates, budget and parent_group_id may be null (clear them).
     not_nullable = frozenset({"name", "currency", "status"})
-    name: str | None = Field(default=None, min_length=1)
+    name: Name | None = None
     destination: str | None = None
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
