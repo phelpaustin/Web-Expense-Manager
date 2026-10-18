@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchBills,
+  syncBills,
   createPendingBill,
   deletePendingBill,
   bulkDeleteBills,
@@ -56,7 +57,18 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     async (q) => {
       setLoading(true)
       try {
-        const res = await fetchBills(q)
+        let res = await fetchBills(q)
+        if (res.needs_sync) {
+          // Listing never writes. Expenses not yet filed under bills (or a derived bill that is out
+          // of date) are fixed with one explicit call, then the list is read again. Once, so a
+          // sync that cannot finish never loops; a failure just shows what is already there.
+          try {
+            await syncBills()
+            res = await fetchBills(q)
+          } catch {
+            /* keep the first response */
+          }
+        }
         // The page may no longer exist (e.g. the last row on it was deleted): step back.
         if (res.items.length === 0 && res.total > 0 && q.page > 1) {
           setQueryState((prev) => ({ ...prev, page: Math.max(1, Math.ceil(res.total / q.page_size)) }))

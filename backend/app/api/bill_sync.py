@@ -12,11 +12,14 @@ so they were invisible on the Bills page. This module fixes that by *adopting* t
   attached, in which case they become an ordinary bill to itemise so the receipt is not lost.
 * Bills the user created or imported are never regrouped or changed here.
 
-It runs when the Bills or Expenses page loads and after an expense is edited or deleted, so
-existing expenses are picked up the first time and anything added later by any route follows.
-It is idempotent, and a unique index (user, origin_key) makes concurrent runs safe: the loser
-of a race simply retries and finds the other's bills.
+Nothing here runs from a GET. Writes file their own expenses (``adopt_after_write``, and the
+edit/delete paths reconcile their bill); ``backfill_all`` catches up existing data at startup; and
+the Bills list reports ``needs_sync`` (a read-only check) so the page can ask for
+``POST /api/bills/sync`` after the rare change that no write path covers (e.g. deleting a space
+moves other members' expenses). It is idempotent, and a unique index (user, origin_key) makes
+concurrent runs safe: the loser of a race simply retries and finds the other's bills.
 """
+import logging
 import uuid
 from collections import defaultdict
 from decimal import Decimal
@@ -25,6 +28,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import models
+
+logger = logging.getLogger(__name__)
 
 ORIGIN_EXPENSES = "expenses"
 EXPLICIT_PREFIX = "b|"
@@ -294,3 +299,43 @@ def adopt_if_needed(db: Session, user_id: int) -> None:
     """Cheap guard for hot paths (listing expenses): adopt only when something is unlinked."""
     if has_unlinked(db, user_id):
         sync_user_bills(db, user_id, reconcile=False)
+
+
+def needs_sync(db: Session, user_id: int) -> bool:
+    """Read-only: is there an unlinked expense, or a derived bill that no longer matches its items?"""
+    return has_unlinked(db, user_id) or bool(_stale_bill_ids(db, user_id))
+
+
+def adopt_after_write(db: Session, user_id: int) -> None:
+    """File freshly written expenses under bills. The write already committed, so a failure here
+    is logged and left for the next sync (``needs_sync`` will still report it) instead of turning
+    a successful save into an error."""
+    try:
+        adopt_if_needed(db, user_id)
+    except Exception:  # noqa: BLE001 - best effort by design
+        db.rollback()
+        logger.warning("Could not file new expenses under bills for user %s", user_id, exc_info=True)
+
+
+def backfill_all(db: Session) -> int:
+    """Startup catch-up: sync every user who has unlinked expenses or stale derived bills.
+
+    Returns how many users needed it. One user failing does not stop the others."""
+    unlinked = {
+        uid
+        for (uid,) in db.query(models.Expense.user_id)
+        .filter(models.Expense.source_bill_id.is_(None), models.Expense.bill_total_only.is_(False), models.Expense.user_id.isnot(None))
+        .distinct()
+    }
+    derived = {
+        uid for (uid,) in db.query(models.PendingBill.user_id).filter(models.PendingBill.origin == ORIGIN_EXPENSES).distinct()
+    }
+    done = 0
+    for uid in sorted(unlinked | derived):
+        try:
+            if sync_user_bills(db, uid):
+                done += 1
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            logger.warning("Bill backfill failed for user %s", uid, exc_info=True)
+    return done

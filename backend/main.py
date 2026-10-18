@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,9 +9,21 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import insecure_secret_reason, settings
 from app.core.rate_limit import limiter
-from app.api import expenses, analytics, budgets, auth, income, recurring, bills, options, metrics, alerts, trips, groups, aliases, dashboard
+from app.api import bill_sync, expenses, analytics, budgets, auth, income, recurring, bills, options, metrics, alerts, trips, groups, aliases, dashboard
+from app.db.database import SessionLocal
 from app.db.migrate import run_migrations
 from app.db.seed import init_db
+
+
+def _backfill_bills() -> None:
+    """File existing expenses under bills once at startup; GET requests never do it."""
+    try:
+        with SessionLocal() as db:
+            n = bill_sync.backfill_all(db)
+        if n:
+            logging.getLogger(__name__).info("Bill backfill updated %s user(s)", n)
+    except Exception:  # noqa: BLE001 - never block startup on this; POST /bills/sync repairs it later
+        logging.getLogger(__name__).warning("Bill backfill failed", exc_info=True)
 
 
 @asynccontextmanager
@@ -25,6 +38,7 @@ async def lifespan(app: FastAPI):
     # Apply schema migrations, then seed sample data on an empty DB.
     run_migrations()
     init_db()
+    _backfill_bills()
     yield
 
 

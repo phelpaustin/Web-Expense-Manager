@@ -43,6 +43,40 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
+describe('syncing (listing bills never writes)', () => {
+  it('asks for one sync when the list says needs_sync, then reloads', async () => {
+    client.fetchBills
+      .mockResolvedValueOnce({ ...page([]), needs_sync: true })
+      .mockResolvedValueOnce({ ...page([BILL(1)]), needs_sync: false })
+    client.syncBills.mockResolvedValue({ changed: true })
+    const { result } = await setup()
+    expect(client.syncBills).toHaveBeenCalledTimes(1)
+    expect(client.fetchBills).toHaveBeenCalledTimes(2)
+    expect(result.current.data.items.map((b) => b.id)).toEqual([1])
+  })
+
+  it('does not sync when nothing is due', async () => {
+    await setup()
+    expect(client.syncBills).not.toHaveBeenCalled()
+  })
+
+  it('syncs at most once per load even if the flag stays on', async () => {
+    client.fetchBills.mockResolvedValue({ ...page([BILL(1)]), needs_sync: true })
+    client.syncBills.mockResolvedValue({ changed: false })
+    await setup()
+    expect(client.syncBills).toHaveBeenCalledTimes(1)
+    expect(client.fetchBills).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows the list it already has when the sync fails', async () => {
+    client.fetchBills.mockResolvedValue({ ...page([BILL(1)]), needs_sync: true })
+    client.syncBills.mockRejectedValue(new Error('nope'))
+    const { result } = await setup()
+    expect(result.current.data.items.map((b) => b.id)).toEqual([1])
+    expect(setError).not.toHaveBeenCalled()
+  })
+})
+
 describe('loading', () => {
   it('loads the first page of to-itemise bills once signed in', async () => {
     const { result } = await setup()

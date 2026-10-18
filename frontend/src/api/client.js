@@ -404,6 +404,12 @@ export function fetchBills(filters = {}) {
   return request(`/api/bills?${params.toString()}`)
 }
 
+// Files expenses under bills. Listing bills never writes, so when the list says needs_sync the
+// page calls this once and reloads.
+export function syncBills() {
+  return request('/api/bills/sync', { method: 'POST' })
+}
+
 export function fetchBill(id) {
   return request(`/api/bills/${id}`)
 }

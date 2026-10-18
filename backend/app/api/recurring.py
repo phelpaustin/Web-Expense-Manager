@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.api import bill_sync
 from app.api.deps import get_current_user
 from app.api.options import default_currency_for
 from app.core.fx import normalize_convertible_currency
@@ -217,6 +218,7 @@ def apply_recurring(
         )
     _post_expense(db, user.id, t, today)
     db.commit()
+    bill_sync.adopt_after_write(db, user.id)
     return {"applied": 1, "item": t.item}
 
 
@@ -259,6 +261,7 @@ def backfill_recurring(
     if t.last_applied is None or dates[-1] > t.last_applied:
         t.last_applied = dates[-1]
     db.commit()
+    bill_sync.adopt_after_write(db, user.id)
     return {"applied": len(dates), "item": t.item, "dates": [d.isoformat() for d in dates]}
 
 
@@ -291,4 +294,6 @@ def apply_due_recurring(
             _post_expense(db, user.id, t, when)
             applied.append(t.item)
     db.commit()
+    if applied:
+        bill_sync.adopt_after_write(db, user.id)
     return {"applied": len(applied), "items": applied}

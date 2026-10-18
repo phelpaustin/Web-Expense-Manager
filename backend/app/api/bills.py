@@ -200,8 +200,6 @@ def list_bills(
     ``counts`` always covers every status (for the tab badges) under the same search and
     date filters, so the tabs show how much is waiting without loading it.
     """
-    # File every expense under a bill first, so what this page shows matches the Expenses page.
-    bill_sync.sync_user_bills(db, user.id)
     base = db.query(models.PendingBill).filter(models.PendingBill.user_id == user.id)
     if date_from:
         base = base.filter(models.PendingBill.date >= date_from)
@@ -233,7 +231,16 @@ def list_bills(
         "page": page,
         "page_size": page_size,
         "counts": counts,
+        # Read-only: true when expenses are not yet filed under bills (or a derived bill is out of
+        # date). The page then calls POST /bills/sync once and reloads; a GET never writes.
+        "needs_sync": bill_sync.needs_sync(db, user.id),
     }
+
+
+@router.post("/bills/sync")
+def sync_bills(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """File every expense under a bill and bring derived bills up to date. Idempotent."""
+    return {"changed": bill_sync.sync_user_bills(db, user.id)}
 
 
 @router.get("/bills/{bill_id}")
@@ -461,6 +468,7 @@ def delete_pending(
         raise HTTPException(status_code=409, detail=_FROM_EXPENSES_MESSAGE)
     _delete_bill_record(db, bill)
     db.commit()
+    bill_sync.adopt_after_write(db, user.id)  # its expenses are kept: file them under a derived bill
 
 
 class BulkIds(BaseModel):
@@ -491,6 +499,8 @@ def bulk_delete_bills(
         _delete_bill_record(db, bill)
         deleted += 1
     db.commit()
+    if deleted:
+        bill_sync.adopt_after_write(db, user.id)
     return {"deleted": deleted, "skipped": skipped}
 
 

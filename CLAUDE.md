@@ -14,14 +14,14 @@ Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supa
 - `backend/main.py` – app setup, CORS, router registration; runs Alembic migrations + seed on startup.
 - `backend/app/api/` – one router per area (auth, expenses, bills, groups, trips, budgets, income, recurring, options, alerts, aliases, analytics, metrics). Thin: validation, permissions, DB access.
 - `backend/app/api/dashboard.py` – ONE endpoint that returns everything the dashboard shows (summary, trends, categories, budgets, metrics, period status, alerts), loading and converting expenses once. Reuse its helpers (`summary_payload`, `trends_payload`) instead of adding another endpoint that re-scans all expenses.
-- `backend/app/api/bill_sync.py` – keeps every expense represented on the Bills page by "adopting" unlinked expenses into derived bills (`origin='expenses'`) and reconciling them when items change. Idempotent; unique index (user, origin_key) makes races safe.
+- `backend/app/api/bill_sync.py` – keeps every expense represented on the Bills page by "adopting" unlinked expenses into derived bills (`origin='expenses'`) and reconciling them when items change. Idempotent; unique index (user, origin_key) makes races safe. GET endpoints never write: writes call `adopt_after_write`, startup runs `backfill_all`, and `GET /bills` returns `needs_sync` so the page calls `POST /bills/sync` once.
 - `backend/app/api/deps.py` – `get_current_user` (JWT + session_version + email_verified) and group role helpers (owner > admin > editor > viewer).
 - `backend/app/logic/` – pure functions on plain dicts (no DB, no FastAPI): analytics, budgets, alerts, bills parsing/ledger, price tracker, categorizer, names/aliases, taxonomy, trips/settlement, currency conversion. Put business rules here and test them directly.
 - `backend/app/core/` – config, security (JWT/bcrypt), email (Resend/SMTP), `fx.py` (Frankfurter rates, cached), money/parsing/upload helpers, rate limiting.
 - `backend/app/db/` – `models.py`, session, seed, category cleanup. Schema changes go through `backend/alembic/versions/` (next number: 0024).
 - `backend/tests/` – pytest; `conftest.py` provides `client`, `make_user`, fake FX.
 - `frontend/src/api/client.js` – the only place that calls `fetch`; attaches the token, handles 401 expiry.
-- `frontend/src/hooks/` – app state and handlers. `useAppData` owns fetched data and `loadAll()`; `useAuth` the session; `use*Handlers` (expense, income, recurring, bills, trip, group, budget) are mutations that call `loadAll()` afterwards.
+- `frontend/src/hooks/` – app state and handlers. `useAppData` owns fetched data and `loadAll()`; `useAuth` the session; `use*Handlers` (expense, income, recurring, bills, trip, group, budget) are mutations that call `loadAll(parts)` afterwards, naming only what changed (`PART`, `EXPENSE_PARTS`). Pages are `React.lazy` chunks.
 - `frontend/src/App.jsx` – wires hooks to routes; `pages/` are screens, `components/` shared UI. `format.js` formats money.
 
 ## Conventions

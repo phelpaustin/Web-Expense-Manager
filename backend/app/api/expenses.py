@@ -284,7 +284,6 @@ def list_expenses(
     page = max(page, 1)
     page_size = min(max(page_size, 1), 200)
 
-    bill_sync.adopt_if_needed(db, user.id)  # expenses entered any way are filed under a bill
     q = _visible_expenses_query(db, user.id, scope, space_ids)
     if q is None:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
@@ -366,6 +365,7 @@ def create_expense(
     db.add(expense)
     db.commit()
     db.refresh(expense)
+    bill_sync.adopt_after_write(db, user.id)  # file it under a bill
     # Auto-learn any new category/subcategory/unit/shop into the user's taxonomy.
     ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
     return expense
@@ -765,6 +765,7 @@ def import_expenses(
                 errors.append(f"Row {line}: {exc}")
 
     db.commit()
+    bill_sync.adopt_after_write(db, user.id)
     for category, subcategory, unit, shop in learned:
         ensure_options(db, user.id, category, subcategory, unit, shop)
 

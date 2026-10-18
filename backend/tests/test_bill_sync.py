@@ -47,6 +47,24 @@ def _all_bills(client, h):
     return _bills(client, h, status="all", page_size=200)["items"]
 
 
+def _sync(client, h):
+    r = client.post("/api/bills/sync", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()["changed"]
+
+
+def _synced_bills(client, h, **kw):
+    """Rows written straight to the database (or by routes that do not file them) need a sync;
+    a GET never does it."""
+    _sync(client, h)
+    return _bills(client, h, **kw)
+
+
+def _synced_all(client, h):
+    _sync(client, h)
+    return _all_bills(client, h)
+
+
 def _bill_of(client, h, expense_id):
     e = next(x for x in _expenses(client, h) if x["id"] == expense_id)
     assert e["source_bill_id"] is not None, "expense is not filed under a bill"
@@ -109,25 +127,103 @@ def test_the_same_shop_in_a_shared_space_is_a_separate_bill(client, make_user):
 def test_expenses_that_already_existed_are_picked_up_on_first_visit(client, make_user):
     uid, h = make_user()
     ids = _insert(uid, [{"shop": "Lidl", "amount": 35.91}, {"shop": "Lidl", "amount": 10}, {"description": "Kiosk", "amount": 25}])
-    assert _bills(client, h, status="all")["total"] == 2  # Lidl (2 lines) + the kiosk expense
-    bills = {b["shop"]: b for b in _all_bills(client, h)}
+    assert _synced_bills(client, h, status="all")["total"] == 2  # Lidl (2 lines) + the kiosk expense
+    bills = {b["shop"]: b for b in _synced_all(client, h)}
     assert D(str(bills["Lidl"]["amount"])) == D("45.91") and bills["Lidl"]["item_count"] == 2
     assert all(e["source_bill_id"] for e in _expenses(client, h) if e["id"] in ids)
 
 
-def test_the_expenses_page_links_them_too(client, make_user):
+def test_listing_expenses_or_bills_never_writes(client, make_user):
     uid, h = make_user()
     _insert(uid, [{"shop": "Lidl", "amount": 12}])
-    [e] = _expenses(client, h)  # listing expenses alone is enough
+    [e] = _expenses(client, h)
+    assert e["source_bill_id"] is None  # a GET does not file it
+    page = _bills(client, h, status="all")
+    assert page["total"] == 0 and page["needs_sync"] is True  # but it says a sync is due
+    db = SessionLocal()
+    assert db.query(models.PendingBill).filter(models.PendingBill.user_id == uid).count() == 0
+    db.close()
+
+
+def test_post_sync_files_them_and_clears_the_flag(client, make_user):
+    uid, h = make_user()
+    _insert(uid, [{"shop": "Lidl", "amount": 12}])
+    assert _sync(client, h) is True
+    [e] = _expenses(client, h)
     assert e["source_bill_id"] is not None and e["bill_total_only"] is False
+    assert _bills(client, h)["needs_sync"] is False
+    assert _sync(client, h) is False  # idempotent
+
+
+def test_needs_sync_also_reports_a_stale_derived_bill(client, make_user):
+    uid, h = make_user()
+    [eid] = _insert(uid, [{"shop": "Lidl", "amount": 12}])
+    _sync(client, h)
+    db = SessionLocal()
+    db.query(models.Expense).filter(models.Expense.id == eid).update({"shop": "ICA"})
+    db.commit()
+    db.close()
+    assert _bills(client, h, status="all")["needs_sync"] is True
+    _sync(client, h)
+    assert _bills(client, h, status="all")["needs_sync"] is False
+
+
+def test_sync_only_touches_the_callers_expenses(client, make_user):
+    a_id, a = make_user()
+    b_id, b = make_user()
+    _insert(a_id, [{"shop": "Mine"}])
+    _insert(b_id, [{"shop": "Theirs"}])
+    _sync(client, a)
+    assert _bills(client, b)["needs_sync"] is True
+    assert [x["shop"] for x in _all_bills(client, a)] == ["Mine"]
+
+
+def test_every_write_route_files_its_expenses_without_a_sync(client, make_user):
+    """Create, import and recurring posting need no later visit to the Bills page."""
+    _, h = make_user()
+    _add(client, h, shop="Coop")
+    csv = "Date,Category,Amount,Shop\n2026-07-11,Food,5,Lidl\n"
+    assert client.post("/api/expenses/import", files={"file": ("e.csv", csv, "text/csv")}, headers=h).status_code == 200
+    t = client.post("/api/recurring", json={"item": "Rent", "amount": "900"}, headers=h).json()
+    assert client.post(f"/api/recurring/{t['id']}/apply", headers=h).status_code == 200
+    assert _bills(client, h)["needs_sync"] is False
+    assert len(_all_bills(client, h)) == 3
+    assert all(e["source_bill_id"] is not None for e in _expenses(client, h))
+
+
+def test_startup_backfill_files_existing_expenses_for_every_user(client, make_user):
+    a_id, a = make_user()
+    b_id, b = make_user()
+    _insert(a_id, [{"shop": "Lidl"}, {"shop": "Lidl"}])
+    _insert(b_id, [{"description": "Kiosk"}])
+    db = SessionLocal()
+    try:
+        assert bill_sync.backfill_all(db) >= 2
+    finally:
+        db.close()
+    assert len(_all_bills(client, a)) == 1 and len(_all_bills(client, b)) == 1
+    assert _bills(client, a)["needs_sync"] is False
+
+
+def test_a_failed_post_write_sync_does_not_fail_the_request(client, make_user, monkeypatch):
+    _, h = make_user()
+
+    def boom(*_a, **_k):
+        raise RuntimeError("db hiccup")
+
+    monkeypatch.setattr(bill_sync, "adopt_if_needed", boom)
+    r = client.post("/api/expenses", json={"date": JULY.format(10), "category": "Food", "amount": "5", "shop": "Coop"}, headers=h)
+    assert r.status_code == 201  # saved; the next sync picks it up
+    monkeypatch.undo()
+    assert _bills(client, h)["needs_sync"] is True
 
 
 def test_adoption_is_idempotent_and_changes_no_totals(client, make_user):
     uid, h = make_user()
     _insert(uid, [{"shop": "A", "amount": 10}, {"shop": "A", "amount": 5}, {"description": "B", "amount": 7}])
     before = _spent(client, h)
-    first = {b["id"]: b for b in _all_bills(client, h)}
-    again = {b["id"]: b for b in _all_bills(client, h)}
+    first = {b["id"]: b for b in _synced_all(client, h)}
+    again = {b["id"]: b for b in _synced_all(client, h)}
     assert first.keys() == again.keys() and _bills(client, h)["counts"]["all"] == 2
     assert _spent(client, h) == before == D("22")
 
@@ -145,8 +241,8 @@ def test_users_only_see_their_own_expenses_as_bills(client, make_user):
     uid_b, b = make_user()
     _insert(uid_a, [{"shop": "Mine", "amount": 1}])
     _insert(uid_b, [{"shop": "Theirs", "amount": 2}])
-    assert [x["shop"] for x in _all_bills(client, a)] == ["Mine"]
-    assert [x["shop"] for x in _all_bills(client, b)] == ["Theirs"]
+    assert [x["shop"] for x in _synced_all(client, a)] == ["Mine"]
+    assert [x["shop"] for x in _synced_all(client, b)] == ["Theirs"]
 
 
 def test_a_members_expense_in_a_shared_space_belongs_to_their_bills(client, make_user):
@@ -256,7 +352,7 @@ def test_without_as_bill_a_bulk_import_is_adopted_by_the_usual_rules(client, mak
     _, h = make_user()
     r = client.post("/api/expenses/bulk", json={"items": _items(5, 6, shop="A")}, headers=h)
     assert all(e["source_bill_id"] is None for e in r.json())  # nothing linked yet...
-    assert len(_all_bills(client, h)) == 1  # ...until the Bills page (or Expenses list) loads: one shop, one bill
+    assert len(_synced_all(client, h)) == 1  # ...until the Bills page (or Expenses list) loads: one shop, one bill
 
 
 def test_lines_on_different_days_or_currencies_are_not_forced_into_one_bill(client, make_user):
@@ -264,7 +360,7 @@ def test_lines_on_different_days_or_currencies_are_not_forced_into_one_bill(clie
     items = _items(5, 6, shop="A")
     items[1]["date"] = JULY.format(2)
     client.post("/api/expenses/bulk", json={"items": items, "as_bill": True}, headers=h)
-    assert len(_all_bills(client, h)) == 2
+    assert len(_synced_all(client, h)) == 2
 
 
 # ── editing and deleting expenses keeps the bill right ───────────────────
@@ -418,7 +514,7 @@ def test_a_concurrent_adopter_losing_the_race_retries_and_finds_the_others_bill(
         return real(db, user_id)
 
     monkeypatch.setattr(bill_sync, "_adopt", racing)
-    [bill] = _all_bills(client, h)
+    [bill] = _synced_all(client, h)
     assert calls == [1, 2] and bill["item_count"] == 2 and D(str(bill["amount"])) == D("15")
 
 
@@ -442,14 +538,14 @@ def test_a_bill_someone_else_just_created_for_the_same_key_is_reused(client, mak
     db.commit()
     existing_id = existing.id
     db.close()
-    [bill] = _all_bills(client, h)
+    [bill] = _synced_all(client, h)
     assert bill["id"] == existing_id and D(str(bill["amount"])) == D("10")
 
 
 def test_reading_the_bills_page_writes_nothing_when_nothing_changed(client, make_user, monkeypatch):
     uid, h = make_user()
     _insert(uid, [{"shop": "ICA"}])
-    _all_bills(client, h)  # adopt once
+    _sync(client, h)  # adopt once
     commits = []
     real_commit = bill_sync.Session.commit if hasattr(bill_sync, "Session") else None
     db = SessionLocal()
@@ -466,7 +562,7 @@ def test_many_expenses_are_adopted_in_one_go(client, make_user):
     rows = [{"shop": f"Shop {i % 120}", "date": JULY.format(1 + i % 28), "amount": 1 + i % 9, "description": f"item {i}"} for i in range(1500)]
     _insert(uid, rows)
     total = sum(r["amount"] for r in rows)
-    result = _bills(client, h, status="all", page_size=200)
+    result = _synced_bills(client, h, status="all", page_size=200)
     keys = {(r["shop"].lower(), r["date"]) for r in rows}
     assert result["total"] == len(keys)
     assert _spent(client, h) == D(str(total))
@@ -550,12 +646,12 @@ def test_nothing_is_stale_after_a_sync(client, make_user):
 def test_an_item_whose_shop_changed_behind_our_back_makes_its_bill_stale(client, make_user):
     uid, h = make_user()
     ids = _insert(uid, [{"shop": "Coop", "amount": 10}, {"shop": "Coop", "amount": 5}])
-    _all_bills(client, h)
+    _synced_all(client, h)
     bill_id = _bill_of(client, h, ids[0])["id"]
     _db_edit(ids[0], shop="Lidl")
     assert _stale(uid) == {bill_id}
     # and the normal page load repairs it
-    bills = _all_bills(client, h)
+    bills = _synced_all(client, h)
     assert sorted((b["shop"], float(b["amount"])) for b in bills) == [("Coop", 5.0), ("Lidl", 10.0)]
     assert _stale(uid) == set()
 
@@ -563,25 +659,25 @@ def test_an_item_whose_shop_changed_behind_our_back_makes_its_bill_stale(client,
 def test_an_amount_that_is_no_longer_the_sum_of_its_items_is_stale(client, make_user):
     uid, h = make_user()
     ids = _insert(uid, [{"shop": "Coop", "amount": 10}, {"shop": "Coop", "amount": 5}])
-    _all_bills(client, h)
+    _synced_all(client, h)
     bill_id = _bill_of(client, h, ids[0])["id"]
     _db_edit(ids[1], amount=6)
     assert _stale(uid) == {bill_id}
-    assert [float(b["amount"]) for b in _all_bills(client, h)] == [16.0]
+    assert [float(b["amount"]) for b in _synced_all(client, h)] == [16.0]
     assert _stale(uid) == set()
 
 
 def test_a_derived_bill_with_no_items_left_is_stale(client, make_user):
     uid, h = make_user()
     [eid] = _insert(uid, [{"shop": "Coop", "amount": 10}])
-    _all_bills(client, h)
+    _synced_all(client, h)
     bill_id = _bill_of(client, h, eid)["id"]
     db = SessionLocal()
     db.query(models.Expense).filter(models.Expense.id == eid).delete()
     db.commit()
     db.close()
     assert _stale(uid) == {bill_id}
-    assert _all_bills(client, h) == []
+    assert _synced_all(client, h) == []
 
 
 def test_items_of_a_hand_grouped_bill_may_differ_in_shop_without_being_stale(client, make_user):
