@@ -12,11 +12,26 @@ import {
 } from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
 
+// The pieces of data loadAll() can refresh. A mutation names only what it changed, so
+// adding an income row no longer re-fetches expenses totals, trips, groups and so on.
+// Calling loadAll() with no argument still refreshes everything (login, currency change).
+export const PART = {
+  DASHBOARD: 'dashboard', // summary, trends, categories, budgets, metrics, period status, alerts
+  INCOME: 'income', // the income list and its summary
+  RECURRING: 'recurring',
+  OPTIONS: 'options', // categories, shops, units, currencies
+  BUDGET_CONFIG: 'budgetConfig',
+  SPACES: 'spaces', // trips and groups
+}
+
+// What changes when expenses are added, edited, deleted, imported or itemised.
+export const EXPENSE_PARTS = [PART.DASHBOARD, PART.OPTIONS, PART.SPACES]
+
 const EMPTY_OPTIONS = { categories: [], subcategories: {}, units: [], shops: [], base_currency: 'SEK', display_currency: 'SEK', currencies: [] }
 
 // Owns every piece of data App.jsx fetches on load/mutation, plus the
-// dashboard scope selector. Every domain handler hook calls loadAll() after a
-// mutation to keep all pages in sync (simple, if a bit heavy-handed, refresh).
+// dashboard scope selector. Each domain handler hook calls loadAll(parts) after a
+// mutation, naming just the data that mutation can have changed.
 export function useAppData() {
   const [summary, setSummary] = useState(null)
   const [trends, setTrends] = useState(null)
@@ -42,7 +57,8 @@ export function useAppData() {
   // Runs each loader independently. One failing endpoint (e.g. an FX problem
   // affecting only the converted dashboards) must not blank pages that don't
   // depend on it, so successful results are applied and failures are reported.
-  function applySettled(tasks) {
+  function applySettled(tasks, parts) {
+    if (parts && parts.length) tasks = tasks.filter((t) => !t.part || parts.includes(t.part))
     const epoch = sessionEpoch.current
     return Promise.allSettled(tasks.map((t) => t.load())).then((results) => {
       if (epoch !== sessionEpoch.current) return
@@ -68,25 +84,27 @@ export function useAppData() {
     if (d.alerts) setAlerts(d.alerts)
   }
 
-  function loadAll() {
+  // parts: optional list of PART values; omit to refresh everything.
+  function loadAll(parts) {
     const scope = dashboardScope
     const ids = dashboardSpaceIds
     return applySettled([
-      { load: () => fetchDashboard(scope, ids), apply: applyDashboard },
-      { load: () => fetchIncome(), apply: setIncome },
-      { load: () => fetchIncomeSummary(), apply: setIncomeSummary },
-      { load: () => fetchRecurring(), apply: setRecurring },
+      { part: PART.DASHBOARD, load: () => fetchDashboard(scope, ids), apply: applyDashboard },
+      { part: PART.INCOME, load: () => fetchIncome(), apply: setIncome },
+      { part: PART.INCOME, load: () => fetchIncomeSummary(), apply: setIncomeSummary },
+      { part: PART.RECURRING, load: () => fetchRecurring(), apply: setRecurring },
       {
+        part: PART.OPTIONS,
         load: () => fetchOptions(),
         apply: (opts) => {
           setOptions(opts)
           setDisplayCurrency(opts.display_currency || opts.base_currency)
         },
       },
-      { load: () => fetchBudgetConfig(), apply: setBudgetConfigState },
-      { load: () => fetchTrips(), apply: setTrips },
-      { load: () => fetchGroups(), apply: setGroups },
-    ])
+      { part: PART.BUDGET_CONFIG, load: () => fetchBudgetConfig(), apply: setBudgetConfigState },
+      { part: PART.SPACES, load: () => fetchTrips(), apply: setTrips },
+      { part: PART.SPACES, load: () => fetchGroups(), apply: setGroups },
+    ], parts)
   }
 
   // Re-fetch just the dashboard-relevant data scoped to "all", "personal", or one space.

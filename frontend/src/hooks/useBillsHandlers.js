@@ -18,6 +18,7 @@ import {
 } from '../api/client.js'
 import { money } from '../format.js'
 import { useDialogs } from './useDialogs.js'
+import { EXPENSE_PARTS } from './useAppData.js'
 
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '', currency: '' }
 export const DEFAULT_QUERY = { status: 'pending', q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 }
@@ -88,7 +89,7 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
   }, [])
 
   const refresh = useCallback(
-    () => Promise.all([loadBills(queryRef.current), loadAll()]),
+    () => Promise.all([loadBills(queryRef.current), loadAll(EXPENSE_PARTS)]),
     [loadBills, loadAll],
   )
 
@@ -160,7 +161,7 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
       setNotice({ text: `${parts.join(' · ')}.`, details: (r.skipped || []).map((s) => `Row ${s.row}: ${s.reason}`) })
       // Show what needs attention first: duplicates / nothing recorded -> the to-itemise tab.
       setQuery({ status: r.possible_duplicates > 0 || r.auto_recorded === 0 ? 'pending' : 'total_only' })
-      await loadAll()
+      await loadAll(EXPENSE_PARTS)
     })
   }
 

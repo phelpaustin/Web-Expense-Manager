@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createExpense, createExpensesBulk, updateExpense, deleteExpense, importExpenses, exportExpenses } from '../api/client.js'
+import { EXPENSE_PARTS } from './useAppData.js'
 
 const EMPTY_FORM = {
   date: '',
@@ -53,7 +54,7 @@ export function useExpenseHandlers(loadAll, setError) {
         group_id: form.group_id ? parseInt(form.group_id, 10) : null,
       })
       setForm(EMPTY_FORM)
-      await loadAll()
+      await loadAll(EXPENSE_PARTS)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -64,7 +65,7 @@ export function useExpenseHandlers(loadAll, setError) {
   async function handleDelete(id) {
     try {
       await deleteExpense(id)
-      await loadAll()
+      await loadAll(EXPENSE_PARTS)
     } catch (err) {
       setError(err.message)
     }
@@ -72,20 +73,20 @@ export function useExpenseHandlers(loadAll, setError) {
 
   async function handleImport(file) {
     const result = await importExpenses(file, importCurrency)
-    await loadAll()
+    await loadAll(EXPENSE_PARTS)
     return result
   }
 
   async function handleAddRow(payload) {
     await createExpense(payload)
-    await loadAll()
+    await loadAll(EXPENSE_PARTS)
   }
 
   // billId: the bill these items itemise (replaces its single total-only expense, if any).
   // options.replace: the bill was already itemised and these items replace its current ones.
   async function handleAddBill(items, billId, options) {
     await createExpensesBulk(items, billId, options)
-    await loadAll()
+    await loadAll(EXPENSE_PARTS)
   }
 
   function handleExport(format) {
@@ -133,7 +134,7 @@ export function useExpenseHandlers(loadAll, setError) {
         group_id: editForm.group_id ? parseInt(editForm.group_id, 10) : null,
       })
       cancelEdit()
-      await loadAll()
+      await loadAll(EXPENSE_PARTS)
     } catch (err) {
       setError(err.message)
     }

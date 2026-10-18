@@ -1,10 +1,11 @@
 import { createTrip, updateTrip, deleteTrip } from '../api/client.js'
+import { EXPENSE_PARTS } from './useAppData.js'
 
 export function useTripHandlers(loadAll, setError) {
   async function handleAddTrip(trip) {
     try {
       await createTrip(trip)
-      await loadAll()
+      await loadAll(EXPENSE_PARTS)
     } catch (err) {
       setError(err.message)
     }
@@ -13,7 +14,7 @@ export function useTripHandlers(loadAll, setError) {
   async function handleUpdateTrip(id, trip) {
     try {
       await updateTrip(id, trip)
-      await loadAll()
+      await loadAll(EXPENSE_PARTS)
     } catch (err) {
       setError(err.message)
     }
@@ -22,7 +23,7 @@ export function useTripHandlers(loadAll, setError) {
   async function handleDeleteTrip(id) {
     try {
       await deleteTrip(id)
-      await loadAll()
+      await loadAll(EXPENSE_PARTS)
     } catch (err) {
       setError(err.message)
     }

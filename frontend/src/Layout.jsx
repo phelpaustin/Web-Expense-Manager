@@ -1,5 +1,5 @@
 import CurrencySelect from './components/CurrencySelect.jsx'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
 const LINKS = [
@@ -105,7 +105,9 @@ export default function Layout({ user, onLogout, error, loading, alerts = [], op
             <p>{error}</p>
           </div>
         )}
-        <Outlet />
+        <Suspense fallback={<p className="subtitle">Loading…</p>}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   )

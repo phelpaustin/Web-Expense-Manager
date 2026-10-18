@@ -1,20 +1,8 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-import ExpensesPage from './pages/ExpensesPage.jsx'
-import IncomePage from './pages/IncomePage.jsx'
-import RecurringPage from './pages/RecurringPage.jsx'
-import BillsPage from './pages/BillsPage.jsx'
-import SettingsPage from './pages/SettingsPage.jsx'
-import TripsPage from './pages/TripsPage.jsx'
-import PriceTrackerPage from './pages/PriceTrackerPage.jsx'
-import ShopsPage from './pages/ShopsPage.jsx'
-import GroupsPage from './pages/GroupsPage.jsx'
-import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
-import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
-import UnsubscribePage from './pages/UnsubscribePage.jsx'
-import { useAppData } from './hooks/useAppData.js'
+import { useAppData, EXPENSE_PARTS } from './hooks/useAppData.js'
 import { useAuth } from './hooks/useAuth.js'
 import { useExpenseHandlers } from './hooks/useExpenseHandlers.js'
 import { useIncomeHandlers } from './hooks/useIncomeHandlers.js'
@@ -23,6 +11,24 @@ import { useBillsHandlers } from './hooks/useBillsHandlers.js'
 import { useTripHandlers } from './hooks/useTripHandlers.js'
 import { useGroupHandlers } from './hooks/useGroupHandlers.js'
 import { useBudgetHandlers } from './hooks/useBudgetHandlers.js'
+
+// Each page is its own chunk: charts and rarely used screens are fetched when first visited,
+// so the sign-in screen and the first paint download far less JavaScript.
+const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx'))
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage.jsx'))
+const IncomePage = lazy(() => import('./pages/IncomePage.jsx'))
+const RecurringPage = lazy(() => import('./pages/RecurringPage.jsx'))
+const BillsPage = lazy(() => import('./pages/BillsPage.jsx'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage.jsx'))
+const TripsPage = lazy(() => import('./pages/TripsPage.jsx'))
+const PriceTrackerPage = lazy(() => import('./pages/PriceTrackerPage.jsx'))
+const ShopsPage = lazy(() => import('./pages/ShopsPage.jsx'))
+const GroupsPage = lazy(() => import('./pages/GroupsPage.jsx'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.jsx'))
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage.jsx'))
+const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage.jsx'))
+
+const PageLoading = () => <p className="subtitle">Loading…</p>
 
 // This component only wires fetched data + handlers (from the hooks below)
 // into routes/pages — each page still receives all its data/handlers as
@@ -50,6 +56,7 @@ export default function App() {
 
   if (!auth.user) {
     return (
+      <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -72,10 +79,12 @@ export default function App() {
           }
         />
       </Routes>
+      </Suspense>
     )
   }
 
   return (
+    <Suspense fallback={<PageLoading />}>
     <Routes>
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -210,7 +219,7 @@ export default function App() {
               onAddTrip={tripHandlers.handleAddTrip}
               onUpdateTrip={tripHandlers.handleUpdateTrip}
               onDeleteTrip={tripHandlers.handleDeleteTrip}
-              onRefresh={data.loadAll}
+              onRefresh={() => data.loadAll(EXPENSE_PARTS)}
               onError={data.setError}
             />
           }
@@ -227,12 +236,13 @@ export default function App() {
               onCreateGroup={groupHandlers.handleCreateGroup}
               onDeleteGroup={groupHandlers.handleDeleteGroup}
               onLeaveGroup={groupHandlers.handleLeaveGroup}
-              onRefresh={data.loadAll}
+              onRefresh={() => data.loadAll(EXPENSE_PARTS)}
               onError={data.setError}
             />
           }
         />
       </Route>
     </Routes>
+    </Suspense>
   )
 }

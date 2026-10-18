@@ -1,4 +1,7 @@
 import { setBudget, deleteBudget, setBudgetConfig } from '../api/client.js'
+import { PART } from './useAppData.js'
+
+const BUDGET_PARTS = [PART.DASHBOARD, PART.BUDGET_CONFIG]
 
 export function useBudgetHandlers(loadAll, setError) {
   async function handleSetBudget(category, amount, currency) {
@@ -6,7 +9,7 @@ export function useBudgetHandlers(loadAll, setError) {
     if (!value || value <= 0) return false
     try {
       await setBudget(category, value, currency)
-      await loadAll()
+      await loadAll(BUDGET_PARTS)
       return true
     } catch (err) {
       setError(err.message)
@@ -17,7 +20,7 @@ export function useBudgetHandlers(loadAll, setError) {
   async function handleDeleteBudget(category) {
     try {
       await deleteBudget(category)
-      await loadAll()
+      await loadAll(BUDGET_PARTS)
     } catch (err) {
       setError(err.message)
     }
@@ -26,7 +29,7 @@ export function useBudgetHandlers(loadAll, setError) {
   async function handleSetBudgetConfig(period, rollover) {
     try {
       await setBudgetConfig(period, rollover)
-      await loadAll()
+      await loadAll(BUDGET_PARTS)
     } catch (err) {
       setError(err.message)
     }

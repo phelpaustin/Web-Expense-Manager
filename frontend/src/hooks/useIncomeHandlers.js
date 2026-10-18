@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { createIncome, deleteIncome } from '../api/client.js'
+import { PART } from './useAppData.js'
 
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '', currency: '' }
+
+// Income feeds the dashboard's savings figures but nothing else.
+const INCOME_PARTS = [PART.INCOME, PART.DASHBOARD]
 
 export function useIncomeHandlers(loadAll, setError) {
   const [incomeForm, setIncomeForm] = useState(EMPTY_INCOME)
@@ -19,7 +23,7 @@ export function useIncomeHandlers(loadAll, setError) {
         currency: incomeForm.currency || undefined,
       })
       setIncomeForm(EMPTY_INCOME)
-      await loadAll()
+      await loadAll(INCOME_PARTS)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -30,7 +34,7 @@ export function useIncomeHandlers(loadAll, setError) {
   async function handleDeleteIncome(id) {
     try {
       await deleteIncome(id)
-      await loadAll()
+      await loadAll(INCOME_PARTS)
     } catch (err) {
       setError(err.message)
     }

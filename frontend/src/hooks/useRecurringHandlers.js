@@ -1,7 +1,11 @@
 import { useRef, useState } from 'react'
 import { createRecurring, updateRecurring, deleteRecurring, backfillRecurring, applyRecurring, applyDueRecurring } from '../api/client.js'
+import { EXPENSE_PARTS, PART } from './useAppData.js'
 
 const EMPTY_RECURRING = { item: '', category: '', amount: '', currency: '', frequency: 'Monthly', auto_post: false }
+
+// Editing a template changes only the template; posting or back-filling creates expenses.
+const POSTING_PARTS = [PART.RECURRING, ...EXPENSE_PARTS]
 
 export function useRecurringHandlers(loadAll, setError) {
   const [recurringForm, setRecurringForm] = useState(EMPTY_RECURRING)
@@ -16,7 +20,7 @@ export function useRecurringHandlers(loadAll, setError) {
     applying.current.add(key)
     try {
       await action()
-      await loadAll()
+      await loadAll(POSTING_PARTS)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -37,7 +41,7 @@ export function useRecurringHandlers(loadAll, setError) {
         auto_post: recurringForm.auto_post,
       })
       setRecurringForm(EMPTY_RECURRING)
-      await loadAll()
+      await loadAll([PART.RECURRING])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -56,7 +60,7 @@ export function useRecurringHandlers(loadAll, setError) {
   async function handleDeleteRecurring(id) {
     try {
       await deleteRecurring(id)
-      await loadAll()
+      await loadAll([PART.RECURRING])
     } catch (err) {
       setError(err.message)
     }
@@ -65,7 +69,7 @@ export function useRecurringHandlers(loadAll, setError) {
   async function handleUpdateRecurring(id, changes) {
     try {
       await updateRecurring(id, changes)
-      await loadAll()
+      await loadAll([PART.RECURRING])
     } catch (err) {
       setError(err.message)
     }
@@ -74,7 +78,7 @@ export function useRecurringHandlers(loadAll, setError) {
   async function handleBackfillRecurring(id, entry) {
     try {
       await backfillRecurring(id, entry)
-      await loadAll()
+      await loadAll(POSTING_PARTS)
     } catch (err) {
       setError(err.message)
     }
