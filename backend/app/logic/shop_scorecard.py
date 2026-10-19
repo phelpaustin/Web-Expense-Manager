@@ -47,9 +47,10 @@ def window_start(today: date, months: int) -> date | None:
 def with_bill_shops(expenses: list[dict]) -> list[dict]:
     """Copies of the expenses in which a bill's recorded total names its shop.
 
-    Recording a bill as a total stores the shop in the expense's description and leaves its
-    shop empty, so without this the biggest shop spending would all read as "no shop".
-    Rows that already have a shop, and ordinary expenses, are returned unchanged.
+    Bill totals now store their shop in the expense's own `shop` (migration 0025 filled it in
+    for older rows). This remains as a safety net for a total whose shop is somehow empty, so
+    it still reads as the shop in its description rather than as "no shop". Rows that already
+    have a shop, and ordinary expenses, are returned unchanged.
     """
     out = []
     for e in expenses:

@@ -108,7 +108,8 @@ def _price_rows(db: Session, user: models.User, item: str | None = None) -> tupl
     rows, _ = convert_rows(
         db,
         user.id,
-        fetch_expenses(db, user.id),
+        # A bill recorded as a total is a shop trip, not an item's price: leave it out up front.
+        [e for e in fetch_expenses(db, user.id) if not e["bill_total_only"]],
         select=lambda usable: names.canonicalise(usable, item_aliases, shop_aliases, only_item=item),
     )
     return rows, item_aliases

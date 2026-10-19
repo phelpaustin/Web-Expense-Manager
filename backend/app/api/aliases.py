@@ -136,5 +136,6 @@ def suggestions(kind: Kind, db: Session = Depends(get_db), user: models.User = D
     item_aliases, shop_aliases = load_alias_maps(db, user.id)
     rows = names.canonicalise(fetch_expenses(db, user.id), item_aliases, shop_aliases)
     field = "description" if kind == "item" else "shop"
-    counts = Counter(r[field] for r in rows if r[field])
+    # A recorded bill total's description is just its shop's name: not an item.
+    counts = Counter(r[field] for r in rows if r[field] and not (kind == "item" and r["bill_total_only"]))
     return {"groups": names.suggest_merges(list(counts.items()))}

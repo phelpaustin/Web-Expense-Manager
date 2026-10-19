@@ -62,6 +62,12 @@ def _shop_label(e: dict) -> str:
     return clean_name(e.get("shop")) or "Unknown"
 
 
+def _is_item_purchase(e: dict) -> bool:
+    """False for a bill recorded as a single total: its description is just the shop's name
+    and its amount is a whole trip, so it says nothing about any item's price."""
+    return not e.get("bill_total_only")
+
+
 def _matching(
     expenses: list[dict],
     item: str,
@@ -77,7 +83,7 @@ def _matching(
     a list keeps only those shops ("Unknown" stands for purchases with no shop).
     """
     wanted = name_key(item)
-    matches = [e for e in expenses if name_key(e.get("description")) == wanted]
+    matches = [e for e in expenses if _is_item_purchase(e) and name_key(e.get("description")) == wanted]
     if unit is not None:
         wanted_unit = unit_label(unit)
         matches = [e for e in matches if _unit(e) == wanted_unit]
@@ -152,7 +158,7 @@ def price_trends(expenses: list[dict]) -> list[dict]:
     """
     by_item: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     for e in expenses:
-        if str(e.get("description") or "").strip():
+        if _is_item_purchase(e) and str(e.get("description") or "").strip():
             by_item[(name_key(e["description"]), _unit(e), _category(e))].append(e)
 
     results = []
