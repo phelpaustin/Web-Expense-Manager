@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -9,6 +9,8 @@ from app.api.deps import (
     require_role_at_least,
 )
 from app.api.options import default_currency_for
+from app.core.config import settings
+from app.core.email import send_email
 from app.core.emails import NormalizedEmail, normalize_email, user_by_email
 from app.core.fx import normalize_convertible_currency
 from app.core.rate_limit import limiter
@@ -103,6 +105,74 @@ def _serialize_group(db: Session, group: models.Group, member: models.GroupMembe
         "role": member.role,
         "member_count": member_count,
     }
+
+
+def _invitation_message(email: str, group_name: str, inviter: str, role: str, has_account: bool) -> tuple[str, str, str]:
+    link = f"{settings.frontend_url.rstrip('/')}/groups"
+    what = (
+        f"Sign in and open Groups to accept or decline: {link}"
+        if has_account
+        else f"Create an account with this email address ({link.rsplit('/', 1)[0]}/) and you will be added automatically."
+    )
+    return (
+        email,
+        f"{inviter} invited you to \"{group_name}\"",
+        f"{inviter} invited you to join the shared space \"{group_name}\" on Expense Dashboard as {role}.\n\n"
+        f"{what}\n\nIf you don't know {inviter}, you can ignore this message.",
+    )
+
+
+# Declared before the /groups/{group_id} routes so "invitations" is not read as an id.
+@router.get("/groups/invitations")
+def my_invitations(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """Invitations to join a space that are waiting for the signed-in user to accept or decline."""
+    rows = (
+        db.query(models.GroupInvite, models.Group, models.User)
+        .join(models.Group, models.Group.id == models.GroupInvite.group_id)
+        .outerjoin(models.User, models.User.id == models.GroupInvite.invited_by)
+        .filter(func.lower(models.GroupInvite.email) == normalize_email(user.email))
+        .order_by(models.GroupInvite.id)
+        .all()
+    )
+    return [
+        {
+            "id": inv.id,
+            "group_id": g.id,
+            "group_name": g.name,
+            "role": inv.role,
+            "invited_by": (inviter.name or inviter.email) if inviter else "Someone",
+        }
+        for inv, g, inviter in rows
+    ]
+
+
+def _my_invite_or_404(db: Session, invite_id: int, user: models.User) -> models.GroupInvite:
+    inv = db.get(models.GroupInvite, invite_id)
+    if inv is None or normalize_email(inv.email) != normalize_email(user.email):
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    return inv
+
+
+@router.post("/groups/invitations/{invite_id}/accept")
+def accept_invitation(invite_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    inv = _my_invite_or_404(db, invite_id, user)
+    group = db.get(models.Group, inv.group_id)
+    if group is None:
+        db.delete(inv)
+        db.commit()
+        raise HTTPException(status_code=404, detail="That space no longer exists")
+    if not is_group_member(db, group.id, user.id):
+        role = inv.role if inv.role in ("admin", "editor", "viewer") else "editor"
+        db.add(models.GroupMember(group_id=group.id, user_id=user.id, role=role))
+    db.delete(inv)
+    db.commit()
+    return {"group_id": group.id}
+
+
+@router.post("/groups/invitations/{invite_id}/decline", status_code=204)
+def decline_invitation(invite_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    db.delete(_my_invite_or_404(db, invite_id, user))
+    db.commit()
 
 
 @router.get("/groups")
@@ -251,6 +321,7 @@ def list_members(
 @limiter.limit("20/hour")
 def invite_member(
     request: Request,
+    background: BackgroundTasks,
     group_id: int,
     payload: InviteIn,
     db: Session = Depends(get_db),
@@ -261,23 +332,27 @@ def invite_member(
 
     role = payload.role if payload.role in ("admin", "editor", "viewer") else "editor"
 
+    # The answer must not depend on whether the address has an account: everyone is invited the
+    # same way and chooses to accept (an account holder on the Groups page, a new user by signing
+    # up). Otherwise inviting arbitrary addresses would be a way to find out who is registered,
+    # and would add people to a space without their say.
     invitee = user_by_email(db, payload.email)
-    if invitee:
-        if is_group_member(db, group_id, invitee.id):
-            raise HTTPException(status_code=409, detail="That user is already a member")
-        db.add(models.GroupMember(group_id=group_id, user_id=invitee.id, role=role))
-        db.commit()
-        return {"status": "added", "email": payload.email, "role": role}
-
+    if invitee and is_group_member(db, group_id, invitee.id):
+        # The inviter can already see this person in the member list, so this tells them nothing new.
+        raise HTTPException(status_code=409, detail="That person is already a member")
     existing_invite = (
         db.query(models.GroupInvite)
         .filter(models.GroupInvite.group_id == group_id, func.lower(models.GroupInvite.email) == payload.email)
         .first()
     )
-    if existing_invite:
-        raise HTTPException(status_code=409, detail="Already invited — waiting for them to sign up")
-    db.add(models.GroupInvite(group_id=group_id, email=payload.email, invited_by=user.id, role=role))
-    db.commit()
+    if existing_invite is None:
+        db.add(models.GroupInvite(group_id=group_id, email=payload.email, invited_by=user.id, role=role))
+        db.commit()
+        group = db.get(models.Group, group_id)
+        background.add_task(
+            send_email,
+            *_invitation_message(payload.email, group.name, user.name or user.email, role, invitee is not None),
+        )
     return {"status": "pending", "email": payload.email, "role": role}
 
 

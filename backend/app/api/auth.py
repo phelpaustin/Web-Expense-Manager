@@ -1,10 +1,11 @@
 import secrets
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -92,22 +93,25 @@ class DeleteAccountIn(BaseModel):
 def _claim_group_invites(db: Session, user: models.User) -> None:
     """Add a newly-registered user to any groups they were invited to by email."""
     invites = db.query(models.GroupInvite).filter(func.lower(models.GroupInvite.email) == normalize_email(user.email)).all()
+    joined: set[int] = set()  # sessions here don't autoflush, so remember what this loop adds
     for invite in invites:
-        already_member = (
+        already_member = invite.group_id in joined or (
             db.query(models.GroupMember)
             .filter(models.GroupMember.group_id == invite.group_id, models.GroupMember.user_id == user.id)
             .first()
         )
         if not already_member:
+            joined.add(invite.group_id)
             role = invite.role if invite.role in ("admin", "editor", "viewer") else "editor"
             db.add(models.GroupMember(group_id=invite.group_id, user_id=user.id, role=role))
         db.delete(invite)
 
 
-def _send_verification_email(user: models.User) -> bool:
+def _verification_message(user: models.User) -> tuple[str, str, str]:
+    """(to, subject, body), built now so it can be sent after the request's session is closed."""
     token = create_email_verification_token(str(user.id), user.email_verification_version)
     link = f"{settings.frontend_url.rstrip('/')}/verify-email?token={token}"
-    return send_email(
+    return (
         user.email,
         "Verify your Expense Dashboard email",
         "Please verify that this email address belongs to you.\n\n"
@@ -116,31 +120,62 @@ def _send_verification_email(user: models.User) -> bool:
     )
 
 
+def _already_registered_message(email: str) -> tuple[str, str, str]:
+    link = f"{settings.frontend_url.rstrip('/')}/"
+    return (
+        email,
+        "You already have an Expense Dashboard account",
+        "Someone (hopefully you) tried to create an account with this email address, but you already have one.\n\n"
+        f"Sign in here: {link}\n"
+        "If you have forgotten your password, use \"Forgot password?\" on the sign-in page.\n\n"
+        "If this wasn't you, you can ignore this message; nothing has changed.",
+    )
+
+
+# One answer for every address, so the form cannot be used to find out who has an account.
+REGISTER_MESSAGE = "Check your email: if this address can be used, a verification link is on its way."
+
+
 @router.post("/auth/register", response_model=RegistrationOut, status_code=201)
 @limiter.limit(register_limit)
-def register(request: Request, payload: RegisterIn, db: Session = Depends(get_db)):
-    exists = user_by_email(db, payload.email)
-    if exists:
-        raise HTTPException(status_code=409, detail="Email already registered")
-    user = models.User(
-        email=payload.email,
-        # Never bind a password chosen before the address is verified. The
-        # mailbox owner chooses the credential when completing verification.
-        hashed_password=hash_password(secrets.token_urlsafe(32)),
-        name="",
-        email_verified=False,
-    )
-    try:
-        db.add(user)
-        db.flush()
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    db.refresh(user)
+def register(request: Request, payload: RegisterIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """Create an account, or quietly do the right thing for an address that already has one.
 
-    _send_verification_email(user)
-    return RegistrationOut(message="Account created. Check your email for a verification link before signing in.")
+    The response, status code and (roughly) timing are the same either way: a new address gets a
+    verification link, an unverified one a fresh link, a verified one a "you already have an
+    account" notice. Emails go out after the response so sending time is not observable either.
+    """
+    existing = user_by_email(db, payload.email)
+    if existing is None:
+        user = models.User(
+            email=payload.email,
+            # Never bind a password chosen before the address is verified. The
+            # mailbox owner chooses the credential when completing verification.
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
+            name="",
+            email_verified=False,
+        )
+        try:
+            db.add(user)
+            db.flush()
+            db.commit()
+        except IntegrityError:  # a simultaneous request registered the same address first
+            db.rollback()
+            existing = user_by_email(db, payload.email)
+            if existing is None:
+                raise
+        else:
+            db.refresh(user)
+            background.add_task(send_email, *_verification_message(user))
+    if existing is not None:
+        hash_password(secrets.token_urlsafe(32))  # the same work a new account costs
+        if existing.email_verified:
+            background.add_task(send_email, *_already_registered_message(existing.email))
+        else:
+            existing.email_verification_version += 1
+            db.commit()
+            background.add_task(send_email, *_verification_message(existing))
+    return RegistrationOut(message=REGISTER_MESSAGE)
 
 
 @router.post("/auth/login", response_model=TokenOut)
@@ -245,13 +280,14 @@ def change_password(
 
 @router.post("/auth/forgot-password")
 @limiter.limit("5/hour")
-def forgot_password(request: Request, payload: ForgotPasswordIn, db: Session = Depends(get_db)):
+def forgot_password(request: Request, payload: ForgotPasswordIn, background: BackgroundTasks, db: Session = Depends(get_db)):
     """Email a reset link. Always returns the same response (no user enumeration)."""
     user = user_by_email(db, payload.email)
     if user:
         token = create_reset_token(str(user.id), user.password_reset_version)
         link = f"{settings.frontend_url}/reset-password?token={token}"
-        send_email(
+        background.add_task(
+            send_email,
             user.email,
             "Reset your Expense Dashboard password",
             f"We received a request to reset your password.\n\n"
@@ -263,13 +299,13 @@ def forgot_password(request: Request, payload: ForgotPasswordIn, db: Session = D
 
 @router.post("/auth/resend-verification")
 @limiter.limit("5/hour")
-def resend_verification(request: Request, payload: ForgotPasswordIn, db: Session = Depends(get_db)):
+def resend_verification(request: Request, payload: ForgotPasswordIn, background: BackgroundTasks, db: Session = Depends(get_db)):
     """Resend a verification link without revealing whether the account exists."""
     user = user_by_email(db, payload.email)
     if user is not None and not user.email_verified:
         user.email_verification_version += 1
         db.commit()
-        _send_verification_email(user)
+        background.add_task(send_email, *_verification_message(user))
     return {"message": "If that account needs verification, a new link has been sent."}
 
 
@@ -364,8 +400,11 @@ def reset_password(request: Request, payload: ResetPasswordIn, db: Session = Dep
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid or expired reset link")
     try:
-        user.email_verified = True
-        _claim_group_invites(db, user)
+        # Only a first verification may claim invites. For an account that already existed, an
+        # invitation is accepted by its owner on the Groups page, never by resetting a password.
+        if not user.email_verified:
+            user.email_verified = True
+            _claim_group_invites(db, user)
         db.commit()
     except Exception:
         db.rollback()

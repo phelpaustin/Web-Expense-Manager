@@ -27,6 +27,7 @@ Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supa
 ## Conventions
 - Money is `Decimal` / `Numeric(12,2)`; never use floats for amounts. Every record carries its own `currency`; totals are converted to the user's reporting currency at each row's date.
 - Emails are lowercased (`app/core/emails.py`); categories are case-insensitive via `logic/taxonomy.py`.
+- Account existence is never revealed: register, resend-verification, forgot-password and group invites answer identically for known and unknown addresses (emails go out as background tasks). Invitations are accepted by the invitee (`/groups/invitations`), never applied automatically to an existing account.
 - Tests accompany behaviour changes: backend in `backend/tests/`, frontend in `frontend/src/__tests__/`.
 
 ## Token-saving rules (read this before exploring)

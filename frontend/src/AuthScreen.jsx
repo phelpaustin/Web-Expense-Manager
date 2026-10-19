@@ -78,9 +78,6 @@ export default function AuthScreen({ onAuthed, sessionNotice = null }) {
       if (mode === 'login' && err.message.toLowerCase().includes('verify your email')) {
         setVerificationEmail(email)
       }
-      if (mode === 'register' && err.message.toLowerCase().includes('email already registered')) {
-        setVerificationEmail(email)
-      }
     } finally {
       setBusy(false)
     }

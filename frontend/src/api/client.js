@@ -793,6 +793,19 @@ export function inviteToGroup(id, email, role = 'editor') {
   })
 }
 
+// Invitations waiting for the signed-in user: [{ id, group_id, group_name, role, invited_by }].
+export function fetchInvitations() {
+  return request('/api/groups/invitations')
+}
+
+export function acceptInvitation(id) {
+  return request(`/api/groups/invitations/${id}/accept`, { method: 'POST' })
+}
+
+export function declineInvitation(id) {
+  return request(`/api/groups/invitations/${id}/decline`, { method: 'POST' })
+}
+
 export function changeMemberRole(id, userId, role) {
   return request(`/api/groups/${id}/members/${userId}/role`, {
     method: 'PUT',

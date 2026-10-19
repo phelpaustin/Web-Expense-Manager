@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import CurrencySelect from '../components/CurrencySelect.jsx'
+import Invitations from '../components/Invitations.jsx'
 import {
   fetchGroupMembers,
   inviteToGroup,
@@ -133,6 +134,8 @@ export default function GroupsPage({ groups, currencies = [], baseCurrency, onCr
   return (
     <>
       <h1 className="page-title">🗂️ Expense Spaces</h1>
+
+      <Invitations onAccepted={onRefresh} onError={onError} />
       <p className="subtitle">
         An Expense Space is where expenses belong — a household, a business, a rental, a trip, or anything custom.
         Invite others to a space so every member can add expenses to it, all in one shared view.

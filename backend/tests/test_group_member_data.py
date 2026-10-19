@@ -17,7 +17,14 @@ def _group_with_member(client, make_user, role="editor"):
     gid = client.post("/api/groups", json={"name": "G", "space_type": "household"}, headers=oh).json()["id"]
     email = _email(mid)
     assert client.post(f"/api/groups/{gid}/invite", json={"email": email, "role": role}, headers=oh).status_code == 201
+    _accept_all(client, mh)
     return gid, (oid, oh), (mid, mh)
+
+
+def _accept_all(client, h):
+    """Invitations are accepted by the invitee: accept every one waiting for this user."""
+    for inv in client.get("/api/groups/invitations", headers=h).json():
+        assert client.post(f"/api/groups/invitations/{inv['id']}/accept", headers=h).status_code == 200
 
 
 def _email(uid):
@@ -62,6 +69,7 @@ def test_leaving_clears_local_parent_mapping_into_left_space(client, make_user):
     other = client.post("/api/groups", json={"name": "Other", "space_type": "household"}, headers=oh).json()["id"]
     for g in (home, other):
         client.post(f"/api/groups/{g}/invite", json={"email": _email(mid)}, headers=oh)
+    _accept_all(client, mh)
     assert client.put(f"/api/groups/{other}/my-mapping", json={"local_parent_group_id": home}, headers=mh).status_code == 200
     client.post(f"/api/groups/{home}/leave", headers=mh)
     db = SessionLocal()
@@ -77,6 +85,7 @@ def test_trip_settlement_after_member_leaves_has_no_phantom_debt(client, make_us
     mid, mh = make_user()
     tid = client.post("/api/trips", json={"name": "T", "currency": "SEK"}, headers=oh).json()["id"]
     client.post(f"/api/groups/{tid}/invite", json={"email": _email(mid)}, headers=oh)
+    _accept_all(client, mh)
     _expense(client, oh, group_id=tid, amount=100)
     _expense(client, mh, group_id=tid, amount=300)
     client.post(f"/api/groups/{tid}/leave", headers=mh)

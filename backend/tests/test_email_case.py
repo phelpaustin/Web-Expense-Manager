@@ -3,7 +3,7 @@ import pytest
 from sqlalchemy import text
 
 from app.core.emails import normalize_email
-from app.core.security import hash_password
+from app.core.security import create_access_token, hash_password
 from app.db import models
 from app.db.database import SessionLocal
 
@@ -38,7 +38,12 @@ def test_login_ignores_case(client):
 def test_register_rejects_case_variant_of_existing(client):
     _raw_user("dupe.reg@example.com")
     r = client.post("/api/auth/register", json={"email": "Dupe.Reg@Example.com"})
-    assert r.status_code == 409
+    assert r.status_code == 201  # same answer as for a new address; see test_account_enumeration.py
+    db = SessionLocal()
+    try:
+        assert db.query(models.User).filter(models.User.email.ilike("dupe.reg@example.com")).count() == 1
+    finally:
+        db.close()
 
 
 def test_register_stores_lowercase(client):
@@ -62,7 +67,15 @@ def test_invite_matches_existing_user_regardless_of_case(client, make_user):
     _raw_user("invitee.case@example.com")
     gid = client.post("/api/groups", json={"name": "G", "type": "household"}, headers=owner_h).json()["id"]
     r = client.post(f"/api/groups/{gid}/invite", json={"email": "Invitee.Case@Example.com"}, headers=owner_h)
-    assert r.status_code == 201 and r.json()["status"] == "added"
+    assert r.status_code == 201 and r.json()["status"] == "pending"
+    db = SessionLocal()
+    try:
+        invitee = db.query(models.User).filter(models.User.email == "invitee.case@example.com").one()
+        token_h = {"Authorization": "Bearer " + create_access_token(str(invitee.id), invitee.session_version)}
+    finally:
+        db.close()
+    [inv] = client.get("/api/groups/invitations", headers=token_h).json()  # found whatever the case it was typed in
+    assert client.post(f"/api/groups/invitations/{inv['id']}/accept", headers=token_h).status_code == 200
 
 
 def test_pending_invite_is_claimed_when_signup_case_differs(client, make_user):
@@ -70,12 +83,15 @@ def test_pending_invite_is_claimed_when_signup_case_differs(client, make_user):
     gid = client.post("/api/groups", json={"name": "G2", "type": "household"}, headers=owner_h).json()["id"]
     r = client.post(f"/api/groups/{gid}/invite", json={"email": "Later.Joiner@Example.com"}, headers=owner_h)
     assert r.json()["status"] == "pending" and r.json()["email"] == "later.joiner@example.com"
-    # a second invite differing only by case is a duplicate
+    # a second invite differing only by case is the same invite (answered the same, stored once)
     r2 = client.post(f"/api/groups/{gid}/invite", json={"email": "LATER.JOINER@example.com"}, headers=owner_h)
-    assert r2.status_code == 409
+    assert r2.status_code == 201
+    db = SessionLocal()
+    assert db.query(models.GroupInvite).filter(models.GroupInvite.group_id == gid).count() == 1
+    db.close()
     # a legacy (mixed-case) invite row is still claimed
     db = SessionLocal()
-    db.query(models.GroupInvite).update({models.GroupInvite.email: "Later.Joiner@Example.com"})
+    db.query(models.GroupInvite).filter(models.GroupInvite.group_id == gid).update({models.GroupInvite.email: "Later.Joiner@Example.com"})
     db.commit()
     db.close()
     from app.api.auth import _claim_group_invites
