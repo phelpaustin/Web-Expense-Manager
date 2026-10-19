@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     # from being used to guess the password.
     rate_limit_sensitive: str = "10/hour"
 
+    # Receipt files. With SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set, new receipts are stored in
+    # a PRIVATE Supabase Storage bucket and the database keeps only a pointer; without them they are
+    # stored in the database as before. The service-role key is a server secret: set it on the
+    # backend only, never in the frontend.
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    supabase_receipts_bucket: str = "receipts"
+
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
     # Google Sign-In (OAuth). Set to your Google OAuth client ID to enable it.

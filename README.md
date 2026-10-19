@@ -209,3 +209,18 @@ Text cells in the CSV/XLSX export that start with `=`, `+`, `-` or `@` (or a tab
 ## Receipts
 
 Uploading a receipt (Bills → 📤 Upload receipt) only **stores** the PDF or photo. Nothing is read from it: no shop, date or amount is guessed. It becomes a bill under "To itemise", named after the file and with no amount, and nothing counts as spending until you record its total or itemise it. Itemising fills the bill's amount, date and shop from the items you typed. To keep a receipt with a bill you already have, use the 📎 button on that bill.
+
+### Where receipt files are stored
+
+By default the file is kept in the database (`receipts.data`). With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set, **new** receipts go to a private Supabase Storage bucket and the database keeps only a pointer (`receipts.storage_key`). Downloads still pass through the app (`GET /api/pending-bills/{id}/receipt`), so the bucket never needs to be public and the usual login and ownership checks apply. Receipts in either place are readable side by side. Replacing or deleting a receipt, deleting a bill, or deleting an account removes the file from the bucket too.
+
+Set up:
+
+1. Supabase → Storage → **New bucket**, name `receipts`, **Public bucket: off**.
+2. Supabase → Project Settings → API: copy the project URL and the `service_role` key (a server secret).
+3. On Render set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (optionally `SUPABASE_RECEIPTS_BUCKET`), then redeploy. Migration `0024` runs on startup.
+4. Prove it works: `python -m app.scripts.migrate_receipts --check` (uploads, downloads and deletes a test object).
+5. Move the existing receipts: `python -m app.scripts.migrate_receipts --dry-run`, then without `--dry-run`. It uploads each file, reads it back, compares, and only then switches the row to its key and clears the database bytes. It is safe to stop and re-run, and a receipt that fails is left untouched. Use `--keep-data` to copy without clearing, and `--purge-copied` later to clear the database copies.
+6. Afterwards run `VACUUM FULL receipts;` in the Supabase SQL editor (in a quiet moment, it locks the table briefly) so Postgres gives the space back.
+
+An object that no row points at (rare: the database write failed right after an upload) costs a little storage and nothing else.

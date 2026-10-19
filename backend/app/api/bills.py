@@ -21,6 +21,7 @@ from app.core.file_upload import content_disposition, read_upload_limited_sync, 
 from app.core.import_limits import MAX_IMPORT_FILE_BYTES
 from app.core.validation import MAX_NAME, Name, Text
 from app.api import bill_sync
+from app.core import receipt_storage
 from app.api.expenses import ExpenseOut, fetch_expenses, fetch_expenses_in_reporting_currency
 from app.db.database import get_db
 from app.core.money import MAX_MONEY, JsonDecimal
@@ -293,22 +294,41 @@ def create_pending(
     return _serialize_one(db, user.id, b)
 
 
-def _store_receipt(db: Session, user_id: int, bill_id: int, filename: str | None, content_type: str, data: bytes) -> None:
+def _store_receipt(db: Session, user_id: int, bill_id: int, filename: str | None, content_type: str, data: bytes) -> str | None:
+    """Attach the file to the bill. Caller commits, then passes the returned key (the object this
+    receipt replaced, if any) to ``receipt_storage.delete_objects``.
+
+    With object storage configured the file is uploaded first and the row keeps only its key; an
+    upload that fails stops the request before anything is written to the database.
+    """
+    store = receipt_storage.get_store()
+    key = None
+    if store is not None:
+        key = receipt_storage.new_key(user_id, bill_id)
+        try:
+            store.put(key, data, content_type)
+        except receipt_storage.ReceiptStorageError as exc:
+            raise HTTPException(status_code=503, detail="Receipt storage is unavailable right now. Please try again.") from exc
+    stored = None if key else data
     existing = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill_id).first()
     if existing:
+        replaced = existing.storage_key
         existing.filename = safe_filename(filename, "receipt")
         existing.content_type = content_type
-        existing.data = data
-    else:
-        db.add(
-            models.Receipt(
-                user_id=user_id,
-                pending_bill_id=bill_id,
-                filename=safe_filename(filename, "receipt"),
-                content_type=content_type,
-                data=data,
-            )
+        existing.data = stored
+        existing.storage_key = key
+        return replaced
+    db.add(
+        models.Receipt(
+            user_id=user_id,
+            pending_bill_id=bill_id,
+            filename=safe_filename(filename, "receipt"),
+            content_type=content_type,
+            data=stored,
+            storage_key=key,
         )
+    )
+    return None
 
 
 @router.post("/pending-bills/upload")
@@ -338,8 +358,9 @@ def upload_pending(
 
     if attach_to is not None:
         bill = _pending_or_404(db, attach_to, user.id)
-        _store_receipt(db, user.id, bill.id, file.filename, content_type, data)
+        replaced = _store_receipt(db, user.id, bill.id, file.filename, content_type, data)
         db.commit()
+        receipt_storage.delete_objects([replaced])
         response.status_code = 200
         return {"result": "attached", "bill": _serialize_one(db, user.id, bill)}
 
@@ -446,13 +467,29 @@ def dismiss_duplicate(
     return _serialize_one(db, user.id, bill)
 
 
-def _delete_bill_record(db: Session, bill: models.PendingBill) -> None:
-    """Remove a bill (and its receipt). Expenses made from it are kept, just unlinked."""
+def _receipt_keys(db: Session, bill_ids: list[int]) -> list[str]:
+    """Object-storage keys of the receipts on these bills (none for receipts kept in the database)."""
+    if not bill_ids:
+        return []
+    return [
+        k
+        for (k,) in db.query(models.Receipt.storage_key).filter(
+            models.Receipt.pending_bill_id.in_(bill_ids), models.Receipt.storage_key.isnot(None)
+        )
+    ]
+
+
+def _delete_bill_record(db: Session, bill: models.PendingBill) -> list[str]:
+    """Remove a bill (and its receipt). Expenses made from it are kept, just unlinked.
+
+    Returns the receipt's object-storage keys; delete them after committing."""
+    keys = _receipt_keys(db, [bill.id])
     db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).delete()
     db.query(models.Expense).filter(models.Expense.source_bill_id == bill.id).update(
         {"source_bill_id": None}, synchronize_session=False
     )
     db.delete(bill)
+    return keys
 
 
 @router.delete("/pending-bills/{bill_id}", status_code=204)
@@ -466,8 +503,9 @@ def delete_pending(
         raise HTTPException(status_code=409, detail="Undo the recorded total before deleting this bill")
     if bill.origin == bill_sync.ORIGIN_EXPENSES:
         raise HTTPException(status_code=409, detail=_FROM_EXPENSES_MESSAGE)
-    _delete_bill_record(db, bill)
+    keys = _delete_bill_record(db, bill)
     db.commit()
+    receipt_storage.delete_objects(keys)
     bill_sync.adopt_after_write(db, user.id)  # its expenses are kept: file them under a derived bill
 
 
@@ -487,6 +525,7 @@ def bulk_delete_bills(
 ):
     """Delete several bills. Bills recorded as a total must be undone first."""
     deleted, skipped = 0, []
+    keys: list[str] = []
     for bill in db.query(models.PendingBill).filter(
         models.PendingBill.user_id == user.id, models.PendingBill.id.in_(payload.ids)
     ):
@@ -496,9 +535,10 @@ def bulk_delete_bills(
         if bill.origin == bill_sync.ORIGIN_EXPENSES:
             skipped.append({"id": bill.id, "reason": _FROM_EXPENSES_MESSAGE})
             continue
-        _delete_bill_record(db, bill)
+        keys += _delete_bill_record(db, bill)
         deleted += 1
     db.commit()
+    receipt_storage.delete_objects(keys)
     if deleted:
         bill_sync.adopt_after_write(db, user.id)
     return {"deleted": deleted, "skipped": skipped}
@@ -664,8 +704,9 @@ def upload_receipt(
         content_type = detect_receipt_content_type(data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _store_receipt(db, user.id, bill.id, file.filename, content_type, data)
+    replaced = _store_receipt(db, user.id, bill.id, file.filename, content_type, data)
     db.commit()
+    receipt_storage.delete_objects([replaced])
     return {"uploaded": True}
 
 
@@ -679,8 +720,19 @@ def get_receipt(
     r = db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).first()
     if r is None:
         raise HTTPException(status_code=404, detail="No receipt")
+    content = r.data
+    if r.storage_key:
+        store = receipt_storage.get_store()
+        if store is None:
+            raise HTTPException(status_code=503, detail="Receipt storage is not configured on this server")
+        try:
+            content = store.get(r.storage_key)
+        except receipt_storage.ReceiptFileMissing as exc:
+            raise HTTPException(status_code=404, detail="This receipt's file is missing from storage") from exc
+        except receipt_storage.ReceiptStorageError as exc:
+            raise HTTPException(status_code=503, detail="Receipt storage is unavailable right now. Please try again.") from exc
     return Response(
-        content=r.data,
+        content=content,
         media_type=r.content_type,
         headers={
             "Content-Disposition": content_disposition(safe_filename(r.filename, "receipt")),
@@ -696,8 +748,10 @@ def delete_receipt(
     user: models.User = Depends(get_current_user),
 ):
     bill = _pending_or_404(db, bill_id, user.id)
+    keys = _receipt_keys(db, [bill.id])
     db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).delete()
     db.commit()
+    receipt_storage.delete_objects(keys)
 
 
 # ── Manual bills ──────────────────────────────────────────────

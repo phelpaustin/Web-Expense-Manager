@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core import receipt_storage
 from app.core.config import settings
 from app.core.email import send_email
 from app.core.emails import NormalizedEmail, normalize_email, user_by_email
@@ -428,6 +429,7 @@ def delete_account(
         _, google_email = _verify_google_credential(payload.google_credential)
         if google_email != normalize_email(user.email):
             raise HTTPException(status_code=400, detail="That Google account does not match this account")
+    receipt_keys: list[str] = []
     try:
         # Shared expenses are financial history: keep them but remove the deleted
         # account reference so they display as "Deleted user".
@@ -469,6 +471,12 @@ def delete_account(
 
         # Receipts must be removed before their pending bills because the FK is
         # intentionally not configured with database-level cascade behavior.
+        receipt_keys = [
+            k
+            for (k,) in db.query(models.Receipt.storage_key).filter(
+                models.Receipt.user_id == user.id, models.Receipt.storage_key.isnot(None)
+            )
+        ]
         db.query(models.Receipt).filter(models.Receipt.user_id == user.id).delete(
             synchronize_session=False
         )
@@ -489,3 +497,4 @@ def delete_account(
     except Exception:
         db.rollback()
         raise
+    receipt_storage.delete_objects(receipt_keys)

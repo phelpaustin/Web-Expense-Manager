@@ -165,7 +165,10 @@ class Receipt(Base):
     pending_bill_id = Column(Integer, ForeignKey("pending_bills.id"), nullable=False, index=True)
     filename = Column(String, nullable=False, default="receipt")
     content_type = Column(String, nullable=False, default="application/octet-stream")
-    data = Column(LargeBinary, nullable=False)
+    # The file lives either here (legacy / no object storage configured) or in object storage,
+    # in which case `storage_key` names it and `data` is NULL. See app/core/receipt_storage.py.
+    data = Column(LargeBinary, nullable=True)
+    storage_key = Column(String, nullable=True)
 
 
 class Trip(Base):
