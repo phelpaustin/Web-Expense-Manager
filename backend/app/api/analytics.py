@@ -9,6 +9,7 @@ from app.api.expenses import fetch_expenses, fetch_expenses_in_reporting_currenc
 from app.api.options import convert_rows, get_reporting_currency
 from app.logic import analytics as analytics_logic
 from app.logic import category_change as category_change_logic
+from app.logic import spending_mix as spending_mix_logic
 from app.logic import shop_scorecard as shop_scorecard_logic
 from app.logic import names, price_tracker
 
@@ -46,6 +47,29 @@ def analytics_categories(
     user: models.User = Depends(get_current_user),
 ):
     return analytics_logic.category_breakdown(fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids))
+
+
+@router.get("/analytics/spending-mix")
+def analytics_spending_mix(
+    months: int = Query(default=spending_mix_logic.DEFAULT_MONTHS, ge=1, le=spending_mix_logic.MAX_MONTHS),
+    top: int = Query(default=spending_mix_logic.MAX_ONE_OFFS, ge=1, le=50),
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Month by month: how much spending is committed, everyday, or a one-off.
+
+    Committed means posted by a recurring template. A one-off is a purchase well above what is
+    usual for its category (see app.logic.spending_mix). The three parts of each month add up
+    to its total.
+    """
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+    result = spending_mix_logic.spending_mix(expenses, months=months, top=top)
+    result["currency"] = get_reporting_currency(db, user.id)
+    # Expenses left out because their currency has no exchange rate (same as the other totals).
+    result["unconverted_count"] = unconverted
+    return result
 
 
 @router.get("/analytics/category-change")

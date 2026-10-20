@@ -70,6 +70,8 @@ class ExpenseOut(BaseModel):
     # Set when the expense came from a bill; bill_total_only marks the one-line "Record total".
     source_bill_id: int | None = None
     bill_total_only: bool = False
+    # Set when a recurring template posted it (a committed payment, not an everyday purchase).
+    recurring_template_id: int | None = None
 
 
 class ExpenseCreate(BaseModel):
@@ -191,7 +193,8 @@ def _visible_expenses_query(db: Session, user_id: int, scope: str | None = None,
 
 _FETCH_KEYS = (
     "id", "date", "category", "subcategory", "description", "amount", "quantity", "unit",
-    "shop", "brand", "currency", "price_per_unit", "bill_total_only", "group_id", "user_id",
+    "shop", "brand", "currency", "price_per_unit", "bill_total_only", "recurring_template_id",
+    "group_id", "user_id",
 )
 _FETCH_COLUMNS = tuple(getattr(models.Expense, k) for k in _FETCH_KEYS)
 
@@ -342,6 +345,7 @@ def list_expenses(
             "group_id": r.group_id,
             "source_bill_id": r.source_bill_id,
             "bill_total_only": bool(r.bill_total_only),
+            "recurring_template_id": r.recurring_template_id,
             "created_by": (
                 (creators.get(r.user_id) or "Deleted user") if r.user_id is not None else "Deleted user"
             ) if r.group_id is not None else None,

@@ -105,6 +105,7 @@ def _post_expense(db: Session, user_id: int, template: models.RecurringTemplate,
             amount=template.amount,
             currency=template.currency,
             price_per_unit=template.amount,
+            recurring_template_id=template.id,
         )
     )
 

@@ -43,6 +43,10 @@ class Expense(Base):
     # True for the single placeholder expense made by "Record total": the full bill amount
     # with no item breakdown. It is replaced by the real items when the bill is itemised.
     bill_total_only = Column(Boolean, nullable=False, default=False, server_default=expression.false())
+    # The recurring template that posted this expense (None for anything entered by hand).
+    # Deliberately not a foreign key: deleting or cancelling a template must not turn the
+    # payments it already made back into everyday spending.
+    recurring_template_id = Column(Integer, nullable=True, index=True)
 
 
 class UserOptions(Base):
