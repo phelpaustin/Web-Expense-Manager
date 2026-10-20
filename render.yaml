@@ -23,3 +23,5 @@ services:
         sync: false # https://YOUR_PROJECT.supabase.co, enables receipt storage (see README > Receipts)
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false # server secret from Supabase > Project Settings > API; never put it in the frontend
+      - key: ANTHROPIC_API_KEY
+        sync: false # optional: enables the import assistant (see README > Importing bank statements)

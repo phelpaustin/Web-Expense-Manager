@@ -582,6 +582,52 @@ export function importExpenses(file, currencyOverride) {
   return request('/api/expenses/import', { method: 'POST', body })
 }
 
+// ── Bank statement import ─────────────────────────────
+// Stateless: every step sends the file again with the mapping, so what the preview shows is exactly
+// what the final step saves.
+function statementForm(file, fields = {}) {
+  const body = new FormData()
+  body.append('file', file)
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      body.append(key, typeof value === 'string' ? value : JSON.stringify(value))
+    }
+  })
+  return body
+}
+
+export function analyzeStatement(file, headerRow) {
+  return request('/api/import/analyze', { method: 'POST', body: statementForm(file, { header_row: headerRow }) })
+}
+
+export function previewStatement(file, mapping, overrides = {}, categories = {}) {
+  return request('/api/import/preview', { method: 'POST', body: statementForm(file, { mapping, overrides, categories }) })
+}
+
+export function commitStatement(file, mapping, overrides = {}, categories = {}) {
+  return request('/api/import/commit', { method: 'POST', body: statementForm(file, { mapping, overrides, categories }) })
+}
+
+export function assistStatement(file, mapping, instruction) {
+  return request('/api/import/assist', { method: 'POST', body: statementForm(file, { mapping, instruction }) })
+}
+
+export function fetchImportProfiles() {
+  return request('/api/import/profiles')
+}
+
+export function saveImportProfile(name, signature, mapping) {
+  return request('/api/import/profiles', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, signature, mapping }),
+  })
+}
+
+export function deleteImportProfile(id) {
+  return request(`/api/import/profiles/${id}`, { method: 'DELETE' })
+}
+
 export function setBaseCurrency(currency) {
   return request('/api/options/base-currency', {
     method: 'POST',

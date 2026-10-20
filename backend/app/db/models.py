@@ -266,6 +266,18 @@ class FxRate(Base):
     __table_args__ = (UniqueConstraint("rate_date", "currency", name="uq_fx_date_currency"),)
 
 
+class ImportProfile(Base):
+    """A saved statement mapping ("my bank's CSV"), found again by the file's header layout."""
+    __tablename__ = "import_profiles"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_import_profile_user_name"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    signature = Column(String(64), nullable=False, index=True)
+    mapping = Column(JSON, nullable=False)
+
+
 class NameAlias(Base):
     """A user's own "treat these as the same" rule for item or shop names.
 

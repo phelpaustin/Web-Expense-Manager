@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
-import { useAppData, EXPENSE_PARTS } from './hooks/useAppData.js'
+import { useAppData, EXPENSE_PARTS, PART } from './hooks/useAppData.js'
 import { useAuth } from './hooks/useAuth.js'
 import { useExpenseHandlers } from './hooks/useExpenseHandlers.js'
 import { useIncomeHandlers } from './hooks/useIncomeHandlers.js'
@@ -23,6 +23,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage.jsx'))
 const TripsPage = lazy(() => import('./pages/TripsPage.jsx'))
 const PriceTrackerPage = lazy(() => import('./pages/PriceTrackerPage.jsx'))
 const ShopsPage = lazy(() => import('./pages/ShopsPage.jsx'))
+const ImportPage = lazy(() => import('./pages/ImportPage.jsx'))
 const GroupsPage = lazy(() => import('./pages/GroupsPage.jsx'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.jsx'))
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage.jsx'))
@@ -226,6 +227,10 @@ export default function App() {
         />
         <Route path="prices" element={<PriceTrackerPage onError={data.setError} />} />
         <Route path="shops" element={<ShopsPage onError={data.setError} />} />
+        <Route
+          path="import"
+          element={<ImportPage onImported={() => data.loadAll([...EXPENSE_PARTS, PART.INCOME])} onError={data.setError} />}
+        />
         <Route
           path="groups"
           element={

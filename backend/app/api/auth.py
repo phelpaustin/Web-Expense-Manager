@@ -488,6 +488,7 @@ def delete_account(
             models.ManualBill,
             models.UserOptions,
             models.NameAlias,
+            models.ImportProfile,
             models.Trip,
         ):
             db.query(model).filter(model.user_id == user.id).delete(synchronize_session=False)

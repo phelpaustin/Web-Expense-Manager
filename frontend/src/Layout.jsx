@@ -5,6 +5,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 const LINKS = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
   { to: '/expenses', label: 'Expenses', icon: '🧾' },
+  { to: '/import', label: 'Import', icon: '📥' },
   { to: '/income', label: 'Income', icon: '💵' },
   { to: '/recurring', label: 'Recurring', icon: '🔁' },
   { to: '/bills', label: 'Bills', icon: '📒' },

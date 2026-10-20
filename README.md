@@ -202,6 +202,19 @@ Emails are case-insensitive: they are trimmed and lowercased on sign-up, sign-in
 - Users can also turn the emails on or off in Settings → Data → Email. Existing users keep receiving the digest until they opt out (migration `0021_alert_digest_enabled`).
 - The link uses `FRONTEND_URL`, so make sure it is set to your Vercel URL in production.
 
+## Importing bank statements
+
+**Import** (sidebar) reads a CSV or Excel statement in four steps, and nothing is saved until the last one:
+
+1. **Columns.** The app finds the table (banks put a title and account details above it), guesses which column is the date, description and amount, and which date format is used. You can change any of it.
+2. **Money in and out.** One signed amount column (choose whether negative or positive means money out), separate money-out and money-in columns, or an amount plus a Debit/Credit column. Expenses and income are imported into their own lists.
+3. **Rules and the assistant.** A rule says "when the description or shop contains X: leave it out / treat as expense / treat as income / file under category Y" (the first matching rule wins, and *leave out* beats the others). With an Anthropic key set, you can instead type what you want ("skip transfers to my savings account", "Swish from Anna is income") and the assistant fills in the columns and rules for you to check. It only ever proposes a mapping; the preview shows exactly what it does.
+4. **Preview and import.** Every row is listed with what it will become and why. Change a row's type or category, or leave it out. Rows already in your records are recognised, so importing the same statement twice adds nothing (two identical purchases within one statement are both kept). Rows are categorised from what you called the same shop or description before, then from keyword rules.
+
+**Remember this for next time** saves the columns and rules under a name; a later file with the same column headings is then set up automatically. Up to 20 are kept per account.
+
+What the AI sees: only the column headings, about ten sample rows (cells cut to 60 characters) and your instruction. The rest of the file is read on the server and never sent. Text inside the statement cannot give the model instructions: it is passed as data, the model can only answer with a mapping, and the mapping is validated (columns must exist, rules are plain text matches). Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) on the backend to enable it; without a key the assistant box is hidden. Assistant calls are limited to 30 per hour per visitor (`RATE_LIMIT_IMPORT_AI`).
+
 ## Exports and spreadsheet formulas
 
 Text cells in the CSV/XLSX export that start with `=`, `+`, `-` or `@` (or a tab/line break) get a leading `'`, so Excel, Sheets and LibreOffice show them as text instead of running them as formulas (a shop named `=HYPERLINK(...)` is harmless). Amounts, quantities and dates stay real numbers/dates. Importing one of our own exports (expenses or bills) removes that quote again, so the original text comes back.

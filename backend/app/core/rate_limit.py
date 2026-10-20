@@ -56,3 +56,11 @@ def google_limit() -> str:
 
 def sensitive_limit() -> str:
     return settings.rate_limit_sensitive
+
+
+def import_limit() -> str:
+    return settings.rate_limit_import
+
+
+def import_ai_limit() -> str:
+    return settings.rate_limit_import_ai

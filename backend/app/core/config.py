@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     # Endpoints that confirm with a password while already signed in: stops a stolen token
     # from being used to guess the password.
     rate_limit_sensitive: str = "10/hour"
+    # Statement import: analyse/preview re-read the uploaded file each time, so they are limited.
+    rate_limit_import: str = "90/hour"
+    # Asking the AI assistant costs money per call, so it is limited more tightly.
+    rate_limit_import_ai: str = "30/hour"
+
+    # Optional AI help in the statement import (turns a typed instruction into a column mapping).
+    # Without a key the feature is simply hidden. Only the headers, ~10 sample rows and the
+    # instruction are sent, never the whole file.
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-haiku-5-5"
+    anthropic_api_url: str = "https://api.anthropic.com/v1/messages"
 
     # Receipt files. With SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set, new receipts are stored in
     # a PRIVATE Supabase Storage bucket and the database keeps only a pointer; without them they are
