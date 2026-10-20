@@ -178,3 +178,116 @@ def test_0024_adds_the_column_makes_data_optional_and_downgrades_safely():
     assert _alembic(path, "downgrade", "0023_normalise_categories").returncode == 0
     assert _alembic(path, "upgrade", "head").returncode == 0
     assert _alembic(path, "upgrade", "head").returncode == 0  # idempotent
+
+
+# ---- orphan sweep -------------------------------------------------------------------------
+
+def _point_at(uid, key):
+    """A receipt row that points at `key` in storage (no bytes in the database)."""
+    (_, rid), = _legacy(uid, 1)
+    db = SessionLocal()
+    r = db.get(models.Receipt, rid)
+    r.data, r.storage_key = None, key
+    db.commit()
+    db.close()
+    return rid
+
+
+def _bucket(make_user):
+    uid, _ = make_user()
+    store = FakeStore()
+    kept, orphan = f"{uid}/1/kept", f"{uid}/2/orphan"
+    store.objects = {kept: (b"a", "application/pdf"), orphan: (b"b", "application/pdf")}
+    _point_at(uid, kept)
+    return uid, store, kept, orphan
+
+
+def test_sweep_reports_orphans_and_changes_nothing_by_default(make_user):
+    uid, store, kept, orphan = _bucket(make_user)
+    lines = []
+    s = mig.sweep(store, out=lines.append)
+    assert orphan in [l.split(": ")[1] for l in lines if l.startswith("orphan")]
+    assert s["orphans"] >= 1 and s["deleted"] == 0
+    assert orphan in store.objects and kept in store.objects
+
+
+def test_sweep_delete_removes_only_unreferenced_objects(make_user):
+    uid, store, kept, orphan = _bucket(make_user)
+    s = mig.sweep(store, delete=True)
+    assert orphan not in store.objects and kept in store.objects
+    assert store.deleted == [orphan] and s["deleted"] == 1
+
+
+def test_sweep_leaves_young_and_untimed_objects_alone(make_user):
+    uid, store, kept, orphan = _bucket(make_user)
+    young, untimed = f"{uid}/3/young", f"{uid}/4/untimed"
+    store.objects[young] = store.objects[untimed] = (b"c", "application/pdf")
+    store.created[young] = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
+    store.created[untimed] = None
+    s = mig.sweep(store, delete=True)
+    assert young in store.objects and untimed in store.objects
+    assert orphan not in store.objects
+    assert s["too_new"] == 2
+    # with no grace period the young one goes, but an object with no timestamp never does
+    mig.sweep(store, delete=True, grace_minutes=0)
+    assert young not in store.objects and untimed in store.objects
+
+
+def test_sweep_reports_receipts_whose_file_is_missing(make_user):
+    uid, store, kept, orphan = _bucket(make_user)
+    before = mig.sweep(store, out=lambda _l: None)["missing"]
+    gone = f"{uid}/9/gone"
+    _point_at(uid, gone)
+    lines = []
+    s = mig.sweep(store, delete=True, out=lines.append)
+    assert s["missing"] == before + 1
+    assert any(l.startswith("missing from storage") for l in lines)  # printout is capped at 20
+    assert gone not in store.deleted and kept in store.objects  # reported, never changed
+
+
+def test_sweep_refuses_to_delete_when_the_database_references_nothing(monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.db.database import Base
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(mig, "SessionLocal", sessionmaker(bind=engine))
+    store = FakeStore()
+    store.objects = {"1/1/a": (b"x", "application/pdf"), "1/2/b": (b"y", "application/pdf")}
+    lines = []
+    s = mig.sweep(store, delete=True, out=lines.append)
+    assert s["refused"] and s["deleted"] == 0 and len(store.objects) == 2
+    assert any("DATABASE_URL" in l for l in lines)
+    s = mig.sweep(store, delete=True, force=True)
+    assert s["deleted"] == 2 and not store.objects
+
+
+def test_sweep_deletes_in_chunks_of_100(make_user):
+    uid, _ = make_user()
+    store = FakeStore()
+    store.objects = {f"{uid}/1/o{i}": (b"x", "application/pdf") for i in range(230)}
+    _point_at(uid, "elsewhere/1/ref")
+    calls = []
+    real = store.delete
+    store.delete = lambda keys: (calls.append(len(keys)), real(keys))
+    mig.sweep(store, delete=True)
+    assert calls == [100, 100, 30]
+
+
+def test_main_sweep_prints_a_summary_and_a_hint(monkeypatch, make_user, capsys):
+    uid, store, kept, orphan = _bucket(make_user)
+    monkeypatch.setattr(rs, "get_store", lambda: store)
+    assert mig.main(["--sweep"]) == 0
+    out = capsys.readouterr().out
+    assert "Orphans:" in out and "--delete" in out and orphan in store.objects
+    assert mig.main(["--sweep", "--delete"]) == 0
+    assert orphan not in store.objects and "Deleted" in capsys.readouterr().out
+
+
+def test_main_sweep_reports_a_storage_failure(monkeypatch, capsys):
+    class Down(FakeStore):
+        def list_objects(self):
+            raise rs.ReceiptStorageError("down")
+    monkeypatch.setattr(rs, "get_store", lambda: Down())
+    assert mig.main(["--sweep"]) == 1
+    assert "FAILED" in capsys.readouterr().out

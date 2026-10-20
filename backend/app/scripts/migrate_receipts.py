@@ -5,6 +5,8 @@
     python -m app.scripts.migrate_receipts                  # move them
     python -m app.scripts.migrate_receipts --keep-data      # copy, but leave the database copy in place
     python -m app.scripts.migrate_receipts --purge-copied   # later: drop DB copies of what is in storage
+    python -m app.scripts.migrate_receipts --sweep          # list objects no receipt points at (changes nothing)
+    python -m app.scripts.migrate_receipts --sweep --delete # ...and remove them
 
 Safe to stop and re-run: each receipt is uploaded, read back and compared, and only then is the
 row switched to its storage key (and, unless --keep-data, its bytes cleared). A receipt that
@@ -17,6 +19,7 @@ shell). Clearing the bytes frees space for reuse only after Postgres compacts th
 import argparse
 import sys
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from app.core import receipt_storage
 from app.core.receipt_storage import ReceiptStorageError
@@ -108,12 +111,61 @@ def purge_copied(*, out=print) -> int:
         db.close()
 
 
+def sweep(store, *, delete=False, grace_minutes=60, force=False, out=print) -> dict:
+    """Find objects in the bucket that no receipt row points at, and optionally remove them.
+
+    Orphans come from a database write that failed right after an upload. Safeguards:
+    * Objects younger than ``grace_minutes`` (or with no usable timestamp) are never touched, so
+      an upload that is still being saved is not mistaken for an orphan.
+    * Nothing is deleted when the database references no objects at all while the bucket has
+      some: that looks like the wrong DATABASE_URL, not a clean-up. ``force`` overrides it.
+    Also reports receipts whose object is missing from the bucket (never changed here).
+    """
+    objects = store.list_objects()
+    db = SessionLocal()
+    try:
+        referenced = {k for (k,) in db.query(models.Receipt.storage_key).filter(models.Receipt.storage_key.isnot(None))}
+    finally:
+        db.close()
+    present = {k for k, _ in objects}
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=grace_minutes)
+    orphans = sorted(k for k, made in objects if k not in referenced and made is not None and made < cutoff)
+    too_new = sum(1 for k, made in objects if k not in referenced and (made is None or made >= cutoff))
+    missing = sorted(referenced - present)
+    stats = {"objects": len(objects), "referenced": len(referenced), "orphans": len(orphans),
+             "too_new": too_new, "missing": len(missing), "deleted": 0, "refused": False}
+    for key in missing[:20]:
+        out(f"missing from storage: {key}")
+    if len(missing) > 20:
+        out(f"... and {len(missing) - 20} more missing")
+    if not delete:
+        for key in orphans[:20]:
+            out(f"orphan: {key}")
+        if len(orphans) > 20:
+            out(f"... and {len(orphans) - 20} more")
+        return stats
+    if orphans and not referenced and not force:
+        stats["refused"] = True
+        out("Refusing to delete: the database references no stored receipts at all, which usually means "
+            "DATABASE_URL points at the wrong database. Check it, or pass --force.")
+        return stats
+    for i in range(0, len(orphans), 100):
+        chunk = orphans[i : i + 100]
+        store.delete(chunk)
+        stats["deleted"] += len(chunk)
+    return stats
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--check", action="store_true", help="round-trip a test object through the bucket and exit")
     p.add_argument("--dry-run", action="store_true", help="count what would move; change nothing")
     p.add_argument("--keep-data", action="store_true", help="leave the database copy of each moved receipt")
     p.add_argument("--purge-copied", action="store_true", help="clear database copies of receipts already in storage")
+    p.add_argument("--sweep", action="store_true", help="find objects in the bucket that no receipt points at")
+    p.add_argument("--delete", action="store_true", help="with --sweep: remove the orphans (default: only list)")
+    p.add_argument("--grace-minutes", type=int, default=60, help="with --sweep: leave objects newer than this alone (default 60)")
+    p.add_argument("--force", action="store_true", help="with --sweep --delete: skip the 'database has no receipts' safeguard")
     p.add_argument("--no-verify", action="store_true", help="skip reading each upload back (faster, less safe)")
     p.add_argument("--limit", type=int, help="stop after this many receipts")
     args = p.parse_args(argv)
@@ -127,6 +179,19 @@ def main(argv=None) -> int:
         return 2
     if args.check:
         return 0 if check(store) else 1
+    if args.sweep:
+        try:
+            s = sweep(store, delete=args.delete, grace_minutes=args.grace_minutes, force=args.force)
+        except ReceiptStorageError as exc:
+            print(f"FAILED: {exc}")
+            return 1
+        print(f"Bucket: {s['objects']} object(s); receipts point at {s['referenced']}. "
+              f"Orphans: {s['orphans']} (plus {s['too_new']} too new to judge). Receipts with a missing file: {s['missing']}.")
+        if args.delete:
+            print(f"Deleted {s['deleted']} orphan(s)." if not s["refused"] else "Nothing deleted.")
+        elif s["orphans"]:
+            print("Run again with --delete to remove them.")
+        return 1 if s["refused"] else 0
     s = migrate(store, dry_run=args.dry_run, keep_data=args.keep_data, verify=not args.no_verify, limit=args.limit)
     verb = "Would move" if args.dry_run else "Moved"
     print(f"{verb} {s['moved']} receipt(s), {s['bytes'] / 1_048_576:.1f} MB. Failed: {s['failed']}. Still in the database: {s['remaining']}.")

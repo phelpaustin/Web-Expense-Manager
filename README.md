@@ -223,4 +223,11 @@ Set up:
 5. Move the existing receipts: `python -m app.scripts.migrate_receipts --dry-run`, then without `--dry-run`. It uploads each file, reads it back, compares, and only then switches the row to its key and clears the database bytes. It is safe to stop and re-run, and a receipt that fails is left untouched. Use `--keep-data` to copy without clearing, and `--purge-copied` later to clear the database copies.
 6. Afterwards run `VACUUM FULL receipts;` in the Supabase SQL editor (in a quiet moment, it locks the table briefly) so Postgres gives the space back.
 
-An object that no row points at (rare: the database write failed right after an upload) costs a little storage and nothing else.
+An object that no row points at (rare: the database write failed right after an upload, or a clean-up delete failed) costs a little storage and nothing else. To find and remove them, run the sweep from a machine with the same `DATABASE_URL` and Supabase variables as the app:
+
+```
+python -m app.scripts.migrate_receipts --sweep            # list only, changes nothing
+python -m app.scripts.migrate_receipts --sweep --delete   # remove the orphans
+```
+
+It lists the whole bucket and compares it with the keys the `receipts` table points at. Objects younger than an hour (`--grace-minutes`) or with no usable timestamp are never touched, so an upload in progress is safe. It refuses to delete if the database references no receipts at all while the bucket has files, which usually means `DATABASE_URL` is pointing at the wrong database (`--force` overrides). It also reports receipts whose file is missing from the bucket, without changing anything. Run it without `--delete` first and read the list.

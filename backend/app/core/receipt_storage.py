@@ -15,6 +15,7 @@ download passes through the app's own login and ownership checks.
 """
 import logging
 import uuid
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Protocol
 from urllib.parse import quote
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 
 _TIMEOUT = (5, 30)  # connect, read (seconds)
 _DELETE_CHUNK = 100
+_LIST_PAGE = 100
 
 
 class ReceiptStorageError(Exception):
@@ -43,6 +45,8 @@ class ReceiptStore(Protocol):
     def get(self, key: str) -> bytes: ...
 
     def delete(self, keys: list[str]) -> None: ...
+
+    def list_objects(self) -> list[tuple[str, datetime | None]]: ...
 
 
 def new_key(user_id: int, bill_id: int) -> str:
@@ -84,6 +88,50 @@ class SupabaseReceiptStore:
             r = self._call("DELETE", f"{self.base}/{quote(self.bucket, safe='')}", json={"prefixes": chunk})
             if r.status_code != 200:
                 raise ReceiptStorageError(f"Receipt storage refused the delete (HTTP {r.status_code})")
+
+
+    def list_objects(self) -> list[tuple[str, datetime | None]]:
+        """Every object in the bucket as (key, created_at). Folders are walked, not returned.
+
+        created_at is None when Supabase did not give a usable time; callers must treat that as
+        "new" and leave the object alone."""
+        found: list[tuple[str, datetime | None]] = []
+        pending = [""]
+        while pending:
+            prefix = pending.pop()
+            offset = 0
+            while True:
+                r = self._call(
+                    "POST",
+                    f"{self.base}/list/{quote(self.bucket, safe='')}",
+                    json={"prefix": prefix, "limit": _LIST_PAGE, "offset": offset},
+                )
+                if r.status_code != 200:
+                    raise ReceiptStorageError(f"Receipt storage refused the listing (HTTP {r.status_code})")
+                try:
+                    entries = r.json()
+                except ValueError as exc:
+                    raise ReceiptStorageError("Receipt storage returned an unreadable listing") from exc
+                for e in entries:
+                    path = f"{prefix}{e['name']}"
+                    if e.get("id") is None:  # a folder
+                        pending.append(path + "/")
+                    else:
+                        found.append((path, _parse_time(e.get("created_at") or e.get("updated_at"))))
+                if len(entries) < _LIST_PAGE:
+                    break
+                offset += _LIST_PAGE
+        return found
+
+
+def _parse_time(value) -> datetime | None:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        t = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
 @lru_cache(maxsize=1)

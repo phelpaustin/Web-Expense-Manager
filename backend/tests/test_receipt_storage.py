@@ -1,4 +1,5 @@
 """Receipts in object storage: where files go, how they are read, and that nothing is left behind."""
+import datetime as dt
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -22,6 +23,11 @@ class FakeStore:
         self.fail_put = False
         self.fail_get = False
         self.deleted: list[str] = []
+        self.created: dict[str, dt.datetime | None] = {}  # tests backdate objects here
+
+    def list_objects(self):
+        old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)
+        return [(k, self.created.get(k, old)) for k in self.objects]
 
     def put(self, key, data, content_type):
         if self.fail_put:
@@ -253,8 +259,27 @@ class _Handler(BaseHTTPRequestHandler):
         self._record(body)
         if _Handler.status_override:
             return self._send(_Handler.status_override)
+        if unquote(self.path).startswith("/storage/v1/object/list/"):
+            return self._list(json.loads(body))
         _Handler.objects[unquote(self.path)] = body
         self._send(200, b'{"Key":"ok"}')
+
+    def _list(self, req):
+        """Like Supabase: direct children of `prefix`, folders have id null, paged by offset/limit."""
+        base = "/storage/v1/object/receipts/" + req["prefix"]
+        seen, rows = set(), []
+        for path in sorted(_Handler.objects):
+            if not path.startswith(base):
+                continue
+            name = path[len(base):].split("/")[0]
+            if name in seen:
+                continue
+            seen.add(name)
+            folder = "/" in path[len(base):]
+            rows.append({"name": name, "id": None if folder else "x",
+                         "created_at": None if folder else "2020-01-01T00:00:00.000Z"})
+        page = rows[req["offset"] : req["offset"] + req["limit"]]
+        self._send(200, json.dumps(page).encode())
 
     def do_GET(self):
         self._record()
@@ -338,3 +363,28 @@ def test_get_store_follows_the_settings(monkeypatch):
     monkeypatch.setattr(settings, "supabase_service_role_key", "k")
     assert isinstance(rs.get_store(), rs.SupabaseReceiptStore)
     rs._configured_store.cache_clear()
+
+
+def test_listing_walks_folders_and_pages(server, monkeypatch):
+    url, h = server
+    monkeypatch.setattr(rs, "_LIST_PAGE", 2)
+    s = rs.SupabaseReceiptStore(url, "SECRET", "receipts")
+    keys = [f"{u}/{b}/k{b}" for u in (1, 2) for b in (1, 2, 3)]
+    for k in keys:
+        s.put(k, b"x", "application/pdf")
+    listed = s.list_objects()
+    assert sorted(k for k, _ in listed) == sorted(keys)
+    assert all(t is not None and t.tzinfo for _, t in listed)
+
+
+def test_listing_failure_is_a_storage_error(server):
+    url, h = server
+    h.status_override = 500
+    with pytest.raises(rs.ReceiptStorageError):
+        rs.SupabaseReceiptStore(url, "SECRET", "receipts").list_objects()
+
+
+def test_unparseable_times_become_none():
+    assert rs._parse_time(None) is None
+    assert rs._parse_time("garbage") is None
+    assert rs._parse_time("2024-05-01T10:00:00Z").year == 2024
