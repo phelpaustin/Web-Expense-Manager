@@ -7,7 +7,7 @@ deleting a template must not turn the payments it already made back into everyda
 Idempotent: a fresh database already got the column and its index from 0001 (built from the
 models). The backfill is a heuristic; see app/db/recurring_link_cleanup.py.
 
-Revision ID: 0026_expense_recurring_template_id
+Revision ID: 0026_expense_recurring_link
 Revises: 0025_fill_bill_total_shops
 Create Date: 2026-10-20
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0026_expense_recurring_template_id"
+revision = "0026_expense_recurring_link"
 down_revision = "0025_fill_bill_total_shops"
 branch_labels = None
 depends_on = None
