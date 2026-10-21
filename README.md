@@ -4,7 +4,7 @@ A personal and shared expense manager built with React, Vite, FastAPI, and SQLAl
 
 ## Features
 
-- Record, edit, search, filter, paginate, import, and export expenses. CSV and Excel imports support up to 10 MB and 10,000 rows; duplicate rows are skipped.
+- Record, edit, search, filter, paginate, and export expenses (Expenses page). Importing is all on the **Import** page: bank statements, and files in the app's own expense format. CSV and Excel imports support up to 10 MB and 10,000 rows; duplicate rows are skipped.
 - View spending trends, category breakdowns, forecasts, price history, cash flow, and financial metrics.
 - Set category and overall budgets, choose weekly, monthly, or annual tracking, and optionally carry unused or overspent amounts between periods.
 - Track income, recurring expenses, bills (to itemise, total only, or itemised), and receipts. Receipt upload supports PDF, JPEG, and PNG files up to 10 MB; receipts are stored, never read.
@@ -204,7 +204,7 @@ Emails are case-insensitive: they are trimmed and lowercased on sign-up, sign-in
 
 ## Importing bank statements
 
-**Import** (sidebar) reads a CSV or Excel statement in four steps, and nothing is saved until the last one:
+**Import** (sidebar) is the one place for bringing data in. It has two tabs. **Expense file** loads a spreadsheet that is already in this app's expense format (what Export produces, with items, quantity, unit and brand; the old dashboard format works too): duplicates are skipped, and rows that could not be read are listed so each can be fixed and added back. **Bank statement** reads a CSV or Excel statement from your bank in four steps, and nothing is saved until the last one:
 
 1. **Columns.** The app finds the table (banks put a title and account details above it), guesses which column is the date, description and amount, and which date format is used. You can change any of it.
 2. **Money in and out.** One signed amount column (choose whether negative or positive means money out), separate money-out and money-in columns, or an amount plus a Debit/Credit column. Expenses and income are imported into their own lists.

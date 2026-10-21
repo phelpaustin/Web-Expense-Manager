@@ -145,11 +145,7 @@ export default function App() {
               saveEdit={expense.saveEdit}
               onDelete={expense.handleDelete}
               options={data.options}
-              onImport={expense.handleImport}
               onExport={expense.handleExport}
-              importCurrency={expense.importCurrency}
-              setImportCurrency={expense.setImportCurrency}
-              onAddRow={expense.handleAddRow}
               trips={data.trips}
               groups={data.groups}
               onError={data.setError}
@@ -229,7 +225,7 @@ export default function App() {
         <Route path="shops" element={<ShopsPage onError={data.setError} />} />
         <Route
           path="import"
-          element={<ImportPage onImported={() => data.loadAll([...EXPENSE_PARTS, PART.INCOME])} onError={data.setError} />}
+          element={<ImportPage options={data.options} onImported={() => data.loadAll([...EXPENSE_PARTS, PART.INCOME])} onError={data.setError} />}
         />
         <Route
           path="groups"

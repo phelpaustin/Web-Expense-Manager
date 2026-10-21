@@ -43,8 +43,7 @@ function Harness() {
         form={e.form} setForm={e.setForm} saving={e.saving} onAdd={e.handleAdd} onAddBill={e.handleAddBill}
         editingId={e.editingId} editForm={e.editForm} setEditForm={e.setEditForm} startEdit={e.startEdit}
         cancelEdit={e.cancelEdit} saveEdit={e.saveEdit} onDelete={e.handleDelete} options={OPTIONS}
-        onImport={e.handleImport} onExport={e.handleExport} importCurrency={e.importCurrency}
-        setImportCurrency={e.setImportCurrency} onAddRow={e.handleAddRow} trips={[]} groups={[]} onError={setError}
+        onExport={e.handleExport} trips={[]} groups={[]} onError={setError}
       />
     </>
   )
@@ -398,5 +397,17 @@ describe('Add expense form labels', () => {
     const unit = screen.getAllByRole('combobox', { name: 'Unit' })[0]
     expect([...unit.options].map((o) => o.value)).toEqual(expect.arrayContaining(['Count', 'Kg', 'Litre']))
     expect(screen.getByText('Quantity')).toBeTruthy()
+  })
+})
+
+describe('importing lives on the Import page only', () => {
+  it('offers Export here, with a link to Import, and no import form', async () => {
+    renderAt()
+    await waitFor(() => expect(client.fetchExpenses).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Export Excel' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Import' }).getAttribute('href')).toBe('/import')
+    expect(document.querySelector('input[type="file"]')).toBeNull()
+    expect(screen.queryByText(/Skipped rows/)).toBeNull()
   })
 })

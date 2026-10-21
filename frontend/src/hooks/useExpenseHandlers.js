@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createExpense, createExpensesBulk, updateExpense, deleteExpense, importExpenses, exportExpenses } from '../api/client.js'
+import { createExpense, createExpensesBulk, updateExpense, deleteExpense, exportExpenses } from '../api/client.js'
 import { EXPENSE_PARTS } from './useAppData.js'
 
 const EMPTY_FORM = {
@@ -28,7 +28,6 @@ export function useExpenseHandlers(loadAll, setError) {
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
-  const [importCurrency, setImportCurrency] = useState('')
 
   async function handleAdd(e) {
     e.preventDefault()
@@ -69,17 +68,6 @@ export function useExpenseHandlers(loadAll, setError) {
     } catch (err) {
       setError(err.message)
     }
-  }
-
-  async function handleImport(file) {
-    const result = await importExpenses(file, importCurrency)
-    await loadAll(EXPENSE_PARTS)
-    return result
-  }
-
-  async function handleAddRow(payload) {
-    await createExpense(payload)
-    await loadAll(EXPENSE_PARTS)
   }
 
   // billId: the bill these items itemise (replaces its single total-only expense, if any).
@@ -147,12 +135,8 @@ export function useExpenseHandlers(loadAll, setError) {
     editingId,
     editForm,
     setEditForm,
-    importCurrency,
-    setImportCurrency,
     handleAdd,
     handleDelete,
-    handleImport,
-    handleAddRow,
     handleAddBill,
     handleExport,
     startEdit,

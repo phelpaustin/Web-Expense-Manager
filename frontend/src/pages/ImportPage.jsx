@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ExpenseFileImport from '../components/ExpenseFileImport.jsx'
 import { money } from '../format.js'
 import {
   analyzeStatement,
@@ -55,7 +56,7 @@ function ColumnSelect({ label, columns, value, onChange, required }) {
   )
 }
 
-export default function ImportPage({ onImported, onError }) {
+function StatementImport({ onImported, onError }) {
   const [file, setFile] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [mapping, setMapping] = useState(null)
@@ -202,7 +203,6 @@ export default function ImportPage({ onImported, onError }) {
 
   return (
     <>
-      <h1>📥 Import bank statement</h1>
       <p className="subtitle">
         Open a CSV or Excel statement. The app guesses the columns, you can correct them or just tell the assistant what
         to do, and you see every row before anything is saved. Re-importing the same file adds nothing twice.
@@ -520,6 +520,32 @@ export default function ImportPage({ onImported, onError }) {
           </section>
         </>
       )}
+    </>
+  )
+}
+
+// Everything that brings data into the app lives here: bank statements (read with the assistant and
+// rules) and spreadsheets already in the app's own expense format. Both stay mounted, so switching tabs
+// never loses a statement that is half set up.
+export default function ImportPage({ options, onImported, onError }) {
+  const [tab, setTab] = useState('statement')
+  return (
+    <>
+      <h1>📥 Import</h1>
+      <div className="tabs" role="tablist" aria-label="What to import">
+        <button type="button" role="tab" aria-selected={tab === 'statement'} className={tab === 'statement' ? 'tab active' : 'tab'} onClick={() => setTab('statement')}>
+          Bank statement
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'file'} className={tab === 'file' ? 'tab active' : 'tab'} onClick={() => setTab('file')}>
+          Expense file
+        </button>
+      </div>
+      <div hidden={tab !== 'statement'}>
+        <StatementImport onImported={onImported} onError={onError} />
+      </div>
+      <div hidden={tab !== 'file'}>
+        <ExpenseFileImport options={options} onImported={onImported} onError={onError} />
+      </div>
     </>
   )
 }

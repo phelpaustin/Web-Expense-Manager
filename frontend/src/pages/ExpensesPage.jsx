@@ -1,7 +1,7 @@
 import UnitSelect from '../components/UnitSelect.jsx'
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { TotalOnlyBadge } from '../components/BillStatus.jsx'
 import { money } from '../format.js'
 import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems, viewReceipt } from '../api/client.js'
@@ -24,11 +24,7 @@ export default function ExpensesPage({
   saveEdit,
   onDelete,
   options,
-  onImport,
   onExport,
-  importCurrency,
-  setImportCurrency,
-  onAddRow,
   trips,
   groups,
   onError,
@@ -41,10 +37,6 @@ export default function ExpensesPage({
   const [billItems, setBillItems] = useState([])
   const [submittingBill, setSubmittingBill] = useState(false)
   const [receiptTotal, setReceiptTotal] = useState('')
-  const [file, setFile] = useState(null)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
-  const [skipped, setSkipped] = useState([])
   const [categorySuggestion, setCategorySuggestion] = useState(null)
   const [autoCatBusy, setAutoCatBusy] = useState(false)
   const [autoCatResult, setAutoCatResult] = useState(null)
@@ -438,51 +430,6 @@ export default function ExpensesPage({
     }
   }
 
-  async function handleImportSubmit(e) {
-    e.preventDefault()
-    if (!file) return
-    setImporting(true)
-    setImportResult(null)
-    try {
-      const result = await afterMutation(onImport(file))
-      setImportResult(result)
-      setSkipped(result.skipped_rows || [])
-      setFile(null)
-      e.target.reset()
-    } catch (err) {
-      setImportResult({ error: err.message })
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  function updateSkipped(i, field, value) {
-    setSkipped((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)))
-  }
-
-  async function addSkipped(i) {
-    const r = skipped[i]
-    try {
-      await afterMutation(
-        onAddRow({
-          date: r.date,
-          category: r.category,
-          subcategory: r.subcategory,
-          description: r.description,
-          amount: parseFloat(r.amount),
-          quantity: parseFloat(r.quantity) || 1,
-          unit: r.unit || 'Count',
-          shop: r.shop,
-          brand: r.brand,
-          currency: r.currency || undefined,
-        }),
-      )
-      setSkipped((prev) => prev.filter((_, idx) => idx !== i))
-    } catch (err) {
-      updateSkipped(i, 'reason', err.message)
-    }
-  }
-
   function renderExpenseRow(e) {
     if (editingId === e.id) {
       return (
@@ -635,119 +582,19 @@ export default function ExpensesPage({
       <h1 className="page-title">🧾 Expenses</h1>
 
       <section className="panel">
-        <h2>📤 Import / Export</h2>
+        <h2>📤 Export</h2>
         <p className="subtitle">
-          Import a CSV or Excel file (old dashboard format supported). Duplicates are skipped.
+          Download all your expenses. To bring a file in, use <Link to="/import">Import</Link> in the sidebar.
         </p>
-        <form className="add-form" onSubmit={handleImportSubmit}>
-          <input
-            type="file"
-            accept=".csv,.xlsx"
-            onChange={(e) => setFile(e.target.files[0] || null)}
-          />
-          <select
-            value={importCurrency}
-            onChange={(e) => setImportCurrency(e.target.value)}
-            title="Currency for imported rows"
-          >
-            <option value="">Currency: from file</option>
-            <option value="SEK">SEK</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-            <option value="INR">INR</option>
-          </select>
-          <button type="submit" disabled={!file || importing}>
-            {importing ? 'Importing…' : 'Import'}
-          </button>
+        <div className="add-form">
           <button type="button" className="ghost-btn" onClick={() => onExport('csv')}>
             Export CSV
           </button>
           <button type="button" className="ghost-btn" onClick={() => onExport('xlsx')}>
             Export Excel
           </button>
-        </form>
-        {importResult && (
-          <div className={importResult.error ? 'auth-error' : 'ok-note'} style={{ marginTop: '0.75rem' }}>
-            {importResult.error
-              ? importResult.error
-              : `Imported ${importResult.added} · skipped ${importResult.skipped}` +
-                (importResult.errors && importResult.errors.length
-                  ? ` · ${importResult.errors.length} row error(s)`
-                  : '')}
-          </div>
-        )}
+        </div>
       </section>
-
-      {skipped.length > 0 && (
-        <section className="panel">
-          <h2>⚠️ Skipped rows ({skipped.length})</h2>
-          <p className="subtitle">Fix any values and add them back individually.</p>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Reason</th>
-                <th>Date</th>
-                <th>Category</th>
-                <th>Subcat</th>
-                <th>Shop</th>
-                <th>Item name</th>
-                <th className="right">Qty</th>
-                <th>Unit</th>
-                <th>Cur</th>
-                <th className="right">Amount</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {skipped.map((r, i) => (
-                <tr key={i}>
-                  <td className="skip-reason">{r.reason}</td>
-                  <td>
-                    <input type="date" value={r.date} onChange={(e) => updateSkipped(i, 'date', e.target.value)} />
-                  </td>
-                  <td>
-                    <input type="text" list="cat-options" value={r.category} onChange={(e) => updateSkipped(i, 'category', e.target.value)} />
-                  </td>
-                  <td>
-                    <input type="text" value={r.subcategory} onChange={(e) => updateSkipped(i, 'subcategory', e.target.value)} />
-                  </td>
-                  <td>
-                    <input type="text" list="shop-options" value={r.shop} onChange={(e) => updateSkipped(i, 'shop', e.target.value)} />
-                  </td>
-                  <td>
-                    <input type="text" value={r.description} onChange={(e) => updateSkipped(i, 'description', e.target.value)} />
-                  </td>
-                  <td className="right">
-                    <input type="number" className="amount-input" value={r.quantity} onChange={(e) => updateSkipped(i, 'quantity', e.target.value)} />
-                  </td>
-                  <td>
-                    <UnitSelect value={r.unit} units={options.units} onChange={(u) => updateSkipped(i, 'unit', u)} />
-                  </td>
-                  <td>
-                    <input type="text" className="unit-input" value={r.currency} onChange={(e) => updateSkipped(i, 'currency', e.target.value)} />
-                  </td>
-                  <td className="right">
-                    <input type="number" className="amount-input" value={r.amount} onChange={(e) => updateSkipped(i, 'amount', e.target.value)} />
-                  </td>
-                  <td className="right nowrap">
-                    <button className="icon-btn save" onClick={() => addSkipped(i)} title="Add this row">
-                      ✓
-                    </button>
-                    <button
-                      className="delete-btn"
-                      onClick={() => setSkipped((prev) => prev.filter((_, idx) => idx !== i))}
-                      title="Dismiss"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
 
       <section className="panel" id="add-expense-panel">
         <h2>➕ Add expense</h2>
