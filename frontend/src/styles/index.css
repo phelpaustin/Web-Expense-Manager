@@ -1153,6 +1153,57 @@ button {
   background: rgba(109, 123, 255, 0.06);
 }
 
+/* Editing a row: one full-width panel of labelled fields instead of ten squeezed table cells. */
+.edit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 0.75rem 1rem;
+  padding: 0.4rem 0;
+}
+
+.edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.edit-field--wide {
+  grid-column: span 2;
+}
+
+.edit-field input,
+.edit-field select {
+  width: 100%;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--text, inherit);
+}
+
+/* The unit and currency pickers have narrow max-widths for table cells; in the panel they fill the field. */
+.edit-field .unit-input,
+.edit-field .currency-select {
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.25rem 0 0.4rem;
+}
+
+@media (max-width: 520px) {
+  .edit-field--wide {
+    grid-column: auto;
+  }
+}
+
 .right,
 .table th.right,
 .table td.right {

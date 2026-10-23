@@ -411,3 +411,22 @@ describe('importing lives on the Import page only', () => {
     expect(screen.queryByText(/Skipped rows/)).toBeNull()
   })
 })
+
+describe('editing an expense in the list', () => {
+  it('opens a labelled, full-width panel instead of squeezed table cells', async () => {
+    renderAt(undefined)
+    await flatView()
+    await screen.findByText('Milk')
+    fireEvent.click(within(rowOf('Milk')).getByTitle('Edit'))
+    const panel = document.querySelector('tr.editing')
+    expect(panel).toBeTruthy()
+    expect(panel.querySelectorAll('td')).toHaveLength(1) // one cell spanning the table
+    for (const label of ['Date', 'Category', 'Subcategory', 'Shop', 'Item name', 'Quantity', 'Unit', 'Amount', 'Currency']) {
+      expect(within(panel).getByLabelText(label)).toBeTruthy()
+    }
+    expect(within(panel).getByLabelText('Item name').value).toBe('Milk')
+    expect(within(panel).getByTitle('Save')).toBeTruthy()
+    fireEvent.click(within(panel).getByTitle('Cancel'))
+    expect(document.querySelector('tr.editing')).toBeNull()
+  })
+})
