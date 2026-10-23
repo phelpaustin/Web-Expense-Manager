@@ -1128,8 +1128,15 @@ button {
   background: rgba(109, 123, 255, 0.06);
 }
 
-.right {
+.right,
+.table th.right,
+.table td.right {
   text-align: right;
+}
+
+/* A note directly under a table: .subtitle's negative top margin would pull it up into the table. */
+.table + .subtitle {
+  margin-top: 0.9rem;
 }
 
 .nowrap {
