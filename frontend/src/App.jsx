@@ -145,6 +145,7 @@ export default function App() {
               cancelEdit={expense.cancelEdit}
               saveEdit={expense.saveEdit}
               onDelete={expense.handleDelete}
+              onBulkUpdate={expense.handleBulkUpdate}
               options={data.options}
               onExport={expense.handleExport}
               trips={data.trips}

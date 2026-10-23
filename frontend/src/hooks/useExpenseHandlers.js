@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createExpense, createExpensesBulk, updateExpense, deleteExpense, exportExpenses } from '../api/client.js'
+import { createExpense, createExpensesBulk, updateExpense, deleteExpense, exportExpenses, bulkUpdateExpenses } from '../api/client.js'
 import { EXPENSE_PARTS } from './useAppData.js'
 
 const EMPTY_FORM = {
@@ -81,6 +81,14 @@ export function useExpenseHandlers(loadAll, setError) {
     return exportExpenses(format).catch((err) => setError(err.message))
   }
 
+  // Same changes on many expenses at once. Throws on failure so the page can show it where the
+  // person is working; nothing has changed if it does (the server applies all or nothing).
+  async function handleBulkUpdate(body) {
+    const result = await bulkUpdateExpenses(body)
+    await loadAll(EXPENSE_PARTS)
+    return result
+  }
+
   function startEdit(expense) {
     setEditingId(expense.id)
     setEditForm({
@@ -139,6 +147,7 @@ export function useExpenseHandlers(loadAll, setError) {
     handleDelete,
     handleAddBill,
     handleExport,
+    handleBulkUpdate,
     startEdit,
     cancelEdit,
     saveEdit,

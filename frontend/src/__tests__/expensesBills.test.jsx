@@ -43,7 +43,7 @@ function Harness() {
         form={e.form} setForm={e.setForm} saving={e.saving} onAdd={e.handleAdd} onAddBill={e.handleAddBill}
         editingId={e.editingId} editForm={e.editForm} setEditForm={e.setEditForm} startEdit={e.startEdit}
         cancelEdit={e.cancelEdit} saveEdit={e.saveEdit} onDelete={e.handleDelete} options={OPTIONS}
-        onExport={e.handleExport} trips={[]} groups={[]} onError={setError}
+        onExport={e.handleExport} onBulkUpdate={e.handleBulkUpdate} trips={[]} groups={[]} onError={setError}
       />
     </>
   )
@@ -428,5 +428,169 @@ describe('editing an expense in the list', () => {
     expect(within(panel).getByTitle('Save')).toBeTruthy()
     fireEvent.click(within(panel).getByTitle('Cancel'))
     expect(document.querySelector('tr.editing')).toBeNull()
+  })
+})
+
+const lastFetch = () => client.fetchExpenses.mock.calls.at(-1)[0]
+
+describe('date filter', () => {
+  const pick = (value) => fireEvent.change(screen.getByTitle('Show expenses from…'), { target: { value } })
+
+  it('is "any date" until a period is chosen', async () => {
+    renderAt(undefined)
+    await screen.findByTitle('Show expenses from…')
+    expect(lastFetch().date_from).toBe('')
+    expect(lastFetch().date_to).toBe('')
+  })
+
+  it('asks for exactly one month', async () => {
+    renderAt(undefined)
+    await screen.findByTitle('Show expenses from…')
+    pick('pick_month')
+    fireEvent.change(await screen.findByLabelText('Month'), { target: { value: '2026-02' } })
+    await waitFor(() => expect(lastFetch()).toMatchObject({ date_from: '2026-02-01', date_to: '2026-02-28', page: 1 }))
+  })
+
+  it('asks for exactly one year', async () => {
+    renderAt(undefined)
+    await screen.findByTitle('Show expenses from…')
+    pick('pick_year')
+    fireEvent.change(await screen.findByLabelText('Year'), { target: { value: '2025' } })
+    await waitFor(() => expect(lastFetch()).toMatchObject({ date_from: '2025-01-01', date_to: '2025-12-31' }))
+  })
+
+  it('still offers a custom range', async () => {
+    renderAt(undefined)
+    await screen.findByTitle('Show expenses from…')
+    pick('custom')
+    fireEvent.change(await screen.findByLabelText('From date'), { target: { value: '2026-03-05' } })
+    fireEvent.change(screen.getByLabelText('To date'), { target: { value: '2026-04-10' } })
+    await waitFor(() => expect(lastFetch()).toMatchObject({ date_from: '2026-03-05', date_to: '2026-04-10' }))
+  })
+
+  it('Clear filters goes back to any date', async () => {
+    renderAt(undefined)
+    await screen.findByTitle('Show expenses from…')
+    pick('last_year')
+    await waitFor(() => expect(lastFetch().date_from).toBe(`${new Date().getFullYear() - 1}-01-01`))
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear filters' }))
+    await waitFor(() => expect(lastFetch().date_from).toBe(''))
+    expect(screen.getByTitle('Show expenses from…').value).toBe('')
+  })
+})
+
+describe('editing expenses together', () => {
+  const start = async () => {
+    renderAt(undefined)
+    await flatView()
+    await screen.findByText('Milk')
+    fireEvent.click(screen.getByRole('button', { name: /Edit together/ }))
+  }
+  const fill = (label, value) => fireEvent.change(within(screen.getByTestId('bulk-bar')).getByLabelText(label), { target: { value } })
+
+  beforeEach(() => client.bulkUpdateExpenses.mockResolvedValue({ updated: 1 }))
+
+  it('changes only what is filled in, on only the ticked expenses', async () => {
+    await start()
+    expect(screen.getByTestId('bulk-count').textContent).toContain('Nothing selected yet')
+    expect(screen.getByRole('button', { name: /Apply to 0/ }).disabled).toBe(true)
+    fireEvent.click(screen.getByLabelText('Select Milk'))
+    expect(screen.getByTestId('bulk-count').textContent).toContain('1 selected')
+    expect(screen.getByRole('button', { name: /Apply to 1/ }).disabled).toBe(true) // nothing to change yet
+    fill('Category', ' Groceries ')
+    expect(screen.getByTestId('bulk-summary').textContent).toBe('Will set Category → Groceries on 1 expense.')
+    fireEvent.click(screen.getByRole('button', { name: /Apply to 1 expense/ }))
+    await waitFor(() => expect(client.bulkUpdateExpenses).toHaveBeenCalledTimes(1))
+    expect(client.bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [1], changes: { category: 'Groceries' } })
+    expect(await screen.findByText('Updated 1 expense.')).toBeTruthy()
+    expect(loadAll).toHaveBeenCalled() // the dashboard and other pages follow
+    expect(screen.getByTestId('bulk-count').textContent).toContain('Nothing selected yet') // selection is cleared
+  })
+
+  it('the header box selects every row on the page', async () => {
+    await start()
+    fireEvent.click(screen.getByLabelText('Select all on this page'))
+    expect(screen.getByTestId('bulk-count').textContent).toContain('2 selected')
+    fill('Shop', 'Unionen')
+    fill('Item name', 'Membership')
+    fireEvent.click(screen.getByRole('button', { name: /Apply to 2 expenses/ }))
+    await waitFor(() => expect(client.bulkUpdateExpenses).toHaveBeenCalled())
+    expect(client.bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [1, 2], changes: { shop: 'Unionen', description: 'Membership' } })
+  })
+
+  it('a bill header ticks all of its items', async () => {
+    renderAt(undefined)
+    await screen.findByText(/· Milk ·/)
+    fireEvent.click(screen.getByRole('button', { name: /Edit together/ }))
+    fireEvent.click(screen.getByLabelText('Select Milk'))
+    expect(screen.getByTestId('bulk-count').textContent).toContain('1 selected')
+  })
+
+  it('can offer to select everything that matches, beyond this page', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [NORMAL, TOTAL_ONLY], total: 9 }))
+    await start()
+    expect(screen.queryByRole('button', { name: /Select all 9 matching/ })).toBeNull()
+    fireEvent.click(screen.getByLabelText('Select all on this page'))
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 9 matching' }))
+    expect(screen.getByTestId('bulk-count').textContent).toContain('All 9 matching expenses are selected.')
+    fill('Category', 'Membership')
+    client.bulkUpdateExpenses.mockResolvedValue({ updated: 9 })
+    fireEvent.click(screen.getByRole('button', { name: /Apply to 9 expenses/ }))
+    await waitFor(() => expect(client.bulkUpdateExpenses).toHaveBeenCalled())
+    const body = client.bulkUpdateExpenses.mock.calls[0][0]
+    expect(body.ids).toBeUndefined()
+    expect(body.changes).toEqual({ category: 'Membership' })
+    expect(body.filters).toMatchObject({ search: undefined, date_from: undefined })
+    expect(await screen.findByText('Updated 9 expenses.')).toBeTruthy()
+  })
+
+  it('applies the current search and date filter when everything matching is selected', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [NORMAL, TOTAL_ONLY], total: 9 }))
+    await start()
+    fireEvent.change(screen.getByPlaceholderText('Search item, shop, brand…'), { target: { value: 'union' } })
+    fireEvent.change(screen.getByTitle('Show expenses from…'), { target: { value: 'this_year' } })
+    await waitFor(() => expect(lastFetch().search).toBe('union'))
+    fireEvent.click(await screen.findByLabelText('Select all on this page'))
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 9 matching' }))
+    fill('Category', 'Membership')
+    fireEvent.click(screen.getByRole('button', { name: /Apply to 9 expenses/ }))
+    await waitFor(() => expect(client.bulkUpdateExpenses).toHaveBeenCalled())
+    const year = new Date().getFullYear()
+    expect(client.bulkUpdateExpenses.mock.calls[0][0].filters).toMatchObject({
+      search: 'union', date_from: `${year}-01-01`, date_to: `${year}-12-31`,
+    })
+  })
+
+  it('unticking one row while everything matching is selected narrows it to the page', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [NORMAL, TOTAL_ONLY], total: 9 }))
+    await start()
+    fireEvent.click(screen.getByLabelText('Select all on this page'))
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 9 matching' }))
+    fireEvent.click(screen.getByLabelText('Select Milk'))
+    expect(screen.getByTestId('bulk-count').textContent).toContain('1 selected')
+  })
+
+  it('changing the filter starts the selection over', async () => {
+    await start()
+    fireEvent.click(screen.getByLabelText('Select Milk'))
+    fireEvent.change(screen.getByTitle('Show expenses from…'), { target: { value: 'this_year' } })
+    await waitFor(() => expect(screen.getByTestId('bulk-count').textContent).toContain('Nothing selected yet'))
+  })
+
+  it('shows the error and keeps the selection if the server refuses', async () => {
+    client.bulkUpdateExpenses.mockRejectedValueOnce(new Error('Viewers can\'t add or edit expenses in this space'))
+    await start()
+    fireEvent.click(screen.getByLabelText('Select Milk'))
+    fill('Category', 'X')
+    fireEvent.click(screen.getByRole('button', { name: /Apply to 1 expense/ }))
+    await waitFor(() => expect(setError).toHaveBeenCalledWith("Viewers can't add or edit expenses in this space"))
+    expect(screen.getByTestId('bulk-count').textContent).toContain('1 selected')
+  })
+
+  it('leaving edit-together hides the boxes and the bar', async () => {
+    await start()
+    fireEvent.click(screen.getByRole('button', { name: /Stop editing together/ }))
+    expect(screen.queryByTestId('bulk-bar')).toBeNull()
+    expect(screen.queryByLabelText('Select Milk')).toBeNull()
   })
 })

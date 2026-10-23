@@ -4,11 +4,33 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { TotalOnlyBadge } from '../components/BillStatus.jsx'
 import { money } from '../format.js'
+import DatePeriodFilter from '../components/DatePeriodFilter.jsx'
+import { EMPTY_DATE_FILTER, datesFor } from '../datePeriod.js'
 import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems, viewReceipt } from '../api/client.js'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
+// '__keep__' for the space means "leave it where it is"; '' is personal.
+const KEEP = '__keep__'
+const EMPTY_BULK = { category: '', subcategory: '', shop: '', description: '', group_id: KEEP }
+
 const SPACE_TYPE_ICONS = { household: '🏠', business: '💼', rental: '🏢', trip: '✈️', custom: '📁' }
+
+// A tick box that can show "some of these are selected". Clicking it never toggles the bill group it sits in.
+function SelectBox({ state, onChange, label }) {
+  return (
+    <input
+      type="checkbox"
+      aria-label={label}
+      checked={state === 'all'}
+      ref={(el) => {
+        if (el) el.indeterminate = state === 'some'
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(e.target.checked)}
+    />
+  )
+}
 
 export default function ExpensesPage({
   form,
@@ -23,6 +45,7 @@ export default function ExpensesPage({
   cancelEdit,
   saveEdit,
   onDelete,
+  onBulkUpdate,
   options,
   onExport,
   trips,
@@ -46,8 +69,15 @@ export default function ExpensesPage({
   const [filterCategory, setFilterCategory] = useState('')
   const [filterShop, setFilterShop] = useState('')
   const [filterGroup, setFilterGroup] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [dateFilter, setDateFilter] = useState(EMPTY_DATE_FILTER)
+  const { date_from: dateFrom, date_to: dateTo } = datesFor(dateFilter)
+  // "Edit together": tick expenses (or everything matching the filter) and change them in one go.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [allMatching, setAllMatching] = useState(false)
+  const [bulk, setBulk] = useState(EMPTY_BULK)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkNotice, setBulkNotice] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [groupByBill, setGroupByBill] = useState(true)
@@ -167,10 +197,96 @@ export default function ExpensesPage({
     setFilterCategory('')
     setFilterShop('')
     setFilterGroup('')
-    setDateFrom('')
-    setDateTo('')
+    setDateFilter(EMPTY_DATE_FILTER)
     setFilterTotalOnly(false)
     setPage(1)
+  }
+
+  // ── Edit together ────────────────────────────────────────────────────────
+  // A different set of results starts the selection over: it was chosen from other rows.
+  useEffect(() => {
+    setSelectedIds(new Set())
+    setAllMatching(false)
+  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, filterTotalOnly])
+
+  const editableIds = pageExpenses.filter(canEditExpense).map((e) => e.id)
+  const isSelected = (id) => allMatching || selectedIds.has(id)
+  const selectionState = (ids) => (ids.length && ids.every(isSelected) ? 'all' : ids.some(isSelected) ? 'some' : 'none')
+  const selectedCount = allMatching ? total : selectedIds.size
+  const pageAllSelected = editableIds.length > 0 && editableIds.every(isSelected)
+  const COLS = selectMode ? 11 : 10
+
+  // Ticking or unticking while "all matching" is on narrows it to this page's rows first.
+  function setSelected(ids, on) {
+    setSelectedIds((prev) => {
+      const next = new Set(allMatching ? editableIds : prev)
+      for (const id of ids) {
+        if (on) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+    setAllMatching(false)
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setAllMatching(false)
+  }
+
+  function toggleSelectMode() {
+    setSelectMode((on) => !on)
+    clearSelection()
+    setBulk(EMPTY_BULK)
+    setBulkNotice('')
+  }
+
+  // Only the fields that were filled in are changed; a blank one means "leave as it is".
+  const bulkChanges = {}
+  for (const key of ['category', 'subcategory', 'shop', 'description']) {
+    if (bulk[key].trim()) bulkChanges[key] = bulk[key].trim()
+  }
+  if (bulk.group_id !== KEEP) bulkChanges.group_id = bulk.group_id === '' ? null : parseInt(bulk.group_id, 10)
+  const hasBulkChanges = Object.keys(bulkChanges).length > 0
+
+  function describeBulkChanges() {
+    const parts = []
+    if (bulkChanges.category) parts.push(`Category → ${bulkChanges.category}`)
+    if (bulkChanges.subcategory) parts.push(`Subcategory → ${bulkChanges.subcategory}`)
+    if (bulkChanges.shop) parts.push(`Shop → ${bulkChanges.shop}`)
+    if (bulkChanges.description) parts.push(`Item name → ${bulkChanges.description}`)
+    if ('group_id' in bulkChanges) parts.push(`Space → ${bulkChanges.group_id === null ? 'Personal' : groupName(bulkChanges.group_id) || 'that space'}`)
+    return parts.join(' · ')
+  }
+
+  async function applyBulk() {
+    const body = allMatching
+      ? {
+          filters: {
+            scope: filterGroup || undefined,
+            search: debouncedSearch || undefined,
+            category: filterCategory || undefined,
+            shop: filterShop || undefined,
+            date_from: dateFrom || undefined,
+            date_to: dateTo || undefined,
+            total_only: filterTotalOnly ? true : undefined,
+          },
+          changes: bulkChanges,
+        }
+      : { ids: [...selectedIds], changes: bulkChanges }
+    setBulkBusy(true)
+    setBulkNotice('')
+    try {
+      const res = await onBulkUpdate(body)
+      await refetch()
+      setBulkNotice(`Updated ${res.updated} expense${res.updated === 1 ? '' : 's'}.`)
+      clearSelection()
+      setBulk(EMPTY_BULK)
+    } catch (err) {
+      onError?.(err.message)
+    } finally {
+      setBulkBusy(false)
+    }
   }
 
   // Suggest a category from the user's own shop history (or keyword rules) while
@@ -434,7 +550,7 @@ export default function ExpensesPage({
     if (editingId === e.id) {
       return (
         <tr key={e.id} className="editing">
-          <td colSpan={10}>
+          <td colSpan={COLS}>
             <div className="edit-grid">
               <label className="edit-field">
                 <span>Date</span>
@@ -545,7 +661,21 @@ export default function ExpensesPage({
       )
     }
     return (
-      <tr key={e.id} className={e.bill_total_only ? 'row-total-only' : ''}>
+      <tr
+        key={e.id}
+        className={`${e.bill_total_only ? 'row-total-only' : ''}${selectMode && isSelected(e.id) ? ' row-selected' : ''}`.trim()}
+      >
+        {selectMode && (
+          <td className="select-cell">
+            {canEditExpense(e) && (
+              <SelectBox
+                state={isSelected(e.id) ? 'all' : 'none'}
+                label={`Select ${e.description || e.category}`}
+                onChange={(on) => setSelected([e.id], on)}
+              />
+            )}
+          </td>
+        )}
         <td>{e.date}</td>
         <td>{e.category}</td>
         <td>{e.subcategory}</td>
@@ -833,6 +963,11 @@ export default function ExpensesPage({
             <option key={s} value={s} />
           ))}
         </datalist>
+        <datalist id="subcat-bulk-options">
+          {(options.subcategories[bulk.category] || []).map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
         <datalist id="subcat-edit-options">
           {(options.subcategories[editForm.category] || []).map((s) => (
             <option key={s} value={s} />
@@ -882,18 +1017,7 @@ export default function ExpensesPage({
                 ))}
               </select>
             )}
-            <input
-              type="date"
-              title="From date"
-              value={dateFrom}
-              onChange={(e) => resetToFirstPage(setDateFrom)(e.target.value)}
-            />
-            <input
-              type="date"
-              title="To date"
-              value={dateTo}
-              onChange={(e) => resetToFirstPage(setDateTo)(e.target.value)}
-            />
+            <DatePeriodFilter filter={dateFilter} onChange={resetToFirstPage(setDateFilter)} />
             <label className="toggle-row inline-toggle" title="Show only expenses that are a bill's total with no items yet">
               <input
                 type="checkbox"
@@ -907,10 +1031,116 @@ export default function ExpensesPage({
                 Clear filters
               </button>
             )}
+            <button type="button" className="ghost-btn" onClick={toggleSelectMode} aria-pressed={selectMode}>
+              {selectMode ? '✕ Stop editing together' : '☑ Edit together'}
+            </button>
             <button type="button" className="ghost-btn" onClick={() => setGroupByBill((v) => !v)}>
               {groupByBill ? '📄 Flat view' : '🧾 Bill view'}
             </button>
           </div>
+        </section>
+      )}
+
+      {selectMode && (
+        <section className="panel bulk-bar" data-testid="bulk-bar">
+          <h2>✏️ Edit together</h2>
+          <p className="subtitle">
+            Tick the expenses (or a whole bill) to change, then fill in only what should change. Everything else stays as it is.
+          </p>
+          <p data-testid="bulk-count" className="bulk-count">
+            {selectedCount === 0
+              ? 'Nothing selected yet.'
+              : allMatching
+                ? `All ${total} matching expenses are selected.`
+                : `${selectedCount} selected.`}{' '}
+            {!allMatching && pageAllSelected && total > pageExpenses.length && (
+              <button type="button" className="mini-btn" onClick={() => setAllMatching(true)}>
+                Select all {total} matching
+              </button>
+            )}{' '}
+            {selectedCount > 0 && (
+              <button type="button" className="mini-btn" onClick={clearSelection}>
+                Clear selection
+              </button>
+            )}
+          </p>
+          <div className="edit-grid">
+            <label className="edit-field">
+              <span>Category</span>
+              <input
+                type="text"
+                list="cat-options"
+                placeholder="Leave unchanged"
+                value={bulk.category}
+                onChange={(e) => setBulk({ ...bulk, category: e.target.value })}
+              />
+            </label>
+            <label className="edit-field">
+              <span>Subcategory</span>
+              <input
+                type="text"
+                list="subcat-bulk-options"
+                placeholder="Leave unchanged"
+                value={bulk.subcategory}
+                onChange={(e) => setBulk({ ...bulk, subcategory: e.target.value })}
+              />
+            </label>
+            <label className="edit-field">
+              <span>Shop</span>
+              <input
+                type="text"
+                list="shop-options"
+                placeholder="Leave unchanged"
+                value={bulk.shop}
+                onChange={(e) => setBulk({ ...bulk, shop: e.target.value })}
+              />
+            </label>
+            <label className="edit-field">
+              <span>Item name</span>
+              <input
+                type="text"
+                placeholder="Leave unchanged"
+                value={bulk.description}
+                onChange={(e) => setBulk({ ...bulk, description: e.target.value })}
+              />
+            </label>
+            {allSpaces.length > 0 && (
+              <label className="edit-field">
+                <span>Space</span>
+                <select value={bulk.group_id} onChange={(e) => setBulk({ ...bulk, group_id: e.target.value })}>
+                  <option value={KEEP}>Leave unchanged</option>
+                  <option value="">Personal expenses</option>
+                  {allSpaces
+                    .filter((g) => g.role !== 'viewer')
+                    .map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
+          </div>
+          {hasBulkChanges && selectedCount > 0 && (
+            <p className="subtitle" data-testid="bulk-summary">
+              Will set {describeBulkChanges()} on {selectedCount} expense{selectedCount === 1 ? '' : 's'}.
+            </p>
+          )}
+          <div className="edit-actions">
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={bulkBusy || selectedCount === 0 || !hasBulkChanges}
+              onClick={applyBulk}
+            >
+              {bulkBusy ? 'Saving…' : `Apply to ${selectedCount} expense${selectedCount === 1 ? '' : 's'}`}
+            </button>
+          </div>
+          {bulkNotice && (
+            <p role="status" className="subtitle">
+              {bulkNotice}
+            </p>
+          )}
         </section>
       )}
 
@@ -920,6 +1150,15 @@ export default function ExpensesPage({
         <table className="table">
           <thead>
             <tr>
+              {selectMode && (
+                <th className="select-cell">
+                  <SelectBox
+                    state={selectionState(editableIds)}
+                    label="Select all on this page"
+                    onChange={(on) => setSelected(editableIds, on)}
+                  />
+                </th>
+              )}
               <th>Date</th>
               <th>Category</th>
               <th>Subcat</th>
@@ -946,13 +1185,21 @@ export default function ExpensesPage({
                   const itemisedBillId = totalOnlyItems.length === 0 && billIds.size === 1 ? [...billIds][0] : null
                   // A single line with no shop is named after what it is, like its bill on the Bills page.
                   const name = group.shop || (single ? single.description : '') || 'No shop'
+                  const groupEditableIds = group.items.filter(canEditExpense).map((e) => e.id)
                   return (
                     <Fragment key={group.key}>
                       <tr
                         className={`bill-group-header clickable-row${allTotalOnly ? ' row-total-only' : ''}`}
                         onClick={() => toggleBillGroup(group.key)}
                       >
-                        <td colSpan={10}>
+                        <td colSpan={COLS}>
+                          {selectMode && groupEditableIds.length > 0 && (
+                            <SelectBox
+                              state={selectionState(groupEditableIds)}
+                              label={`Select ${name}`}
+                              onChange={(on) => setSelected(groupEditableIds, on)}
+                            />
+                          )}{' '}
                           {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {name} · {group.items.length}{' '}
                           item{group.items.length === 1 ? '' : 's'} · Bill total:{' '}
                           {money(group.items.reduce((sum, e) => sum + e.amount, 0), group.currency)}

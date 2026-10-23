@@ -5,7 +5,7 @@ from decimal import Decimal
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
@@ -115,6 +115,50 @@ class ExpenseUpdate(PartialUpdate):
     @classmethod
     def _valid_currency(cls, value: str | None) -> str | None:
         return normalize_convertible_currency(value) if value is not None else None
+
+
+class ExpenseBulkChanges(PartialUpdate):
+    """What "edit together" can set on many expenses at once. Amount, quantity, unit, date and
+    currency are per-expense facts, so they are not offered. group_id may be null (move to personal)."""
+
+    not_nullable = frozenset({"category", "subcategory", "description", "shop", "brand"})
+    category: Name | None = None
+    subcategory: OptionalName | None = None
+    description: Text | None = None
+    shop: OptionalName | None = None
+    brand: OptionalName | None = None
+    group_id: int | None = None
+
+
+class ExpenseBulkFilters(BaseModel):
+    """The Expenses page's search & filter, so "everything that matches" can span several pages."""
+
+    scope: str | None = None
+    space_ids: str | None = None
+    search: str | None = None
+    category: str | None = None
+    shop: str | None = None
+    date_from: datetime.date | None = None
+    date_to: datetime.date | None = None
+    total_only: bool | None = None
+
+
+# Far above what one person edits at once, but a hard stop on a runaway request.
+MAX_BULK_UPDATE = 5000
+
+
+class ExpenseBulkUpdate(BaseModel):
+    ids: list[int] | None = Field(default=None, min_length=1, max_length=MAX_BULK_UPDATE)
+    filters: ExpenseBulkFilters | None = None
+    changes: ExpenseBulkChanges
+
+    @model_validator(mode="after")
+    def _one_target_and_a_change(self):
+        if (self.ids is None) == (self.filters is None):
+            raise ValueError("send either ids or filters")
+        if not self.changes.model_dump(exclude_unset=True):
+            raise ValueError("changes must set at least one field")
+        return self
 
 
 class ExpenseBulkCreate(BaseModel):
@@ -266,6 +310,33 @@ def _require_group_write_access(
         raise HTTPException(status_code=403, detail="Editors can only edit or delete their own expenses in this space")
 
 
+def _apply_list_filters(q, search, category, shop, date_from, date_to, total_only):
+    """The Expenses page's search & filter, shared by the list and by "edit everything that matches"."""
+    # Case does not matter: "milk" finds what was entered as "Milk" or "MILK".
+    if category and category.strip():
+        q = q.filter(func.lower(models.Expense.category) == category.strip().lower())
+    if shop and shop.strip():
+        q = q.filter(func.lower(models.Expense.shop) == shop.strip().lower())
+    if date_from:
+        q = q.filter(models.Expense.date >= date_from)
+    if date_to:
+        q = q.filter(models.Expense.date <= date_to)
+    if total_only is not None:
+        q = q.filter(models.Expense.bill_total_only == total_only)
+    if search and search.strip():
+        like = like_pattern(search)
+        q = q.filter(
+            or_(
+                models.Expense.description.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.shop.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.brand.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.category.ilike(like, escape=LIKE_ESCAPE),
+                models.Expense.subcategory.ilike(like, escape=LIKE_ESCAPE),
+            )
+        )
+    return q
+
+
 @router.get("/expenses")
 def list_expenses(
     scope: str | None = None,
@@ -291,28 +362,7 @@ def list_expenses(
     if q is None:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
-    # Case does not matter: "milk" finds what was entered as "Milk" or "MILK".
-    if category and category.strip():
-        q = q.filter(func.lower(models.Expense.category) == category.strip().lower())
-    if shop and shop.strip():
-        q = q.filter(func.lower(models.Expense.shop) == shop.strip().lower())
-    if date_from:
-        q = q.filter(models.Expense.date >= date_from)
-    if date_to:
-        q = q.filter(models.Expense.date <= date_to)
-    if total_only is not None:
-        q = q.filter(models.Expense.bill_total_only == total_only)
-    if search and search.strip():
-        like = like_pattern(search)
-        q = q.filter(
-            or_(
-                models.Expense.description.ilike(like, escape=LIKE_ESCAPE),
-                models.Expense.shop.ilike(like, escape=LIKE_ESCAPE),
-                models.Expense.brand.ilike(like, escape=LIKE_ESCAPE),
-                models.Expense.category.ilike(like, escape=LIKE_ESCAPE),
-                models.Expense.subcategory.ilike(like, escape=LIKE_ESCAPE),
-            )
-        )
+    q = _apply_list_filters(q, search, category, shop, date_from, date_to, total_only)
 
     total = q.count()
     rows = (
@@ -474,6 +524,56 @@ def create_expenses_bulk(
         db.refresh(expense)
         ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
     return created
+
+
+@router.post("/expenses/bulk-update")
+def update_expenses_bulk(
+    payload: ExpenseBulkUpdate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Apply the same changes to many expenses at once: the ids given, or everything matching a
+    search & filter. All or nothing: one expense the user may not edit stops the whole request, so
+    a failure never leaves a half-edited set."""
+    data = payload.changes.model_dump(exclude_unset=True)
+
+    if payload.ids is not None:
+        ids = list(dict.fromkeys(payload.ids))
+        expenses = [_get_visible_or_404(db, i, user.id) for i in ids]
+    else:
+        f = payload.filters
+        q = _visible_expenses_query(db, user.id, f.scope, f.space_ids)
+        if q is None:
+            return {"updated": 0}
+        q = _apply_list_filters(q, f.search, f.category, f.shop, f.date_from, f.date_to, f.total_only)
+        if q.count() > MAX_BULK_UPDATE:
+            raise HTTPException(status_code=422, detail=f"That is more than {MAX_BULK_UPDATE} expenses; narrow the filters first")
+        expenses = q.all()
+    if not expenses:
+        return {"updated": 0}
+
+    # Check every permission before changing anything.
+    for expense in expenses:
+        _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
+        if "group_id" in data:
+            _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
+
+    bills_by_owner: dict[int, set[int]] = {}
+    for expense in expenses:
+        if expense.source_bill_id is not None and expense.user_id is not None:
+            bills_by_owner.setdefault(expense.user_id, set()).add(expense.source_bill_id)
+        for field, value in data.items():
+            setattr(expense, field, value)
+    db.commit()
+
+    for owner_id, bill_ids in bills_by_owner.items():
+        # A bill made from expenses follows its items (regrouping if the shop changed).
+        bill_sync.sync_user_bills(db, owner_id, bill_ids=sorted(bill_ids))
+
+    seen = {(e.category, e.subcategory, e.unit, e.shop) for e in expenses}
+    for category, subcategory, unit, shop in seen:
+        ensure_options(db, user.id, category, subcategory, unit, shop)
+    return {"updated": len(expenses)}
 
 
 @router.put("/expenses/{expense_id}", response_model=ExpenseOut)

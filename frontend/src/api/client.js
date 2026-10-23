@@ -328,6 +328,15 @@ export function updateExpense(id, changes) {
   })
 }
 
+// Apply the same changes to many expenses: { ids, changes } or { filters, changes }.
+export function bulkUpdateExpenses(body) {
+  return request('/api/expenses/bulk-update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export function deleteExpense(id) {
   return request(`/api/expenses/${id}`, { method: 'DELETE' })
 }
