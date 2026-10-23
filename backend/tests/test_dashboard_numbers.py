@@ -1,4 +1,7 @@
-"""Release 9: partial current month must not skew MoM/forecast; categorizer matches whole words."""
+"""Release 9: partial current month must not skew month-over-month; categorizer matches whole words.
+
+(The forecast moved to app.logic.forecast; its tests are in test_forecast.py.)
+"""
 from datetime import date
 from decimal import Decimal
 
@@ -36,20 +39,6 @@ def test_gap_month_counts_as_zero_not_skipped():
 def test_last_month_without_spend_is_minus_100():
     ch = analytics.month_over_month_change([m("2026-08", 400), m("2026-09", 400)], date(2026, 11, 3))
     assert ch["last"] == 0 and ch["pct_change"] == -100.0
-
-
-@pytest.mark.skipif(not analytics.HAS_STATS, reason="statsmodels missing")
-def test_forecast_ignores_partial_month_and_is_not_negative():
-    monthly = [m("2026-07", 5000), m("2026-08", 5000), m("2026-09", 5100), m("2026-10", 600)]
-    f = analytics.forecast_next_month(monthly, OCT7)
-    assert f is not None and f > 4500
-    declining = [m("2026-05", 900), m("2026-06", 500), m("2026-07", 100), m("2026-08", 10)]
-    assert analytics.forecast_next_month(declining, date(2026, 9, 5)) >= 0
-
-
-def test_forecast_needs_three_finished_months():
-    monthly = [m("2026-08", 5000), m("2026-09", 5100), m("2026-10", 600)]
-    assert analytics.forecast_next_month(monthly, OCT7) is None
 
 
 def test_complete_months_drops_current_month():

@@ -1,5 +1,3 @@
-import { money } from '../format.js'
-
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 // "2026-09" -> "Sep"
@@ -8,10 +6,10 @@ export function monthName(key) {
   return MONTHS[n - 1] || key
 }
 
-// Month-over-month change and forecast under the spending chart. Both are based on
-// finished months only; the in-progress month is called out instead of being counted.
+// Month-over-month change under the spending chart. It is based on finished months only; the
+// in-progress month is called out instead of being counted. (The forecast has its own panel.)
 export default function TrendMeta({ trends }) {
-  const { change, forecast_next_month: forecast, current_month: current } = trends
+  const { change, current_month: current } = trends
   const pct = change?.pct_change
   const arrow = change?.direction === 'up' ? '▲' : change?.direction === 'down' ? '▼' : '■'
   return (
@@ -25,15 +23,10 @@ export default function TrendMeta({ trends }) {
             </strong>
           </span>
         )}
-        {forecast != null && (
-          <span>
-            forecast for {current ? monthName(current) : 'this month'}: <strong>{money(forecast)}</strong>
-          </span>
-        )}
       </div>
       {current && (
         <small className="muted">
-          {monthName(current)} is still in progress, so it is left out of the change and forecast.
+          {monthName(current)} is still in progress, so it is left out of the change.
         </small>
       )}
     </>

@@ -9,6 +9,7 @@ from app.api.expenses import fetch_expenses, fetch_expenses_in_reporting_currenc
 from app.api.options import convert_rows, get_reporting_currency
 from app.logic import analytics as analytics_logic
 from app.logic import category_change as category_change_logic
+from app.logic import forecast as forecast_logic
 from app.logic import spending_mix as spending_mix_logic
 from app.logic import shop_scorecard as shop_scorecard_logic
 from app.logic import names, price_tracker
@@ -27,14 +28,15 @@ def analytics_trends(
 
 
 def trends_payload(expenses: list[dict]) -> dict:
-    """Monthly totals, change and forecast for converted expenses (shared with /dashboard)."""
+    """Monthly totals and change for converted expenses (shared with /dashboard).
+
+    The forecast has its own endpoint (/analytics/forecast): a range and a track record.
+    """
     monthly = analytics_logic.monthly_totals(expenses)
     return {
         "monthly": monthly,
         "change": analytics_logic.month_over_month_change(monthly),
-        "forecast_next_month": analytics_logic.forecast_next_month(monthly),
-        "forecast_available": analytics_logic.HAS_STATS,
-        # Month still in progress: excluded from change/forecast above.
+        # Month still in progress: excluded from the change above.
         "current_month": analytics_logic.current_month_key(),
     }
 
@@ -47,6 +49,28 @@ def analytics_categories(
     user: models.User = Depends(get_current_user),
 ):
     return analytics_logic.category_breakdown(fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids))
+
+
+@router.get("/analytics/forecast")
+def analytics_forecast(
+    top: int = Query(default=forecast_logic.DEFAULT_TOP, ge=1, le=20),
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Forecast of this month's baseline spending (without one-offs), with a range and a backtest.
+
+    The method is chosen by testing several on your own recent months; the range is how far
+    off it has really been. Needs 3 finished months for a number, 7 for a range. See
+    app.logic.forecast for the details.
+    """
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+    result = forecast_logic.forecast(expenses, top=top)
+    result["currency"] = get_reporting_currency(db, user.id)
+    # Expenses left out because their currency has no exchange rate (same as the other totals).
+    result["unconverted_count"] = unconverted
+    return result
 
 
 @router.get("/analytics/spending-mix")

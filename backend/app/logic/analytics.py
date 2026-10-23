@@ -14,16 +14,6 @@ import pandas as pd
 from app.logic.frame import frame
 from app.core.money import as_decimal, quantize_money
 
-# statsmodels is optional — forecasting degrades gracefully without it,
-# exactly like the HAS_STATS flag in the original module.
-try:
-    from statsmodels.tsa.holtwinters import ExponentialSmoothing
-
-    HAS_STATS = True
-except Exception:
-    HAS_STATS = False
-
-
 def _to_frame(expenses: list[dict]) -> pd.DataFrame:
     if not expenses:
         return pd.DataFrame(columns=["date", "category", "amount"])
@@ -85,28 +75,6 @@ def month_over_month_change(monthly: list[dict], today: date | None = None) -> d
         "pct_change": pct,
         "direction": "up" if delta > 0 else "down" if delta < 0 else "flat",
     }
-
-
-MIN_FORECAST_MONTHS = 3
-
-
-def forecast_next_month(monthly: list[dict], today: date | None = None) -> float | None:
-    """One-step Holt-Winters forecast of the month after the last finished one.
-
-    Fitted on finished months only (so the part-way current month cannot drag
-    the trend down), needs at least MIN_FORECAST_MONTHS of them, and is never
-    negative.
-    """
-    done = complete_months(monthly, today)
-    if not HAS_STATS or len(done) < MIN_FORECAST_MONTHS:
-        return None
-    # Totals are Decimal (Numeric columns); statsmodels needs a float series.
-    series = pd.Series([float(m["total"]) for m in done], dtype="float64")
-    try:
-        fit = ExponentialSmoothing(series, trend="add", seasonal=None).fit()
-        return quantize_money(max(float(fit.forecast(1).iloc[0]), 0.0))
-    except Exception:
-        return None
 
 
 def category_breakdown(expenses: list[dict]) -> list[dict]:

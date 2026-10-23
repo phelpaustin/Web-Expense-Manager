@@ -4,6 +4,8 @@ import { STATUS_COLORS } from '../constants.js'
 import { money } from '../format.js'
 import TrendMeta from '../components/TrendMeta.jsx'
 import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
+import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
+import ForecastPanel from '../components/ForecastPanel.jsx'
 import { SpendingTrendChart, CashFlowChart, CategoryDonut } from '../components/Charts.jsx'
 
 const CHOOSE_SPACES = '__choose__'
@@ -399,17 +401,26 @@ export default function DashboardPage({
                 </strong>
               </span>
             )}
-            {trends.forecast_next_month != null && (
-              <span>
-                forecast next month: <strong>{money(trends.forecast_next_month)}</strong>
-              </span>
-            )}
           </div>
         </section>
       )}
 
+      <ForecastPanel
+        key={`forecast|${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`}
+        scope={dashboardScope}
+        spaceIds={dashboardSpaceIds}
+        refreshKey={trends}
+      />
+
       <CategoryChangePanel
         key={`${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`}
+        scope={dashboardScope}
+        spaceIds={dashboardSpaceIds}
+        refreshKey={trends}
+      />
+
+      <SpendingMixPanel
+        key={`mix|${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`}
         scope={dashboardScope}
         spaceIds={dashboardSpaceIds}
         refreshKey={trends}

@@ -256,6 +256,18 @@ export function fetchCategoryChange({ month, scope, spaceIds } = {}) {
   return request(`/api/analytics/category-change${joined ? `?${joined}` : ''}`)
 }
 
+// Forecast of this month's baseline spending, with a range and a backtest.
+export function fetchForecast({ scope, spaceIds } = {}) {
+  return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)
+}
+
+// Month by month: how much spending is committed (recurring), everyday, or a one-off.
+export function fetchSpendingMix({ months = 12, scope, spaceIds } = {}) {
+  const query = scopeQuery(scope, spaceIds)
+  const joined = [query.replace(/^\?/, ''), `months=${encodeURIComponent(months)}`].filter(Boolean).join('&')
+  return request(`/api/analytics/spending-mix?${joined}`)
+}
+
 export function fetchCategories(scope, spaceIds) {
   return request(`/api/analytics/categories${scopeQuery(scope, spaceIds)}`)
 }

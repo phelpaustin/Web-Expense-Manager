@@ -11,7 +11,7 @@ vi.mock('recharts', () => {
   const Pass = ({ children }) => <div>{children}</div>
   const None = () => null
   return {
-    BarChart: Pass, Bar: Pass, Cell: None, CartesianGrid: None, XAxis: None, YAxis: None, Tooltip: None, ResponsiveContainer: Pass,
+    BarChart: Pass, Bar: Pass, Cell: None, ErrorBar: None, CartesianGrid: None, XAxis: None, YAxis: None, Tooltip: None, ResponsiveContainer: Pass,
     AreaChart: Pass, Area: None, LineChart: Pass, Line: None, PieChart: Pass, Pie: Pass, Legend: None,
   }
 })
@@ -69,7 +69,7 @@ describe('Dashboard: what changed', () => {
   })
 
   it('refreshes when the dashboard data is refreshed', async () => {
-    const t1 = { monthly: [], change: null, forecast_next_month: null }
+    const t1 = { monthly: [], change: null }
     const { rerender } = render(page({ trends: t1 }))
     await screen.findByTestId('change-sentence')
     const before = client.fetchCategoryChange.mock.calls.length

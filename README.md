@@ -182,8 +182,8 @@ GitHub Actions runs both on every push to `main` and on pull requests.
 
 ## Dashboard numbers
 
-- Month-over-month change, the forecast and volatility use **finished months only**. The in-progress month is shown in the chart but left out of those figures (the dashboard says so). Months with no spend between finished months count as zero.
-- The forecast needs at least three finished months and is never negative.
+- Month-over-month change and volatility use **finished months only**. The in-progress month is shown in the chart but left out of those figures (the dashboard says so). Months with no spend between finished months count as zero.
+- **The forecast** is for the month in progress and covers *baseline* spending: committed plus everyday, without one-offs, so one big purchase doesn't inflate it (one-offs are shown beside it). Several simple methods are tested the way they would really be used (forecast a past month from only the months before it); the most accurate wins, preferring the simpler unless another is at least 5% better, and the same errors size the range (80%, widened for few tests). It needs 3 finished months for a number, 5 to test it and 7 for a range; seasonal patterns are only considered with 27+ months. It is never negative, and the category forecasts are scaled to add up to the total.
 - The category suggester matches **whole words** (plural allowed), not substrings, so "Pizza slice" is Dining rather than Transport.
 
 ## Email addresses
