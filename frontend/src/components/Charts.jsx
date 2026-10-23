@@ -72,17 +72,28 @@ export function CashFlowChart({ data }) {
 
 export function CategoryDonut({ data }) {
   const chartData = data.map((c) => ({ name: c.category, value: c.total }))
+  // The legend lives outside the chart: with many categories it wraps onto several rows, and inside
+  // a fixed-height chart it squeezed the ring until its top was cut off.
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <PieChart>
-        <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={100} paddingAngle={2}>
-          {chartData.map((_, i) => (
-            <Cell key={i} fill={PIE[i % PIE.length]} />
-          ))}
-        </Pie>
-        <Tooltip content={<CurrencyTooltip />} />
-        <Legend />
-      </PieChart>
-    </ResponsiveContainer>
+    <div>
+      <ResponsiveContainer width="100%" height={260}>
+        <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+          <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={100} paddingAngle={2}>
+            {chartData.map((_, i) => (
+              <Cell key={i} fill={PIE[i % PIE.length]} />
+            ))}
+          </Pie>
+          <Tooltip content={<CurrencyTooltip />} />
+        </PieChart>
+      </ResponsiveContainer>
+      <ul className="donut-legend" data-testid="category-legend">
+        {chartData.map((d, i) => (
+          <li key={d.name}>
+            <span className="donut-swatch" style={{ background: PIE[i % PIE.length] }} />
+            {d.name}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

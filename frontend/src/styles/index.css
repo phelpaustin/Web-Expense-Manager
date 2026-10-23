@@ -903,6 +903,31 @@ button {
   font-size: 0.85rem;
 }
 
+.donut-legend {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.donut-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.donut-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
 .file-attach {
   display: inline-flex;
   align-items: center;
