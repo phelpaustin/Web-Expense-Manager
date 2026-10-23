@@ -36,6 +36,7 @@ export function useAppData() {
   const [summary, setSummary] = useState(null)
   const [trends, setTrends] = useState(null)
   const [categories, setCategories] = useState([])
+  const [categoryMonths, setCategoryMonths] = useState([])
   const [budgets, setBudgets] = useState([])
   const [error, setError] = useState(null)
   const [income, setIncome] = useState([])
@@ -78,6 +79,7 @@ export function useAppData() {
     setSummary(d.summary)
     setTrends(d.trends)
     setCategories(d.categories)
+    setCategoryMonths(d.category_months || [])
     setBudgets(d.budgets)
     setMetrics(d.metrics)
     setPeriodStatus(d.period_status)
@@ -165,6 +167,7 @@ export function useAppData() {
     summary,
     trends,
     categories,
+    categoryMonths,
     budgets,
     error,
     setError,

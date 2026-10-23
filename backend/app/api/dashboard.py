@@ -50,6 +50,7 @@ def dashboard(
         "summary": summary_payload(expenses, unconverted, reporting_currency(opts)),
         "trends": trends_payload(expenses),
         "categories": analytics_logic.category_breakdown(expenses),
+        "category_months": analytics_logic.category_by_month(expenses),
         "budgets": budgets_logic.calculate_budget_status(expenses, budgets, None),
         "metrics": metrics_logic.summary(expenses, income),
         "period_status": budgets_logic.period_budget_status(

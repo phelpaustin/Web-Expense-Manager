@@ -57,7 +57,37 @@ def test_dashboard_matches_the_separate_endpoints(client, make_user, scope):
 
     expected = _separate(client, h, query)
     expected["alerts"] = client.get("/api/alerts", headers=h).json()  # alerts always cover every space
+    # category_months exists only on the combined endpoint (it feeds the period picker); it is
+    # checked separately below.
+    months = body.pop("category_months")
     assert body == expected
+
+    # Its rows add up to the all-time category totals the breakdown already shows.
+    per_category = {}
+    for row in months:
+        per_category[row["category"]] = per_category.get(row["category"], Decimal(0)) + Decimal(str(row["total"]))
+    assert {c: float(t) for c, t in per_category.items()} == pytest.approx(
+        {c["category"]: float(c["total"]) for c in expected["categories"]}
+    )
+    assert [r["month"] for r in months] == sorted(r["month"] for r in months)
+
+
+def test_category_months_groups_by_calendar_month_and_category():
+    from app.logic import analytics as analytics_logic
+
+    rows = [
+        {"date": dt.date(2026, 1, 5), "category": "Groceries", "amount": Decimal("10.00")},
+        {"date": dt.date(2026, 1, 20), "category": "Groceries", "amount": Decimal("5.50")},
+        {"date": dt.date(2026, 1, 21), "category": "Rent", "amount": Decimal("100")},
+        {"date": dt.date(2026, 2, 1), "category": "Groceries", "amount": Decimal("7")},
+    ]
+    out = analytics_logic.category_by_month(rows)
+    assert [(r["month"], r["category"], float(r["total"])) for r in out] == [
+        ("2026-01", "Groceries", 15.5),
+        ("2026-01", "Rent", 100.0),
+        ("2026-02", "Groceries", 7.0),
+    ]
+    assert analytics_logic.category_by_month([]) == []
 
 
 def test_alerts_can_be_left_out(client, make_user):
@@ -73,6 +103,7 @@ def test_dashboard_for_a_user_with_no_data(client, make_user):
     body = client.get("/api/dashboard", headers=h).json()
     assert body["summary"]["count"] == 0
     assert body["categories"] == []
+    assert body["category_months"] == []
     assert body["alerts"] == []
 
 

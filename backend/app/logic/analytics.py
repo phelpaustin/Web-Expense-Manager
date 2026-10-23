@@ -77,6 +77,21 @@ def month_over_month_change(monthly: list[dict], today: date | None = None) -> d
     }
 
 
+def category_by_month(expenses: list[dict]) -> list[dict]:
+    """Spend per (calendar month, category), oldest month first. The dashboard sums these rows
+    for whichever period the user picks (a month, a year, the last 12 months...), so changing
+    the period needs no new request."""
+    df = _to_frame(expenses)
+    if df.empty:
+        return []
+    df["month"] = df["date"].dt.to_period("M").astype(str)
+    grouped = df.groupby(["month", "category"])["amount"].sum().reset_index().sort_values(["month", "category"])
+    return [
+        {"month": row.month, "category": row.category, "total": quantize_money(row.amount)}
+        for row in grouped.itertuples()
+    ]
+
+
 def category_breakdown(expenses: list[dict]) -> list[dict]:
     """Per-category totals, share, and avg cost per purchase (was category_insights)."""
     df = _to_frame(expenses)

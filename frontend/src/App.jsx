@@ -113,6 +113,7 @@ export default function App() {
               budgets={data.budgets}
               trends={data.trends}
               categories={data.categories}
+              categoryMonths={data.categoryMonths}
               onSetBudget={budgetHandlers.handleSetBudget}
               onDeleteBudget={budgetHandlers.handleDeleteBudget}
               metrics={data.metrics}
