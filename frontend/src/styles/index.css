@@ -2655,3 +2655,30 @@ label.link-btn input[type='file'] {
 .import-badge-error { background: rgba(220, 38, 38, 0.18); }
 .import-duplicate, .import-skipped { opacity: 0.65; }
 @media (max-width: 640px) { .import-rule { grid-template-columns: 1fr; } .import-field.import-wide { grid-column: auto; } }
+
+/* Chance of going over. The global .subtitle has a negative top margin (it tucks under a heading),
+   which pulled each row's explanation up onto its headline. Inside this list it is plain text. */
+.risk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.risk-row {
+  margin: 0.9rem 0;
+}
+
+.risk-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+}
+
+.risk-row .subtitle {
+  margin: 0;
+}
+
+.risk-row > .subtitle {
+  margin-top: 0.2rem;
+}
