@@ -42,6 +42,15 @@ describe('routes after the restructure', () => {
     expect(screen.getByRole('heading', { level: 1, name: /Settings/ })).toBeTruthy()
   })
 
+  it('sends /prices and /shops to their tabs in Insights', async () => {
+    const { unmount } = renderAt('/prices')
+    expect(await screen.findByRole('tab', { name: 'Prices', selected: true })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: /Insights/ })).toBeTruthy()
+    unmount()
+    renderAt('/shops')
+    expect(await screen.findByRole('tab', { name: 'Shops', selected: true })).toBeTruthy()
+  })
+
   it('shows the waiting-invitation badge on Settings in the sidebar', async () => {
     renderAt('/')
     expect(await screen.findByRole('status', { name: '1 invitation waiting' })).toBeTruthy()

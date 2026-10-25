@@ -17,7 +17,7 @@ vi.mock('recharts', () => {
 })
 
 import * as client from '../api/client.js'
-import DashboardPage from '../pages/DashboardPage.jsx'
+import InsightsPage from '../pages/InsightsPage.jsx'
 
 const CHANGE = (month) => ({
   month, compare_month: '2026-08', partial: false, through_day: null, available: true, currency: 'SEK', unconverted_count: 0,
@@ -28,7 +28,8 @@ const CHANGE = (month) => ({
 
 function page(props = {}) {
   return (
-    <DashboardPage
+    <InsightsPage
+      initialTab="categories"
       currencies={['SEK']} displayCurrency="SEK" summary={null} budgets={[]} trends={null} categories={[]}
       onSetBudget={vi.fn()} onDeleteBudget={vi.fn()} metrics={null} periodStatus={null} budgetConfig={{ period: 'Monthly', rollover: false }}
       onSetBudgetConfig={vi.fn()} groups={[]} trips={[]} dashboardScope="all" onSetDashboardScope={vi.fn()}
@@ -42,7 +43,7 @@ beforeEach(() => {
   client.fetchCategoryChange.mockImplementation(async ({ month }) => CHANGE(month || '2026-09'))
 })
 
-describe('Dashboard: what changed', () => {
+describe('Insights: what changed', () => {
   it('shows the category change panel for the current scope', async () => {
     render(page({ dashboardScope: 'personal' }))
 

@@ -38,14 +38,17 @@ function renderLayout(props = {}) {
 beforeEach(() => vi.clearAllMocks())
 
 describe('sidebar', () => {
-  it('is grouped, with Expense Spaces moved out of it', () => {
+  it('is grouped, with Expense Spaces moved into Settings and Prices and Shops into Insights', () => {
     renderLayout()
     const nav = screen.getByRole('navigation', { name: 'Main' })
     const titles = [...nav.querySelectorAll('.nav-group-title')].map((n) => n.textContent)
-    expect(titles).toEqual(['Money', 'Insights'])
+    expect(titles).toEqual(['Money'])
     const labels = within(nav).getAllByRole('link').map((l) => l.textContent.replace(l.querySelector('.nav-icon').textContent, '').trim())
-    expect(labels).toEqual(['Dashboard', 'Expenses', 'Bills', 'Income', 'Recurring', 'Import', 'Prices', 'Shops', 'Trips', 'Settings'])
+    expect(labels).toEqual(['Dashboard', 'Expenses', 'Bills', 'Income', 'Recurring', 'Import', 'Insights', 'Trips', 'Settings'])
     expect(screen.queryByRole('link', { name: /Expense Spaces/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Prices/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Shops/ })).toBeNull()
+    expect(screen.getByRole('link', { name: /Insights/ }).getAttribute('href')).toBe('/insights')
   })
 
   it('shows a badge on Settings with the number of invitations waiting', () => {

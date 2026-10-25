@@ -7,7 +7,7 @@ import TidyNames from '../components/TidyNames.jsx'
 const PAGE_SIZE = 200
 const TREND_ICON = { Increasing: '📈', Decreasing: '📉', Stable: '➡️' }
 
-export default function PriceTrackerPage({ onError }) {
+export default function PriceTrackerPage({ onError, embedded = false }) {
   const [trends, setTrends] = useState([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -44,7 +44,7 @@ export default function PriceTrackerPage({ onError }) {
 
   return (
     <>
-      <h1 className="page-title">📈 Price tracker</h1>
+      {!embedded && <h1 className="page-title">📈 Price tracker</h1>}
       <p className="subtitle">
         See how prices for items you've bought more than once have changed over time, and compare shops. Amounts are
         converted to your base currency. Prices are compared across purchases of the same item and category, in units

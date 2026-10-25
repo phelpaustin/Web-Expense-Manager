@@ -17,7 +17,7 @@ vi.mock('recharts', () => {
 })
 
 import * as client from '../api/client.js'
-import DashboardPage from '../pages/DashboardPage.jsx'
+import InsightsPage from '../pages/InsightsPage.jsx'
 
 const FORECAST = {
   available: false, reason: 'no_spending', month: '2026-10', months_available: 0, level: 80,
@@ -30,7 +30,8 @@ const CHANGE = {
 
 function page(props = {}) {
   return (
-    <DashboardPage
+    <InsightsPage
+      initialTab="forecast"
       currencies={['SEK']} displayCurrency="SEK" summary={null} budgets={[]} trends={null} categories={[]}
       onSetBudget={vi.fn()} onDeleteBudget={vi.fn()} metrics={null} periodStatus={null} budgetConfig={{ period: 'Monthly', rollover: false }}
       onSetBudgetConfig={vi.fn()} groups={[]} trips={[]} dashboardScope="all" onSetDashboardScope={vi.fn()}
@@ -45,7 +46,7 @@ beforeEach(() => {
   client.fetchForecast.mockImplementation(async () => FORECAST)
 })
 
-describe('Dashboard: forecast', () => {
+describe('Insights: forecast', () => {
   it('shows the forecast panel for the current scope and combined spaces', async () => {
     render(page({ dashboardScope: 'personal', dashboardSpaceIds: ['personal', 3] }))
 
@@ -64,7 +65,7 @@ describe('Dashboard: forecast', () => {
     await waitFor(() => expect(client.fetchForecast.mock.calls.length).toBe(before + 1))
   })
 
-  it('no longer shows the old one-number forecast anywhere on the dashboard', async () => {
+  it('no longer shows the old one-number forecast anywhere on the page', async () => {
     const trends = {
       monthly: [{ month: '2026-08', total: 1000 }, { month: '2026-09', total: 1200 }], current_month: '2026-10', forecast_next_month: 4200,
       change: { last_month: '2026-09', previous_month: '2026-08', pct_change: 20, direction: 'up' },

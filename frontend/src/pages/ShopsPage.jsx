@@ -5,7 +5,7 @@ import { PERIODS, DEFAULT_MONTHS, priceLevel, describeOpportunity, cheapestOn } 
 
 const TONE_CLASS = { good: 'down', bad: 'up' } // a cheaper shop is good news, like spending going down
 
-export default function ShopsPage({ onError }) {
+export default function ShopsPage({ onError, embedded = false }) {
   const [months, setMonths] = useState(DEFAULT_MONTHS)
   const [data, setData] = useState(null)
   const latest = useRef(0)
@@ -25,7 +25,7 @@ export default function ShopsPage({ onError }) {
 
   return (
     <>
-      <h1>🏪 Shops</h1>
+      {!embedded && <h1>🏪 Shops</h1>}
       <p className="subtitle">
         Where your money goes, how often you shop there, and which shops are cheaper for the things you buy at more
         than one. ICA, ICA Maxi and Ica Nara are separate shops unless you merge them on the Prices page.

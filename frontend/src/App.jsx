@@ -22,8 +22,7 @@ const RecurringPage = lazy(() => import('./pages/RecurringPage.jsx'))
 const BillsPage = lazy(() => import('./pages/BillsPage.jsx'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage.jsx'))
 const TripsPage = lazy(() => import('./pages/TripsPage.jsx'))
-const PriceTrackerPage = lazy(() => import('./pages/PriceTrackerPage.jsx'))
-const ShopsPage = lazy(() => import('./pages/ShopsPage.jsx'))
+const InsightsPage = lazy(() => import('./pages/InsightsPage.jsx'))
 const ImportPage = lazy(() => import('./pages/ImportPage.jsx'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.jsx'))
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage.jsx'))
@@ -36,6 +35,13 @@ function SettingsRoute(props) {
   const [params] = useSearchParams()
   const tab = params.get('tab') || 'account'
   return <SettingsPage key={tab} {...props} initialTab={tab} />
+}
+
+// Insights opens on the tab named in the address (?tab=shops); /prices and /shops redirect to their tabs.
+function InsightsRoute(props) {
+  const [params] = useSearchParams()
+  const tab = params.get('tab') || 'overview'
+  return <InsightsPage key={tab} {...props} initialTab={tab} />
 }
 
 // This component only wires fetched data + handlers (from the hooks below)
@@ -121,8 +127,6 @@ export default function App() {
               summary={data.summary}
               budgets={data.budgets}
               trends={data.trends}
-              categories={data.categories}
-              categoryMonths={data.categoryMonths}
               onSetBudget={budgetHandlers.handleSetBudget}
               onDeleteBudget={budgetHandlers.handleDeleteBudget}
               metrics={data.metrics}
@@ -243,8 +247,27 @@ export default function App() {
             />
           }
         />
-        <Route path="prices" element={<PriceTrackerPage onError={data.setError} />} />
-        <Route path="shops" element={<ShopsPage onError={data.setError} />} />
+        <Route
+          path="insights"
+          element={
+            <InsightsRoute
+              trends={data.trends}
+              metrics={data.metrics}
+              categories={data.categories}
+              categoryMonths={data.categoryMonths}
+              groups={data.groups}
+              trips={data.trips}
+              dashboardScope={data.dashboardScope}
+              onSetDashboardScope={data.handleSetDashboardScope}
+              dashboardSpaceIds={data.dashboardSpaceIds}
+              onSetDashboardSpaceIds={data.handleSetDashboardSpaceIds}
+              onError={data.setError}
+            />
+          }
+        />
+        {/* Prices and Shops became tabs of Insights; old links and bookmarks still land there. */}
+        <Route path="prices" element={<Navigate to="/insights?tab=prices" replace />} />
+        <Route path="shops" element={<Navigate to="/insights?tab=shops" replace />} />
         <Route
           path="import"
           element={<ImportPage options={data.options} onImported={() => data.loadAll([...EXPENSE_PARTS, PART.INCOME])} onError={data.setError} />}

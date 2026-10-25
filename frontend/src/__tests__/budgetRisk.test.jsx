@@ -20,6 +20,7 @@ import * as client from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
 import { levelLabel, sinceLabel, percent, describeRisk, headline, describeMethod, periodUnit } from '../budgetRisk.js'
 import BudgetRiskPanel from '../components/BudgetRiskPanel.jsx'
+import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from '../pages/DashboardPage.jsx'
 import { useAppData } from '../hooks/useAppData.js'
 
@@ -132,12 +133,14 @@ describe('BudgetRiskPanel', () => {
 
 function page(props = {}) {
   return (
-    <DashboardPage
-      currencies={['SEK']} displayCurrency="SEK" summary={null} budgets={[]} trends={null} categories={[]}
-      onSetBudget={vi.fn()} onDeleteBudget={vi.fn()} metrics={null} periodStatus={null} budgetConfig={{ period: 'Monthly', rollover: false }}
-      onSetBudgetConfig={vi.fn()} groups={[]} trips={[]} dashboardScope="all" onSetDashboardScope={vi.fn()}
-      dashboardSpaceIds={[]} onSetDashboardSpaceIds={vi.fn()} {...props}
-    />
+    <MemoryRouter>
+      <DashboardPage
+        currencies={['SEK']} displayCurrency="SEK" summary={null} budgets={[]} trends={null}
+        onSetBudget={vi.fn()} onDeleteBudget={vi.fn()} metrics={null} periodStatus={null} budgetConfig={{ period: 'Monthly', rollover: false }}
+        onSetBudgetConfig={vi.fn()} groups={[]} trips={[]} dashboardScope="all" onSetDashboardScope={vi.fn()}
+        dashboardSpaceIds={[]} onSetDashboardSpaceIds={vi.fn()} {...props}
+      />
+    </MemoryRouter>
   )
 }
 

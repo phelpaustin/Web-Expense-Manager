@@ -1,18 +1,12 @@
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { STATUS_COLORS } from '../constants.js'
 import { money } from '../format.js'
 import TrendMeta from '../components/TrendMeta.jsx'
-import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
-import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
-import ForecastPanel from '../components/ForecastPanel.jsx'
+import ScopePicker from '../components/ScopePicker.jsx'
 import BudgetRiskPanel from '../components/BudgetRiskPanel.jsx'
-import { SpendingTrendChart, CashFlowChart, CategoryDonut } from '../components/Charts.jsx'
-import {
-  PERIOD_PRESETS, PICK_MONTH, PICK_YEAR, availablePeriods, categoryTotals, monthLabel,
-} from '../categoryPeriod.js'
-
-const CHOOSE_SPACES = '__choose__'
+import { SpendingTrendChart } from '../components/Charts.jsx'
 const TOTAL_BUDGET_KEY = '__total_monthly__'
 
 export default function DashboardPage({
@@ -21,8 +15,6 @@ export default function DashboardPage({
   summary,
   budgets,
   trends,
-  categories,
-  categoryMonths = [],
   onSetBudget,
   onDeleteBudget,
   metrics,
@@ -37,8 +29,6 @@ export default function DashboardPage({
   dashboardSpaceIds,
   onSetDashboardSpaceIds,
 }) {
-  const [choosingSpaces, setChoosingSpaces] = useState(false)
-  const [pendingSelection, setPendingSelection] = useState(dashboardSpaceIds || [])
   const [budgetFormOpen, setBudgetFormOpen] = useState(false)
   const [budgetType, setBudgetType] = useState('total')
   const [newBudgetCategory, setNewBudgetCategory] = useState('')
@@ -46,14 +36,6 @@ export default function DashboardPage({
   const [newBudgetCurrency, setNewBudgetCurrency] = useState('')
   const [savingBudget, setSavingBudget] = useState(false)
   const [budgetFormError, setBudgetFormError] = useState('')
-  // Category breakdown period. 'all' keeps the card's original behaviour until the user changes it.
-  const [catPeriod, setCatPeriod] = useState('all')
-  const [catValue, setCatValue] = useState('')
-  const catAvailable = availablePeriods(categoryMonths)
-  // Fall back to the all-time totals if the per-month rows aren't there (e.g. an older server).
-  const catData = categoryMonths.length ? categoryTotals(categoryMonths, catPeriod, catValue) : categories
-  const multiActive = dashboardSpaceIds && dashboardSpaceIds.length > 0
-  const allSpaces = (groups || []).concat(trips || [])
   const hasTotalBudget = Boolean(periodStatus)
   const showBudgetForm = budgets.length === 0 || budgetFormOpen
 
@@ -99,96 +81,17 @@ export default function DashboardPage({
     }
   }
 
-  function spaceLabel(id) {
-    if (id === 'personal') return 'Personal expenses'
-    return allSpaces.find((g) => String(g.id) === String(id))?.name || id
-  }
-
-  function handleSelectChange(value) {
-    if (value === CHOOSE_SPACES) {
-      setPendingSelection(dashboardSpaceIds && dashboardSpaceIds.length ? dashboardSpaceIds : ['personal'])
-      setChoosingSpaces(true)
-      return
-    }
-    setChoosingSpaces(false)
-    onSetDashboardScope(value)
-  }
-
-  function toggleSpace(id) {
-    setPendingSelection((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]))
-  }
-
-  function applySelection() {
-    onSetDashboardSpaceIds(pendingSelection)
-    setChoosingSpaces(false)
-  }
-
   return (
     <>
-      <div className="dashboard-header">
-        <h1 className="page-title">📊 Dashboard</h1>
-        {allSpaces.length > 0 && (
-          <div className="scope-picker">
-            <select
-              className="scope-select"
-              value={multiActive ? CHOOSE_SPACES : dashboardScope}
-              onChange={(e) => handleSelectChange(e.target.value)}
-              title="Show data for personal expenses only, one Expense Space, or a combined view"
-            >
-              <option value="all">All expenses</option>
-              <option value="personal">Personal expenses</option>
-              {allSpaces.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-              <option value={CHOOSE_SPACES}>Choose spaces…</option>
-            </select>
-            {multiActive && !choosingSpaces && (
-              <span className="subtitle">Selected spaces: {dashboardSpaceIds.map(spaceLabel).join(', ')}</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {choosingSpaces && (
-        <section className="panel">
-          <h2>🗂️ Choose Expense Spaces</h2>
-          <p className="subtitle">Combine two or more spaces into one view.</p>
-          <ul className="space-checklist">
-            <li>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={pendingSelection.includes('personal')}
-                  onChange={() => toggleSpace('personal')}
-                />
-                Personal expenses
-              </label>
-            </li>
-            {allSpaces.map((g) => (
-              <li key={g.id}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={pendingSelection.includes(String(g.id))}
-                    onChange={() => toggleSpace(String(g.id))}
-                  />
-                  {g.name}
-                </label>
-              </li>
-            ))}
-          </ul>
-          <div className="auto-cat-row">
-            <button type="button" onClick={applySelection} disabled={pendingSelection.length === 0}>
-              Apply
-            </button>
-            <button type="button" className="ghost-btn" onClick={() => setChoosingSpaces(false)}>
-              Cancel
-            </button>
-          </div>
-        </section>
-      )}
+      <ScopePicker
+        title="📊 Dashboard"
+        groups={groups}
+        trips={trips}
+        dashboardScope={dashboardScope}
+        onSetDashboardScope={onSetDashboardScope}
+        dashboardSpaceIds={dashboardSpaceIds}
+        onSetDashboardSpaceIds={onSetDashboardSpaceIds}
+      />
 
       {summary && summary.unconverted_count > 0 && (
         <div className="auth-error" role="alert">
@@ -197,43 +100,30 @@ export default function DashboardPage({
           {summary.unconverted_count === 1 ? 'it' : 'them'} on the Expenses page and choose a supported currency.
         </div>
       )}
-      {summary && (
+      {(summary || metrics) && (
         <section className="cards">
-          <div className="card">
-            <span className="card-label">Total spent</span>
-            <span className="card-value">{money(summary.total)}</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Transactions</span>
-            <span className="card-value">{summary.count}</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Categories</span>
-            <span className="card-value">{Object.keys(summary.by_category).length}</span>
-          </div>
-          {metrics && (
+          {summary && (
             <div className="card">
-              <span className="card-label">Net this month</span>
-              <span className="card-value card-value--money">{money(metrics.monthly_savings)}</span>
+              <span className="card-label">Total spent</span>
+              <span className="card-value">{money(summary.total)}</span>
             </div>
           )}
-        </section>
-      )}
-
-      {metrics && (
-        <section className="cards">
-          <div className="card">
-            <span className="card-label">Savings rate</span>
-            <span className="card-value">{metrics.savings_rate}%</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Projected spend</span>
-            <span className="card-value">{money(metrics.monthly_projection)}</span>
-          </div>
-          <div className="card">
-            <span className="card-label">Spend volatility</span>
-            <span className="card-value">{metrics.volatility_cv}%</span>
-          </div>
+          {metrics && (
+            <>
+              <div className="card">
+                <span className="card-label">Net this month</span>
+                <span className="card-value card-value--money">{money(metrics.monthly_savings)}</span>
+              </div>
+              <div className="card">
+                <span className="card-label">Savings rate</span>
+                <span className="card-value">{metrics.savings_rate}%</span>
+              </div>
+              <div className="card">
+                <span className="card-label">Projected spend</span>
+                <span className="card-value">{money(metrics.monthly_projection)}</span>
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -404,7 +294,10 @@ export default function DashboardPage({
 
       {trends && (
         <section className="panel">
-          <h2>📈 Spending trend</h2>
+          <div className="period-header">
+            <h2>📈 Spending trend</h2>
+            <Link to="/insights">More in Insights</Link>
+          </div>
           <SpendingTrendChart data={trends.monthly} />
           <div className="trend-meta">
             {trends.change && (
@@ -416,86 +309,6 @@ export default function DashboardPage({
               </span>
             )}
           </div>
-        </section>
-      )}
-
-      <ForecastPanel
-        key={`forecast|${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`}
-        scope={dashboardScope}
-        spaceIds={dashboardSpaceIds}
-        refreshKey={trends}
-      />
-
-      <CategoryChangePanel
-        key={`${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`}
-        scope={dashboardScope}
-        spaceIds={dashboardSpaceIds}
-        refreshKey={trends}
-      />
-
-      <SpendingMixPanel
-        key={`mix|${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`}
-        scope={dashboardScope}
-        spaceIds={dashboardSpaceIds}
-        refreshKey={trends}
-      />
-
-      {metrics && metrics.cash_flow && metrics.cash_flow.length > 0 && (
-        <section className="panel">
-          <h2>💸 Cash flow</h2>
-          <CashFlowChart data={metrics.cash_flow} />
-        </section>
-      )}
-
-      {categories.length > 0 && (
-        <section className="panel">
-          <div className="period-header">
-            <h2>🏆 Category breakdown</h2>
-            <div className="period-controls" data-testid="category-period">
-              <select
-                aria-label="Category breakdown period"
-                value={catPeriod}
-                onChange={(e) => {
-                  const next = e.target.value
-                  setCatPeriod(next)
-                  // Preselect the newest month or year that has data when switching to a picker.
-                  if (next === PICK_MONTH) setCatValue(catAvailable.months[0] || '')
-                  if (next === PICK_YEAR) setCatValue(catAvailable.years[0] || '')
-                }}
-              >
-                {PERIOD_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-                <option value={PICK_MONTH}>Choose a month…</option>
-                <option value={PICK_YEAR}>Choose a year…</option>
-              </select>
-              {catPeriod === PICK_MONTH && (
-                <select aria-label="Month" value={catValue} onChange={(e) => setCatValue(e.target.value)}>
-                  {catAvailable.months.map((k) => (
-                    <option key={k} value={k}>
-                      {monthLabel(k)}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {catPeriod === PICK_YEAR && (
-                <select aria-label="Year" value={catValue} onChange={(e) => setCatValue(e.target.value)}>
-                  {catAvailable.years.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </div>
-          {catData.length > 0 ? (
-            <CategoryDonut data={catData} />
-          ) : (
-            <p className="subtitle">No spending in this period.</p>
-          )}
         </section>
       )}
     </>

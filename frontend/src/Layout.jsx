@@ -15,13 +15,7 @@ const NAV = [
       { to: '/import', label: 'Import', icon: '📥' },
     ],
   },
-  {
-    title: 'Insights',
-    links: [
-      { to: '/prices', label: 'Prices', icon: '📈' },
-      { to: '/shops', label: 'Shops', icon: '🏪' },
-    ],
-  },
+  { links: [{ to: '/insights', label: 'Insights', icon: '📈' }] },
   { links: [{ to: '/trips', label: 'Trips', icon: '🧳' }] },
   { links: [{ to: '/settings', label: 'Settings', icon: '⚙️', badge: 'invitations' }] },
 ]

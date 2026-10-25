@@ -17,7 +17,7 @@ vi.mock('recharts', () => {
 })
 
 import * as client from '../api/client.js'
-import DashboardPage from '../pages/DashboardPage.jsx'
+import InsightsPage from '../pages/InsightsPage.jsx'
 
 const MIX = {
   window: { from: '2025-11-01', to: '2026-10-16', months: 12 }, available: true, currency: 'SEK', unconverted_count: 0,
@@ -32,7 +32,8 @@ const CHANGE = {
 
 function page(props = {}) {
   return (
-    <DashboardPage
+    <InsightsPage
+      initialTab="overview"
       currencies={['SEK']} displayCurrency="SEK" summary={null} budgets={[]} trends={null} categories={[]}
       onSetBudget={vi.fn()} onDeleteBudget={vi.fn()} metrics={null} periodStatus={null} budgetConfig={{ period: 'Monthly', rollover: false }}
       onSetBudgetConfig={vi.fn()} groups={[]} trips={[]} dashboardScope="all" onSetDashboardScope={vi.fn()}
@@ -47,7 +48,7 @@ beforeEach(() => {
   client.fetchSpendingMix.mockImplementation(async () => MIX)
 })
 
-describe('Dashboard: committed vs everyday', () => {
+describe('Insights: committed vs everyday', () => {
   it('shows the panel for the current scope', async () => {
     render(page({ dashboardScope: 'personal' }))
 
