@@ -23,6 +23,7 @@ Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supa
 - `backend/tests/` – pytest; `conftest.py` provides `client`, `make_user`, fake FX.
 - `frontend/src/api/client.js` – the only place that calls `fetch`; attaches the token, handles 401 expiry.
 - `frontend/src/hooks/` – app state and handlers. `useAppData` owns fetched data and `loadAll()`; `useAuth` the session; `use*Handlers` (expense, income, recurring, bills, trip, group, budget) are mutations that call `loadAll(parts)` afterwards, naming only what changed (`PART`, `EXPENSE_PARTS`). Pages are `React.lazy` chunks.
+- `frontend/src/components/expenses/` – the pieces of the Expenses page (add panel, filters, bulk edit, table, row, pager, option lists). They only render; all state and handlers stay in `pages/ExpensesPage.jsx` and arrive as props.
 - `frontend/src/App.jsx` – wires hooks to routes; `pages/` are screens, `components/` shared UI. `format.js` formats money.
 
 ## Conventions
@@ -38,7 +39,7 @@ Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supa
 
 ## Token-saving rules (read this before exploring)
 - Do NOT read `frontend/package-lock.json`, `backend/alembic/versions/*` (unless adding or debugging a migration), `**/__tests__/*` and `backend/tests/*` (unless asked, or editing the code they cover), `frontend/src/styles/index.css`, `dist/`, `node_modules/`.
-- Use Grep to locate code, then read only the needed line range. Large files: `ExpensesPage.jsx`, `expenses.py`, `bills.py`, `client.js`.
+- Use Grep to locate code, then read only the needed line range. Large files: `expenses.py`, `bills.py`, `client.js`.
 - Don't run the full backend suite for a small change; run the matching test file, then the full suite once at the end.
 - Don't print whole command output; pipe through `tail`/`head`.
 - `README.md` is long; the map above is enough for orientation.

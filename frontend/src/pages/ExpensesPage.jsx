@@ -1,36 +1,15 @@
-import UnitSelect from '../components/UnitSelect.jsx'
-import CurrencySelect from '../components/CurrencySelect.jsx'
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { TotalOnlyBadge } from '../components/BillStatus.jsx'
 import { money } from '../format.js'
-import DatePeriodFilter from '../components/DatePeriodFilter.jsx'
 import { EMPTY_DATE_FILTER, datesFor } from '../datePeriod.js'
-import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems, viewReceipt } from '../api/client.js'
-
-const PAGE_SIZES = [10, 25, 50, 100]
-
-// '__keep__' for the space means "leave it where it is"; '' is personal.
-const KEEP = '__keep__'
-const EMPTY_BULK = { category: '', subcategory: '', shop: '', description: '', group_id: KEEP }
-
-const SPACE_TYPE_ICONS = { household: '🏠', business: '💼', rental: '🏢', trip: '✈️', custom: '📁' }
-
-// A tick box that can show "some of these are selected". Clicking it never toggles the bill group it sits in.
-function SelectBox({ state, onChange, label }) {
-  return (
-    <input
-      type="checkbox"
-      aria-label={label}
-      checked={state === 'all'}
-      ref={(el) => {
-        if (el) el.indeterminate = state === 'some'
-      }}
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => onChange(e.target.checked)}
-    />
-  )
-}
+import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems } from '../api/client.js'
+import AddExpensePanel from '../components/expenses/AddExpensePanel.jsx'
+import BulkEditPanel from '../components/expenses/BulkEditPanel.jsx'
+import ExpenseFilters from '../components/expenses/ExpenseFilters.jsx'
+import ExpensePager from '../components/expenses/ExpensePager.jsx'
+import ExpenseTable from '../components/expenses/ExpenseTable.jsx'
+import OptionLists from '../components/expenses/OptionLists.jsx'
+import { EMPTY_BULK, KEEP } from '../components/expenses/shared.jsx'
 
 export default function ExpensesPage({
   form,
@@ -546,178 +525,28 @@ export default function ExpensesPage({
     }
   }
 
-  function renderExpenseRow(e) {
-    if (editingId === e.id) {
-      return (
-        <tr key={e.id} className="editing">
-          <td colSpan={COLS}>
-            <div className="edit-grid">
-              <label className="edit-field">
-                <span>Date</span>
-                <input
-                  type="date"
-                  value={editForm.date}
-                  onChange={(ev) => setEditForm({ ...editForm, date: ev.target.value })}
-                />
-              </label>
-              <label className="edit-field">
-                <span>Category</span>
-                <input
-                  type="text"
-                  list="cat-options"
-                  value={editForm.category}
-                  onChange={(ev) => setEditForm({ ...editForm, category: ev.target.value })}
-                />
-              </label>
-              <label className="edit-field">
-                <span>Subcategory</span>
-                <input
-                  type="text"
-                  list="subcat-edit-options"
-                  value={editForm.subcategory}
-                  onChange={(ev) => setEditForm({ ...editForm, subcategory: ev.target.value })}
-                />
-              </label>
-              <label className="edit-field">
-                <span>Shop</span>
-                <input
-                  type="text"
-                  list="shop-options"
-                  value={editForm.shop}
-                  onChange={(ev) => setEditForm({ ...editForm, shop: ev.target.value })}
-                />
-              </label>
-              <label className="edit-field edit-field--wide">
-                <span>Item name</span>
-                <input
-                  type="text"
-                  value={editForm.description}
-                  onChange={(ev) => setEditForm({ ...editForm, description: ev.target.value })}
-                />
-              </label>
-              {allSpaces.length > 0 && (
-                <label className="edit-field">
-                  <span>Space</span>
-                  <select
-                    value={editForm.group_id || ''}
-                    onChange={(ev) => setEditForm({ ...editForm, group_id: ev.target.value })}
-                    title="Move this expense to a different Expense Space (or personal)"
-                  >
-                    <option value="">Personal expenses</option>
-                    {allSpaces
-                      .filter((g) => g.role !== 'viewer')
-                      .map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              )}
-              <label className="edit-field">
-                <span>Quantity</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={editForm.quantity}
-                  onChange={(ev) => setEditForm({ ...editForm, quantity: ev.target.value })}
-                />
-              </label>
-              <label className="edit-field">
-                <span>Unit</span>
-                <UnitSelect value={editForm.unit} units={options.units} onChange={(u) => setEditForm({ ...editForm, unit: u })} />
-              </label>
-              <label className="edit-field">
-                <span>Amount</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={editForm.amount}
-                  onChange={(ev) => setEditForm({ ...editForm, amount: ev.target.value })}
-                />
-              </label>
-              <label className="edit-field">
-                <span>Currency</span>
-                <CurrencySelect
-                  value={editForm.currency}
-                  onChange={(c) => setEditForm({ ...editForm, currency: c })}
-                  currencies={options.currencies}
-                  allowDefault={false}
-                />
-              </label>
-            </div>
-            <div className="edit-actions">
-              <button className="icon-btn save" onClick={() => afterMutation(saveEdit(e.id))} title="Save">
-                ✓ Save
-              </button>
-              <button className="icon-btn" onClick={cancelEdit} title="Cancel">
-                ✕ Cancel
-              </button>
-            </div>
-          </td>
-        </tr>
-      )
+  const rowProps = {
+      editingId,
+      editForm,
+      setEditForm,
+      startEdit,
+      cancelEdit,
+      saveEdit,
+      onDelete,
+      options,
+      selectMode,
+      groupName,
+      groupSpaceType,
+      allSpaces,
+      canEditExpense,
+      isSelected,
+      COLS,
+      setSelected,
+      itemiseFromExpense,
+      afterMutation,
+      afterDelete,
     }
-    return (
-      <tr
-        key={e.id}
-        className={`${e.bill_total_only ? 'row-total-only' : ''}${selectMode && isSelected(e.id) ? ' row-selected' : ''}`.trim()}
-      >
-        {selectMode && (
-          <td className="select-cell">
-            {canEditExpense(e) && (
-              <SelectBox
-                state={isSelected(e.id) ? 'all' : 'none'}
-                label={`Select ${e.description || e.category}`}
-                onChange={(on) => setSelected([e.id], on)}
-              />
-            )}
-          </td>
-        )}
-        <td>{e.date}</td>
-        <td>{e.category}</td>
-        <td>{e.subcategory}</td>
-        <td>{e.shop}</td>
-        <td>
-          {e.description}
-          {e.bill_total_only && <TotalOnlyBadge />}
-        </td>
-        <td>
-          {groupName(e.group_id) ? (
-            <span title={e.created_by ? `Added by ${e.created_by}` : undefined}>
-              {SPACE_TYPE_ICONS[groupSpaceType(e.group_id)] || '📁'} {groupName(e.group_id)}
-            </span>
-          ) : (
-            '—'
-          )}
-        </td>
-        <td className="right">{e.quantity}</td>
-        <td>{e.unit}</td>
-        <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
-          {money(e.amount, e.currency)}
-        </td>
-        <td className="right nowrap">
-          {canEditExpense(e) && e.bill_total_only && e.source_bill_id && (
-            <button className="mini-btn primary" onClick={() => itemiseFromExpense(e)} title="Enter the items on this bill; they replace this single total">
-              Itemise
-            </button>
-          )}
-          {canEditExpense(e) && (
-            <>
-              <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
-                ✎
-              </button>
-              <button className="delete-btn" onClick={() => afterDelete(onDelete(e.id))} title="Delete">
-                ✕
-              </button>
-            </>
-          )}
-        </td>
-      </tr>
-    )
-  }
+
 
   return (
     <>
@@ -738,544 +567,114 @@ export default function ExpensesPage({
         </div>
       </section>
 
-      <section className="panel" id="add-expense-panel">
-        <h2>➕ Add expense</h2>
-        {itemisingBill && (
-          <div className="itemising-banner" role="status">
-            <div className="grow">
-              <strong>
-                {itemisingBill.reitemise ? 'Editing items' : 'Itemising'}: {itemisingBill.shop}
-              </strong>{' '}
-              · {itemisingBill.date} · {money(itemisingBill.amount, itemisingBill.currency)}
-              <small>
-                {itemisingBill.reitemise
-                  ? 'Change, remove or add items below. Saving replaces this bill\'s current items, so nothing is counted twice.'
-                  : itemisingBill.status === 'total_only'
-                    ? 'Its single total line is replaced by these items when you submit, so nothing is counted twice.'
-                    : 'This bill becomes itemised when you submit its items.'}
-              </small>
-            </div>
-            {itemisingBill.has_receipt !== false && (
-              <button type="button" className="ghost-btn" onClick={() => viewReceipt(itemisingBill.id).catch((err) => onError?.(err.message))}>
-                📎 View receipt
-              </button>
-            )}
-            <button type="button" className="ghost-btn" onClick={toggleBillMode}>
-              Cancel
-            </button>
-          </div>
-        )}
-        <div className="auto-cat-row">
-          <button type="button" className="ghost-btn" onClick={toggleBillMode}>
-            {billMode ? (itemisingBill ? '✕ Cancel itemising' : '✕ Exit bill mode') : '🧾 Add by bill'}
-          </button>
-          {billMode && (
-            <span className="subtitle">
-              Add every item from one receipt, then submit them all together. Date/shop/currency/space are shared by
-              the whole bill.
-            </span>
-          )}
-        </div>
-        <form className="add-form" onSubmit={handleFormSubmit}>
-          <input
-            type="date"
-            required
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-          />
-          <input
-            type="text"
-            list="cat-options"
-            placeholder="Category"
-            required
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-          />
-          {categorySuggestion && (
-            <button type="button" className="suggestion-chip" onClick={applySuggestion}>
-              💡 {categorySuggestion.category}?
-            </button>
-          )}
-          <input
-            type="text"
-            list="subcat-add-options"
-            placeholder="Subcategory"
-            value={form.subcategory}
-            onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
-          />
-          <input
-            type="text"
-            list="shop-options"
-            placeholder="Shop"
-            value={form.shop}
-            onChange={(e) => setForm({ ...form, shop: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Brand"
-            value={form.brand}
-            onChange={(e) => setForm({ ...form, brand: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Item name"
-            aria-label="Item name"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-          <label className="field-label">
-            <span>Quantity</span>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="Qty"
-              className="qty-input"
-              value={form.quantity}
-              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-            />
-          </label>
-          <label className="field-label">
-            <span>Unit</span>
-            <UnitSelect value={form.unit} units={options.units} onChange={(u) => setForm({ ...form, unit: u })} />
-          </label>
-          <CurrencySelect
-            value={form.currency}
-            onChange={(c) => setForm({ ...form, currency: c })}
-            currencies={options.currencies}
-            defaultCurrency={defaultCurrency}
-            disabled={billMode && billItems.length > 0}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Amount"
-            required
-            value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
-          />
-          {allSpaces.length > 0 && (
-            <select
-              value={form.group_id || ''}
-              onChange={(e) => setForm({ ...form, group_id: e.target.value })}
-              title="Add this expense to an Expense Space or trip (optional)"
-            >
-              <option value="">Personal expenses</option>
-              {allSpaces
-                .filter((g) => g.role !== 'viewer')
-                .map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
-                  </option>
-                ))}
-            </select>
-          )}
-          <button type="submit" disabled={billMode ? false : saving}>
-            {billMode ? '➕ Add item to bill' : saving ? 'Saving…' : 'Add'}
-          </button>
-        </form>
-
-        {billMode && (
-          <div className="bill-tray">
-            {billItems.length === 0 ? (
-              <p className="subtitle">No items added yet — fill in the fields above and click "Add item to bill".</p>
-            ) : (
-              <>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Category</th>
-                      <th>Item name</th>
-                      <th className="right">Qty</th>
-                      <th>Unit</th>
-                      <th className="right">Amount</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {billItems.map((it, i) => (
-                      <tr key={i}>
-                        <td>{it.category}</td>
-                        <td>{it.description}</td>
-                        <td className="right">{it.quantity}</td>
-                        <td>{it.unit}</td>
-                        <td className="right">{money(it.amount, it.currency)}</td>
-                        <td className="right nowrap">
-                          <button className="icon-btn" onClick={() => editBillItem(i)} title="Edit this item" aria-label={`Edit ${it.description || it.category}`}>
-                            ✎
-                          </button>
-                          <button className="delete-btn" onClick={() => removeBillItem(i)} title="Remove" aria-label={`Remove ${it.description || it.category}`}>
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="bill-total-row">
-                  <strong>
-                    Bill total so far: {money(billTotal, effectiveCurrency)} ({billItems.length} item{billItems.length === 1 ? '' : 's'})
-                  </strong>
-                  <label className="receipt-total-input">
-                    Receipt total
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="e.g. from the printed total"
-                      value={receiptTotal}
-                      onChange={(e) => setReceiptTotal(e.target.value)}
-                    />
-                  </label>
-                </div>
-                {billMismatch !== null && (
-                  <p className={billMismatch === 0 ? 'ok-note' : 'auth-error'}>
-                    {billMismatch === 0
-                      ? '✓ Matches the receipt total.'
-                      : `⚠️ Items add up to ${money(billTotal, effectiveCurrency)}, ${billMismatch > 0 ? 'more than' : 'less than'} the receipt total ` +
-                        `of ${money(receiptTotalNum, effectiveCurrency)} (off by ${money(Math.abs(billMismatch), effectiveCurrency)}).`}
-                  </p>
-                )}
-                <button type="button" className="primary-btn" onClick={handleSubmitBill} disabled={submittingBill}>
-                  {submittingBill ? 'Submitting…' : `✅ Submit bill (${money(billTotal, effectiveCurrency)})`}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        <div className="auto-cat-row">
-          <button type="button" className="ghost-btn" onClick={handleAutoCategorize} disabled={autoCatBusy}>
-            {autoCatBusy ? 'Categorizing…' : '🤖 Auto-categorize uncategorized expenses'}
-          </button>
-          {autoCatResult && <span className="subtitle">{autoCatResult}</span>}
-        </div>
-
-        {/* Shared option lists — type a new value to add it (auto-learned on save). */}
-        <datalist id="cat-options">
-          {options.categories.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
-        <datalist id="subcat-add-options">
-          {(options.subcategories[form.category] || []).map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <datalist id="subcat-bulk-options">
-          {(options.subcategories[bulk.category] || []).map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <datalist id="subcat-edit-options">
-          {(options.subcategories[editForm.category] || []).map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <datalist id="shop-options">
-          {(options.shops || []).map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-      </section>
+      <AddExpensePanel
+        form={form}
+        setForm={setForm}
+        saving={saving}
+        options={options}
+        onError={onError}
+        defaultCurrency={defaultCurrency}
+        effectiveCurrency={effectiveCurrency}
+        billMode={billMode}
+        billItems={billItems}
+        submittingBill={submittingBill}
+        receiptTotal={receiptTotal}
+        setReceiptTotal={setReceiptTotal}
+        categorySuggestion={categorySuggestion}
+        autoCatBusy={autoCatBusy}
+        autoCatResult={autoCatResult}
+        itemisingBill={itemisingBill}
+        allSpaces={allSpaces}
+        applySuggestion={applySuggestion}
+        handleAutoCategorize={handleAutoCategorize}
+        billTotal={billTotal}
+        receiptTotalNum={receiptTotalNum}
+        billMismatch={billMismatch}
+        toggleBillMode={toggleBillMode}
+        handleFormSubmit={handleFormSubmit}
+        removeBillItem={removeBillItem}
+        editBillItem={editBillItem}
+        handleSubmitBill={handleSubmitBill}
+      />
+      <OptionLists form={form} editForm={editForm} options={options} bulk={bulk} />
 
       {(total > 0 || hasActiveFilters) && (
-        <section className="panel">
-          <h2>🔍 Search &amp; filter</h2>
-          <div className="add-form">
-            <input
-              type="text"
-              placeholder="Search item, shop, brand…"
-              value={search}
-              onChange={(e) => resetToFirstPage(setSearch)(e.target.value)}
-            />
-            <select value={filterCategory} onChange={(e) => resetToFirstPage(setFilterCategory)(e.target.value)}>
-              <option value="">All categories</option>
-              {options.categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <select value={filterShop} onChange={(e) => resetToFirstPage(setFilterShop)(e.target.value)}>
-              <option value="">All shops</option>
-              {(options.shops || []).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            {allSpaces.length > 0 && (
-              <select value={filterGroup} onChange={(e) => resetToFirstPage(setFilterGroup)(e.target.value)}>
-                <option value="">All expenses</option>
-                <option value="personal">Personal expenses</option>
-                {allSpaces.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
-                  </option>
-                ))}
-              </select>
-            )}
-            <DatePeriodFilter filter={dateFilter} onChange={resetToFirstPage(setDateFilter)} />
-            <label className="toggle-row inline-toggle" title="Show only expenses that are a bill's total with no items yet">
-              <input
-                type="checkbox"
-                checked={filterTotalOnly}
-                onChange={(e) => resetToFirstPage(setFilterTotalOnly)(e.target.checked)}
-              />
-              <span>Total-only bills</span>
-            </label>
-            {hasActiveFilters && (
-              <button type="button" className="ghost-btn" onClick={clearFilters}>
-                Clear filters
-              </button>
-            )}
-            <button type="button" className="ghost-btn" onClick={toggleSelectMode} aria-pressed={selectMode}>
-              {selectMode ? '✕ Stop editing together' : '☑ Edit together'}
-            </button>
-            <button type="button" className="ghost-btn" onClick={() => setGroupByBill((v) => !v)}>
-              {groupByBill ? '📄 Flat view' : '🧾 Bill view'}
-            </button>
-          </div>
-        </section>
+        <ExpenseFilters
+          options={options}
+          search={search}
+          filterCategory={filterCategory}
+          filterShop={filterShop}
+          filterGroup={filterGroup}
+          dateFilter={dateFilter}
+          setDateFilter={setDateFilter}
+          selectMode={selectMode}
+          groupByBill={groupByBill}
+          setGroupByBill={setGroupByBill}
+          filterTotalOnly={filterTotalOnly}
+          allSpaces={allSpaces}
+          hasActiveFilters={hasActiveFilters}
+          clearFilters={clearFilters}
+          resetToFirstPage={resetToFirstPage}
+          setSearch={setSearch}
+          setFilterCategory={setFilterCategory}
+          setFilterShop={setFilterShop}
+          setFilterGroup={setFilterGroup}
+          setFilterTotalOnly={setFilterTotalOnly}
+          toggleSelectMode={toggleSelectMode}
+        />
       )}
 
       {selectMode && (
-        <section className="panel bulk-bar" data-testid="bulk-bar">
-          <h2>✏️ Edit together</h2>
-          <p className="subtitle">
-            Tick the expenses (or a whole bill) to change, then fill in only what should change. Everything else stays as it is.
-          </p>
-          <p data-testid="bulk-count" className="bulk-count">
-            {selectedCount === 0
-              ? 'Nothing selected yet.'
-              : allMatching
-                ? `All ${total} matching expenses are selected.`
-                : `${selectedCount} selected.`}{' '}
-            {!allMatching && pageAllSelected && total > pageExpenses.length && (
-              <button type="button" className="mini-btn" onClick={() => setAllMatching(true)}>
-                Select all {total} matching
-              </button>
-            )}{' '}
-            {selectedCount > 0 && (
-              <button type="button" className="mini-btn" onClick={clearSelection}>
-                Clear selection
-              </button>
-            )}
-          </p>
-          <div className="edit-grid">
-            <label className="edit-field">
-              <span>Category</span>
-              <input
-                type="text"
-                list="cat-options"
-                placeholder="Leave unchanged"
-                value={bulk.category}
-                onChange={(e) => setBulk({ ...bulk, category: e.target.value })}
-              />
-            </label>
-            <label className="edit-field">
-              <span>Subcategory</span>
-              <input
-                type="text"
-                list="subcat-bulk-options"
-                placeholder="Leave unchanged"
-                value={bulk.subcategory}
-                onChange={(e) => setBulk({ ...bulk, subcategory: e.target.value })}
-              />
-            </label>
-            <label className="edit-field">
-              <span>Shop</span>
-              <input
-                type="text"
-                list="shop-options"
-                placeholder="Leave unchanged"
-                value={bulk.shop}
-                onChange={(e) => setBulk({ ...bulk, shop: e.target.value })}
-              />
-            </label>
-            <label className="edit-field">
-              <span>Item name</span>
-              <input
-                type="text"
-                placeholder="Leave unchanged"
-                value={bulk.description}
-                onChange={(e) => setBulk({ ...bulk, description: e.target.value })}
-              />
-            </label>
-            {allSpaces.length > 0 && (
-              <label className="edit-field">
-                <span>Space</span>
-                <select value={bulk.group_id} onChange={(e) => setBulk({ ...bulk, group_id: e.target.value })}>
-                  <option value={KEEP}>Leave unchanged</option>
-                  <option value="">Personal expenses</option>
-                  {allSpaces
-                    .filter((g) => g.role !== 'viewer')
-                    .map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            )}
-          </div>
-          {hasBulkChanges && selectedCount > 0 && (
-            <p className="subtitle" data-testid="bulk-summary">
-              Will set {describeBulkChanges()} on {selectedCount} expense{selectedCount === 1 ? '' : 's'}.
-            </p>
-          )}
-          <div className="edit-actions">
-            <button
-              type="button"
-              className="primary-btn"
-              disabled={bulkBusy || selectedCount === 0 || !hasBulkChanges}
-              onClick={applyBulk}
-            >
-              {bulkBusy ? 'Saving…' : `Apply to ${selectedCount} expense${selectedCount === 1 ? '' : 's'}`}
-            </button>
-          </div>
-          {bulkNotice && (
-            <p role="status" className="subtitle">
-              {bulkNotice}
-            </p>
-          )}
-        </section>
+      <BulkEditPanel
+        pageExpenses={pageExpenses}
+        allMatching={allMatching}
+        setAllMatching={setAllMatching}
+        bulk={bulk}
+        setBulk={setBulk}
+        bulkBusy={bulkBusy}
+        bulkNotice={bulkNotice}
+        total={total}
+        allSpaces={allSpaces}
+        selectedCount={selectedCount}
+        pageAllSelected={pageAllSelected}
+        clearSelection={clearSelection}
+        hasBulkChanges={hasBulkChanges}
+        describeBulkChanges={describeBulkChanges}
+        applyBulk={applyBulk}
+      />
       )}
 
       {loadingExpenses && <p className="subtitle">Loading…</p>}
 
       {!loadingExpenses && total > 0 && (
-        <table className="table">
-          <thead>
-            <tr>
-              {selectMode && (
-                <th className="select-cell">
-                  <SelectBox
-                    state={selectionState(editableIds)}
-                    label="Select all on this page"
-                    onChange={(on) => setSelected(editableIds, on)}
-                  />
-                </th>
-              )}
-              <th>Date</th>
-              <th>Category</th>
-              <th>Subcat</th>
-              <th>Shop</th>
-              <th>Item name</th>
-              <th>Group</th>
-              <th className="right">Qty</th>
-              <th>Unit</th>
-              <th className="right">Amount</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupByBill
-              ? billGroups.map((group) => {
-                  const isExpanded = expandedBillKeys.has(group.key)
-                  // A bill recorded as a total only (no items yet) is flagged right on its header,
-                  // so it is visible without expanding and can be itemised from there.
-                  const totalOnlyItems = group.items.filter((e) => e.bill_total_only)
-                  const allTotalOnly = totalOnlyItems.length === group.items.length
-                  const single = group.items.length === 1 ? group.items[0] : null
-                  // Items that all came from one itemised bill can be re-opened for editing.
-                  const billIds = new Set(group.items.map((e) => e.source_bill_id))
-                  const itemisedBillId = totalOnlyItems.length === 0 && billIds.size === 1 ? [...billIds][0] : null
-                  // A single line with no shop is named after what it is, like its bill on the Bills page.
-                  const name = group.shop || (single ? single.description : '') || 'No shop'
-                  const groupEditableIds = group.items.filter(canEditExpense).map((e) => e.id)
-                  return (
-                    <Fragment key={group.key}>
-                      <tr
-                        className={`bill-group-header clickable-row${allTotalOnly ? ' row-total-only' : ''}`}
-                        onClick={() => toggleBillGroup(group.key)}
-                      >
-                        <td colSpan={COLS}>
-                          {selectMode && groupEditableIds.length > 0 && (
-                            <SelectBox
-                              state={selectionState(groupEditableIds)}
-                              label={`Select ${name}`}
-                              onChange={(on) => setSelected(groupEditableIds, on)}
-                            />
-                          )}{' '}
-                          {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {name} · {group.items.length}{' '}
-                          item{group.items.length === 1 ? '' : 's'} · Bill total:{' '}
-                          {money(group.items.reduce((sum, e) => sum + e.amount, 0), group.currency)}
-                          {totalOnlyItems.length > 0 && <TotalOnlyBadge />}
-                          {itemisedBillId && group.items.every(canEditExpense) && (
-                            <button
-                              type="button"
-                              className="mini-btn"
-                              onClick={(ev) => {
-                                ev.stopPropagation()
-                                editItemsOfBill(itemisedBillId)
-                              }}
-                              title="Change, add or remove the items on this bill"
-                            >
-                              Edit items
-                            </button>
-                          )}
-                          {allTotalOnly && single && single.source_bill_id && canEditExpense(single) && (
-                            <button
-                              type="button"
-                              className="mini-btn primary"
-                              onClick={(ev) => {
-                                ev.stopPropagation()
-                                itemiseFromExpense(single)
-                              }}
-                              title="Enter the items on this bill; they replace this single total"
-                            >
-                              Itemise
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                      {isExpanded && group.items.map((e) => renderExpenseRow(e))}
-                    </Fragment>
-                  )
-                })
-              : pageExpenses.map((e) => renderExpenseRow(e))}
-          </tbody>
-        </table>
+        <ExpenseTable
+          rowProps={rowProps}
+          selectMode={selectMode}
+          groupByBill={groupByBill}
+          expandedBillKeys={expandedBillKeys}
+          pageExpenses={pageExpenses}
+          toggleBillGroup={toggleBillGroup}
+          canEditExpense={canEditExpense}
+          editableIds={editableIds}
+          selectionState={selectionState}
+          COLS={COLS}
+          setSelected={setSelected}
+          itemiseFromExpense={itemiseFromExpense}
+          editItemsOfBill={editItemsOfBill}
+          billGroups={billGroups}
+        />
       )}
 
       {total > 0 && (
-        <div className="pagination-bar">
-          <span className="subtitle">
-            Showing {pageStart + 1}–{Math.min(pageStart + pageSize, total)} of {total}
-          </span>
-          <div className="pagination-controls">
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value))
-                setPage(1)
-              }}
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
-            <button type="button" className="ghost-btn" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
-              ← Prev
-            </button>
-            <span className="subtitle">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled={currentPage >= totalPages}
-              onClick={() => setPage(currentPage + 1)}
-            >
-              Next →
-            </button>
-          </div>
-        </div>
+          <ExpensePager
+            setPage={setPage}
+            pageSize={pageSize}
+            setPageSize={setPageSize}
+            total={total}
+            totalPages={totalPages}
+            currentPage={currentPage}
+            pageStart={pageStart}
+          />
       )}
 
       {!loadingExpenses && total === 0 && (
