@@ -45,6 +45,7 @@ export function useAppData() {
   const [options, setOptions] = useState(EMPTY_OPTIONS)
   const [metrics, setMetrics] = useState(null)
   const [periodStatus, setPeriodStatus] = useState(null)
+  const [budgetRisk, setBudgetRisk] = useState(null)
   const [budgetConfig, setBudgetConfigState] = useState({ period: 'Monthly', rollover: false })
   const [alerts, setAlerts] = useState([])
   const [trips, setTrips] = useState([])
@@ -83,6 +84,7 @@ export function useAppData() {
     setBudgets(d.budgets)
     setMetrics(d.metrics)
     setPeriodStatus(d.period_status)
+    setBudgetRisk(d.budget_risk ?? null)
     if (d.alerts) setAlerts(d.alerts)
   }
 
@@ -140,6 +142,7 @@ export function useAppData() {
     setOptions(EMPTY_OPTIONS)
     setMetrics(null)
     setPeriodStatus(null)
+    setBudgetRisk(null)
     setBudgetConfigState({ period: 'Monthly', rollover: false })
     setAlerts([])
     setTrips([])
@@ -178,6 +181,7 @@ export function useAppData() {
     setOptions,
     metrics,
     periodStatus,
+    budgetRisk,
     budgetConfig,
     alerts,
     trips,

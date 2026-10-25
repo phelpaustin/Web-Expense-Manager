@@ -15,6 +15,7 @@ from app.db.database import get_db
 from app.db import models
 from app.api.expenses import fetch_expenses_in_reporting_currency
 from app.logic import budgets as budgets_logic
+from app.logic import budget_risk as budget_risk_logic
 from app.logic.budgets import TOTAL_BUDGET_KEY
 
 router = APIRouter()
@@ -166,6 +167,28 @@ def set_budget_config(
     opts.budget_rollover = bool(payload.rollover)
     db.commit()
     return {"period": opts.budget_period, "rollover": opts.budget_rollover}
+
+
+@router.get("/budgets/risk")
+def budgets_risk(
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """The chance of exceeding each budget by the end of its period (see app.logic.budget_risk).
+
+    Uses the same numbers as the budget bars: category budgets for the calendar month, and the total
+    budget in its chosen period with rollover. Needs 4 earlier periods of history for an estimate.
+    """
+    opts = get_or_create_options(db, user.id)
+    budgets = fetch_budgets(db, user.id)
+    expenses = fetch_expenses_in_reporting_currency(db, user.id, scope, space_ids)
+    return budget_risk_logic.budget_risk(
+        expenses,
+        budgets_logic.calculate_budget_status(expenses, budgets, None),
+        budgets_logic.period_budget_status(expenses, budgets.get(TOTAL_BUDGET_KEY), opts.budget_period, opts.budget_rollover),
+    )
 
 
 @router.get("/budgets/period-status")

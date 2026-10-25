@@ -42,6 +42,7 @@ def _separate(client, h, query):
         "budgets": get("/api/budgets/status"),
         "metrics": get("/api/metrics"),
         "period_status": get("/api/budgets/period-status"),
+        "budget_risk": get("/api/budgets/risk"),
     }
 
 
@@ -105,6 +106,7 @@ def test_dashboard_for_a_user_with_no_data(client, make_user):
     assert body["categories"] == []
     assert body["category_months"] == []
     assert body["alerts"] == []
+    assert body["budget_risk"]["has_budgets"] is False and body["budget_risk"]["items"] == []
 
 
 def test_dashboard_never_includes_another_users_expenses(client, make_user):

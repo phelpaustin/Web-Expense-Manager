@@ -6,6 +6,7 @@ import TrendMeta from '../components/TrendMeta.jsx'
 import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
 import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
 import ForecastPanel from '../components/ForecastPanel.jsx'
+import BudgetRiskPanel from '../components/BudgetRiskPanel.jsx'
 import { SpendingTrendChart, CashFlowChart, CategoryDonut } from '../components/Charts.jsx'
 import {
   PERIOD_PRESETS, PICK_MONTH, PICK_YEAR, availablePeriods, categoryTotals, monthLabel,
@@ -26,6 +27,7 @@ export default function DashboardPage({
   onDeleteBudget,
   metrics,
   periodStatus,
+  budgetRisk,
   budgetConfig,
   onSetBudgetConfig,
   groups,
@@ -397,6 +399,8 @@ export default function DashboardPage({
             </form>
           )}
       </section>
+
+      <BudgetRiskPanel risk={budgetRisk} />
 
       {trends && (
         <section className="panel">

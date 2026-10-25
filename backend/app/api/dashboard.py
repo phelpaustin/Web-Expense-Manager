@@ -20,6 +20,7 @@ from app.db import models
 from app.db.database import get_db
 from app.logic import analytics as analytics_logic
 from app.logic import budgets as budgets_logic
+from app.logic import budget_risk as budget_risk_logic
 from app.logic import metrics as metrics_logic
 from app.logic.budgets import TOTAL_BUDGET_KEY
 
@@ -34,7 +35,7 @@ def dashboard(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """summary, trends, categories, budget status, metrics, period status and (optionally)
+    """summary, trends, categories, budget status, budget risk, metrics, period status and (optionally)
     alerts for the chosen scope. Alerts always cover every space, whatever the scope."""
     opts = get_or_create_options(db, user.id)
     expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
@@ -46,15 +47,19 @@ def dashboard(
         all_spaces = (scope is None or scope == "all") and not space_ids
         alerts = _alerts_for_user(db, user.id, expenses if all_spaces else None, budgets)
 
+    category_statuses = budgets_logic.calculate_budget_status(expenses, budgets, None)
+    period_status = budgets_logic.period_budget_status(
+        expenses, budgets.get(TOTAL_BUDGET_KEY), opts.budget_period, opts.budget_rollover
+    )
     return {
         "summary": summary_payload(expenses, unconverted, reporting_currency(opts)),
         "trends": trends_payload(expenses),
         "categories": analytics_logic.category_breakdown(expenses),
         "category_months": analytics_logic.category_by_month(expenses),
-        "budgets": budgets_logic.calculate_budget_status(expenses, budgets, None),
+        "budgets": category_statuses,
         "metrics": metrics_logic.summary(expenses, income),
-        "period_status": budgets_logic.period_budget_status(
-            expenses, budgets.get(TOTAL_BUDGET_KEY), opts.budget_period, opts.budget_rollover
-        ),
+        "period_status": period_status,
+        # The chance of exceeding each budget, from the same numbers as the budget bars.
+        "budget_risk": budget_risk_logic.budget_risk(expenses, category_statuses, period_status),
         "alerts": alerts,
     }

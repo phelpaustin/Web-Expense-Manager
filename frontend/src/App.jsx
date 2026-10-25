@@ -118,6 +118,7 @@ export default function App() {
               onDeleteBudget={budgetHandlers.handleDeleteBudget}
               metrics={data.metrics}
               periodStatus={data.periodStatus}
+              budgetRisk={data.budgetRisk}
               budgetConfig={data.budgetConfig}
               onSetBudgetConfig={budgetHandlers.handleSetBudgetConfig}
               groups={data.groups}

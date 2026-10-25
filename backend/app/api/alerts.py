@@ -19,6 +19,7 @@ from app.db.database import get_db
 from app.db import models
 from app.logic import alerts as alerts_logic
 from app.logic import budgets as budgets_logic
+from app.logic import budget_risk as budget_risk_logic
 from app.logic.budgets import TOTAL_BUDGET_KEY
 
 router = APIRouter()
@@ -40,7 +41,8 @@ def _alerts_for_user(
     period_status = budgets_logic.period_budget_status(
         expenses, budgets.get(TOTAL_BUDGET_KEY), opts.budget_period, opts.budget_rollover
     )
-    return alerts_logic.generate_alerts(category_statuses, period_status)
+    risk = budget_risk_logic.budget_risk(expenses, category_statuses, period_status)
+    return alerts_logic.generate_alerts(category_statuses, period_status, risk)
 
 
 @router.get("/alerts")
