@@ -2,14 +2,19 @@ import { useEffect, useState } from 'react'
 import { fetchInvitations, acceptInvitation, declineInvitation } from '../api/client.js'
 
 // Invitations to shared spaces. Being invited never adds anyone: the invitee accepts here.
-export default function Invitations({ onAccepted, onError }) {
+export default function Invitations({ onAccepted, onError, onCount }) {
   const [invites, setInvites] = useState([])
   const [busyId, setBusyId] = useState(null)
 
   useEffect(() => {
     let live = true
     fetchInvitations()
-      .then((list) => live && setInvites(Array.isArray(list) ? list : []))
+      .then((list) => {
+        if (!live) return
+        const next = Array.isArray(list) ? list : []
+        setInvites(next)
+        onCount?.(next.length)
+      })
       .catch((err) => live && onError(err.message))
     return () => {
       live = false
@@ -21,7 +26,11 @@ export default function Invitations({ onAccepted, onError }) {
     try {
       if (accept) await acceptInvitation(invite.id)
       else await declineInvitation(invite.id)
-      setInvites((prev) => prev.filter((i) => i.id !== invite.id))
+      setInvites((prev) => {
+        const next = prev.filter((i) => i.id !== invite.id)
+        onCount?.(next.length)
+        return next
+      })
       if (accept) await onAccepted()
     } catch (err) {
       onError(err.message)

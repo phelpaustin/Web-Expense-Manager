@@ -29,7 +29,7 @@ function spaceTypeIcon(spaceType) {
   return SPACE_TYPES.find((t) => t.value === spaceType)?.icon || '📁'
 }
 
-export default function GroupsPage({ groups, currencies = [], baseCurrency, onCreateGroup, onDeleteGroup, onLeaveGroup, onRefresh, onError }) {
+export default function GroupsPage({ groups, currencies = [], baseCurrency, onCreateGroup, onDeleteGroup, onLeaveGroup, onRefresh, onError, onInvitationsChange, embedded = false }) {
   const [name, setName] = useState('')
   const [spaceType, setSpaceType] = useState('custom')
   const [currency, setCurrency] = useState('')
@@ -133,9 +133,9 @@ export default function GroupsPage({ groups, currencies = [], baseCurrency, onCr
 
   return (
     <>
-      <h1 className="page-title">🗂️ Expense Spaces</h1>
+      {!embedded && <h1 className="page-title">🗂️ Expense Spaces</h1>}
 
-      <Invitations onAccepted={onRefresh} onError={onError} />
+      <Invitations onAccepted={onRefresh} onError={onError} onCount={onInvitationsChange} />
       <p className="subtitle">
         An Expense Space is where expenses belong — a household, a business, a rental, a trip, or anything custom.
         Invite others to a space so every member can add expenses to it, all in one shared view.

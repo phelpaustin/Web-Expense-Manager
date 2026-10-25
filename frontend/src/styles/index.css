@@ -160,6 +160,28 @@ h3 {
   box-shadow: 0 10px 22px -10px rgba(109, 123, 255, 0.6);
 }
 
+.nav-group-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0.85rem 0.8rem 0.2rem;
+}
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 1.3rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #d92d20;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.3rem;
+  text-align: center;
+}
+
 .nav-icon {
   font-size: 1.05rem;
   width: 1.2rem;
@@ -2634,6 +2656,11 @@ label.link-btn input[type='file'] {
   .nav-link {
     flex: none;
     white-space: nowrap;
+  }
+
+  /* The phone nav is one scrollable row, so group headings would only get in the way. */
+  .nav-group-title {
+    display: none;
   }
 }
 

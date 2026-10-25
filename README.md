@@ -85,6 +85,8 @@ Alternatively configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, 
 
 ## Expense Spaces and trips
 
+Create, rename, invite to and leave Expense Spaces under **Settings → Spaces & sharing** (the old `/groups` address opens it). A badge on Settings in the sidebar shows how many invitations are waiting.
+
 An Expense Space is a shared expense area, such as a household, business, rental, or custom space. Membership is independent for each space. Owners can manage the space and members; admins can invite members; editors can add expenses and edit their own; viewers can read the space.
 
 Trips are their own Expense Spaces. A trip can optionally be filed under a non-trip Expense Space, while its membership remains separate. Inviting someone to a trip does not give them access to its parent space. Trip expenses can use different currencies; summaries and settlement are shown in the trip currency when rates are available.
@@ -218,6 +220,8 @@ Emails are case-insensitive: they are trimmed and lowercased on sign-up, sign-in
 What the AI sees: only the column headings, about ten sample rows (cells cut to 60 characters) and your instruction. The rest of the file is read on the server and never sent. Text inside the statement cannot give the model instructions: it is passed as data, the model can only answer with a mapping, and the mapping is validated (columns must exist, rules are plain text matches). Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) on the backend to enable it; without a key the assistant box is hidden. Assistant calls are limited to 30 per hour per visitor (`RATE_LIMIT_IMPORT_AI`).
 
 ## Exports and spreadsheet formulas
+
+Export CSV or Excel under **Settings → App data**.
 
 Text cells in the CSV/XLSX export that start with `=`, `+`, `-` or `@` (or a tab/line break) get a leading `'`, so Excel, Sheets and LibreOffice show them as text instead of running them as formulas (a shop named `=HYPERLINK(...)` is harmless). Amounts, quantities and dates stay real numbers/dates. Importing one of our own exports (expenses or bills) removes that quote again, so the original text comes back.
 

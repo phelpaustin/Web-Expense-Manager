@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { money } from '../format.js'
 import { EMPTY_DATE_FILTER, datesFor } from '../datePeriod.js'
 import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems } from '../api/client.js'
@@ -26,7 +26,6 @@ export default function ExpensesPage({
   onDelete,
   onBulkUpdate,
   options,
-  onExport,
   trips,
   groups,
   onError,
@@ -551,21 +550,6 @@ export default function ExpensesPage({
   return (
     <>
       <h1 className="page-title">🧾 Expenses</h1>
-
-      <section className="panel">
-        <h2>📤 Export</h2>
-        <p className="subtitle">
-          Download all your expenses. To bring a file in, use <Link to="/import">Import</Link> in the sidebar.
-        </p>
-        <div className="add-form">
-          <button type="button" className="ghost-btn" onClick={() => onExport('csv')}>
-            Export CSV
-          </button>
-          <button type="button" className="ghost-btn" onClick={() => onExport('xlsx')}>
-            Export Excel
-          </button>
-        </div>
-      </section>
 
       <AddExpensePanel
         form={form}

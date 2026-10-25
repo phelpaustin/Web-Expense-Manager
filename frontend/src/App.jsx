@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import AuthScreen from './AuthScreen.jsx'
 import Layout from './Layout.jsx'
 import { useAppData, EXPENSE_PARTS, PART } from './hooks/useAppData.js'
@@ -10,6 +10,7 @@ import { useRecurringHandlers } from './hooks/useRecurringHandlers.js'
 import { useBillsHandlers } from './hooks/useBillsHandlers.js'
 import { useTripHandlers } from './hooks/useTripHandlers.js'
 import { useGroupHandlers } from './hooks/useGroupHandlers.js'
+import { useInvitationCount } from './hooks/useInvitationCount.js'
 import { useBudgetHandlers } from './hooks/useBudgetHandlers.js'
 
 // Each page is its own chunk: charts and rarely used screens are fetched when first visited,
@@ -24,12 +25,18 @@ const TripsPage = lazy(() => import('./pages/TripsPage.jsx'))
 const PriceTrackerPage = lazy(() => import('./pages/PriceTrackerPage.jsx'))
 const ShopsPage = lazy(() => import('./pages/ShopsPage.jsx'))
 const ImportPage = lazy(() => import('./pages/ImportPage.jsx'))
-const GroupsPage = lazy(() => import('./pages/GroupsPage.jsx'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.jsx'))
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage.jsx'))
 const UnsubscribePage = lazy(() => import('./pages/UnsubscribePage.jsx'))
 
 const PageLoading = () => <p className="subtitle">Loading…</p>
+
+// Settings opens on the tab named in the address (?tab=spaces), so links and the old /groups address land on it.
+function SettingsRoute(props) {
+  const [params] = useSearchParams()
+  const tab = params.get('tab') || 'account'
+  return <SettingsPage key={tab} {...props} initialTab={tab} />
+}
 
 // This component only wires fetched data + handlers (from the hooks below)
 // into routes/pages — each page still receives all its data/handlers as
@@ -46,6 +53,7 @@ export default function App() {
   const tripHandlers = useTripHandlers(data.loadAll, data.setError)
   const groupHandlers = useGroupHandlers(data.loadAll, data.setError)
   const budgetHandlers = useBudgetHandlers(data.loadAll, data.setError)
+  const [invitationCount, setInvitationCount] = useInvitationCount(!!auth.user)
 
   if (!auth.authChecked) {
     return (
@@ -100,6 +108,7 @@ export default function App() {
             alerts={data.alerts}
             options={data.options}
             onDisplayCurrencyChange={data.changeDisplayCurrency}
+            invitationCount={invitationCount}
           />
         }
       >
@@ -148,7 +157,6 @@ export default function App() {
               onDelete={expense.handleDelete}
               onBulkUpdate={expense.handleBulkUpdate}
               options={data.options}
-              onExport={expense.handleExport}
               trips={data.trips}
               groups={data.groups}
               onError={data.setError}
@@ -199,7 +207,7 @@ export default function App() {
         <Route
           path="settings"
           element={
-            <SettingsPage
+            <SettingsRoute
               user={auth.user}
               options={data.options}
               onOptionsUpdated={data.setOptions}
@@ -207,6 +215,17 @@ export default function App() {
               onDisplayCurrencyChange={data.changeDisplayCurrency}
               onError={data.setError}
               onDeleteAccount={auth.handleDeleteAccount}
+              onExport={expense.handleExport}
+              spaces={{
+                groups: data.groups,
+                currencies: data.options.currencies,
+                baseCurrency: data.options.base_currency,
+                onCreateGroup: groupHandlers.handleCreateGroup,
+                onDeleteGroup: groupHandlers.handleDeleteGroup,
+                onLeaveGroup: groupHandlers.handleLeaveGroup,
+                onRefresh: () => data.loadAll(EXPENSE_PARTS),
+                onInvitationsChange: setInvitationCount,
+              }}
             />
           }
         />
@@ -230,21 +249,8 @@ export default function App() {
           path="import"
           element={<ImportPage options={data.options} onImported={() => data.loadAll([...EXPENSE_PARTS, PART.INCOME])} onError={data.setError} />}
         />
-        <Route
-          path="groups"
-          element={
-            <GroupsPage
-              groups={data.groups}
-              currencies={data.options.currencies}
-              baseCurrency={data.options.base_currency}
-              onCreateGroup={groupHandlers.handleCreateGroup}
-              onDeleteGroup={groupHandlers.handleDeleteGroup}
-              onLeaveGroup={groupHandlers.handleLeaveGroup}
-              onRefresh={() => data.loadAll(EXPENSE_PARTS)}
-              onError={data.setError}
-            />
-          }
-        />
+        {/* Expense Spaces moved into Settings; old links and bookmarks still land there. */}
+        <Route path="groups" element={<Navigate to="/settings?tab=spaces" replace />} />
       </Route>
     </Routes>
     </Suspense>

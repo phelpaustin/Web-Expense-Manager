@@ -400,13 +400,13 @@ describe('Add expense form labels', () => {
   })
 })
 
-describe('importing lives on the Import page only', () => {
-  it('offers Export here, with a link to Import, and no import form', async () => {
+describe('importing and exporting live elsewhere', () => {
+  it('has no import form and no export buttons (Import page and Settings own those)', async () => {
     renderAt()
     await waitFor(() => expect(client.fetchExpenses).toHaveBeenCalled())
-    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Export Excel' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Import' }).getAttribute('href')).toBe('/import')
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Export Excel' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Import' })).toBeNull()
     expect(document.querySelector('input[type="file"]')).toBeNull()
     expect(screen.queryByText(/Skipped rows/)).toBeNull()
   })

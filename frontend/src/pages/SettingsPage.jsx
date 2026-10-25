@@ -3,6 +3,7 @@ import Switch from '../components/Switch.jsx'
 import GoogleConfirmButton, { GOOGLE_CLIENT_ID } from '../components/GoogleConfirmButton.jsx'
 import { saveAlertDigest, saveCountBillsAsSpending } from '../api/client.js'
 import { useState } from 'react'
+import GroupsPage from './GroupsPage.jsx'
 import {
   changePassword,
   addCategory,
@@ -16,6 +17,8 @@ import {
   setBaseCurrency,
 } from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
+
+const TABS = ['account', 'spaces', 'data']
 
 function ChipList({ items, onDelete }) {
   if (!items || items.length === 0) return <p className="muted-note">None yet.</p>
@@ -61,8 +64,11 @@ export default function SettingsPage({
   onDisplayCurrencyChange,
   onError,
   onDeleteAccount,
+  onExport,
+  spaces,
+  initialTab = 'account',
 }) {
-  const [tab, setTab] = useState('account')
+  const [tab, setTab] = useState(TABS.includes(initialTab) ? initialTab : 'account')
 
   // Account tab
   const [pwCurrent, setPwCurrent] = useState('')
@@ -132,6 +138,11 @@ export default function SettingsPage({
         <button className={tab === 'account' ? 'tab active' : 'tab'} onClick={() => setTab('account')}>
           Account
         </button>
+        {spaces && (
+          <button className={tab === 'spaces' ? 'tab active' : 'tab'} onClick={() => setTab('spaces')}>
+            Spaces &amp; sharing
+          </button>
+        )}
         <button className={tab === 'data' ? 'tab active' : 'tab'} onClick={() => setTab('data')}>
           App data
         </button>
@@ -205,8 +216,25 @@ export default function SettingsPage({
         </section>
       )}
 
+      {tab === 'spaces' && spaces && <GroupsPage embedded {...spaces} onError={onError} />}
+
       {tab === 'data' && (
         <>
+          {onExport && (
+            <section className="panel">
+              <h2>Export</h2>
+              <p className="muted-note">Download all your expenses. To bring a file in, use Import in the sidebar.</p>
+              <div className="add-form">
+                <button type="button" className="ghost-btn" onClick={() => onExport('csv')}>
+                  Export CSV
+                </button>
+                <button type="button" className="ghost-btn" onClick={() => onExport('xlsx')}>
+                  Export Excel
+                </button>
+              </div>
+            </section>
+          )}
+
           <section className="panel">
             <h2>Base currency</h2>
             <p className="muted-note">

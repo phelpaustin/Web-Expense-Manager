@@ -1,19 +1,29 @@
 import CurrencySelect from './components/CurrencySelect.jsx'
-import { Suspense, useState } from 'react'
+import { Fragment, Suspense, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
-const LINKS = [
-  { to: '/', label: 'Dashboard', icon: '📊', end: true },
-  { to: '/expenses', label: 'Expenses', icon: '🧾' },
-  { to: '/import', label: 'Import', icon: '📥' },
-  { to: '/income', label: 'Income', icon: '💵' },
-  { to: '/recurring', label: 'Recurring', icon: '🔁' },
-  { to: '/bills', label: 'Bills', icon: '📒' },
-  { to: '/trips', label: 'Trips', icon: '🧳' },
-  { to: '/groups', label: 'Expense Spaces', icon: '🗂️' },
-  { to: '/prices', label: 'Prices', icon: '📈' },
-  { to: '/shops', label: 'Shops', icon: '🏪' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+// Grouped so the sidebar reads as a few jobs, not a long list. A group without a title is a single link.
+const NAV = [
+  { links: [{ to: '/', label: 'Dashboard', icon: '📊', end: true }] },
+  {
+    title: 'Money',
+    links: [
+      { to: '/expenses', label: 'Expenses', icon: '🧾' },
+      { to: '/bills', label: 'Bills', icon: '📒' },
+      { to: '/income', label: 'Income', icon: '💵' },
+      { to: '/recurring', label: 'Recurring', icon: '🔁' },
+      { to: '/import', label: 'Import', icon: '📥' },
+    ],
+  },
+  {
+    title: 'Insights',
+    links: [
+      { to: '/prices', label: 'Prices', icon: '📈' },
+      { to: '/shops', label: 'Shops', icon: '🏪' },
+    ],
+  },
+  { links: [{ to: '/trips', label: 'Trips', icon: '🧳' }] },
+  { links: [{ to: '/settings', label: 'Settings', icon: '⚙️', badge: 'invitations' }] },
 ]
 
 const SEVERITY_ICON = { critical: '🔴', warning: '🟠', caution: '🟡', info: '💡' }
@@ -56,22 +66,32 @@ function NotificationBell({ alerts }) {
   )
 }
 
-export default function Layout({ user, onLogout, error, loading, alerts = [], options, onDisplayCurrencyChange }) {
+export default function Layout({ user, onLogout, error, loading, alerts = [], options, onDisplayCurrencyChange, invitationCount = 0 }) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">💳 Expenses</div>
-        <nav className="nav">
-          {LINKS.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              end={l.end}
-              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-            >
-              <span className="nav-icon">{l.icon}</span>
-              {l.label}
-            </NavLink>
+        <nav className="nav" aria-label="Main">
+          {NAV.map((group, gi) => (
+            <Fragment key={group.title || gi}>
+              {group.title && <div className="nav-group-title">{group.title}</div>}
+              {group.links.map((l) => (
+                <NavLink
+                  key={l.to}
+                  to={l.to}
+                  end={l.end}
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                >
+                  <span className="nav-icon">{l.icon}</span>
+                  {l.label}
+                  {l.badge === 'invitations' && invitationCount > 0 && (
+                    <span className="nav-badge" role="status" aria-label={`${invitationCount} invitation${invitationCount === 1 ? '' : 's'} waiting`}>
+                      {invitationCount}
+                    </span>
+                  )}
+                </NavLink>
+              ))}
+            </Fragment>
           ))}
         </nav>
         <div className="sidebar-footer">
