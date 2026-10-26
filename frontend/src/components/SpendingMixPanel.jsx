@@ -30,7 +30,7 @@ const LEGEND = [
 
 // Fixed vs everyday vs one-off spending by month, with what a typical month costs and the
 // purchases that stood out.
-export default function SpendingMixPanel({ scope, spaceIds, refreshKey }) {
+export default function SpendingMixPanel({ scope, spaceIds, refreshKey, onSelectMonth }) {
   const [months, setMonths] = useState(DEFAULT_MONTHS)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
@@ -69,6 +69,8 @@ export default function SpendingMixPanel({ scope, spaceIds, refreshKey }) {
     )
   }
 
+  const rows = data.available ? chartRows(data) : []
+
   return (
     <section className="panel">
       <h2>🧱 Committed vs everyday</h2>
@@ -89,7 +91,20 @@ export default function SpendingMixPanel({ scope, spaceIds, refreshKey }) {
         <>
           <div data-testid="mix-chart">
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartRows(data)} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart
+                data={rows}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                style={onSelectMonth ? { cursor: 'pointer' } : undefined}
+                onClick={
+                  onSelectMonth
+                    ? (state) => {
+                        // Recharts 3 reports the clicked position as an index, not the row.
+                        const row = rows[Number(state?.activeTooltipIndex)]
+                        if (row?.month) onSelectMonth(row.month)
+                      }
+                    : undefined
+                }
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e6e8f2" />
                 <XAxis dataKey="name" {...axis} />
                 <YAxis {...axis} width={52} />
@@ -108,6 +123,7 @@ export default function SpendingMixPanel({ scope, spaceIds, refreshKey }) {
             ))}
             * month in progress
           </p>
+          {onSelectMonth && <p className="chart-hint">Click a month to see its expenses and income.</p>}
 
           {data.totals.committed_pct != null && (
             <p className="subtitle">

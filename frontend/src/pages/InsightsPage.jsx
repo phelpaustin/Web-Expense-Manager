@@ -8,6 +8,7 @@ import RecurringCostsPanel from '../components/RecurringCostsPanel.jsx'
 import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
 import ForecastPanel from '../components/ForecastPanel.jsx'
 import { SpendingTrendChart, CashFlowChart } from '../components/Charts.jsx'
+import MonthDetailDialog from '../components/MonthDetailDialog.jsx'
 
 // Shops and Prices used to be pages of their own; they open inside the tab, as their own chunks.
 const ShopsPage = lazy(() => import('./ShopsPage.jsx'))
@@ -42,6 +43,7 @@ export default function InsightsPage({
 }) {
   // The month the Overview panels talk about; null lets the server pick the last finished month.
   const [month, setMonth] = useState(null)
+  const [detailMonth, setDetailMonth] = useState(null)
   const [tab, setTab] = useState(TAB_KEYS.includes(initialTab) ? initialTab : 'overview')
   const scopeKey = `${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`
   const hasCashFlow = metrics && metrics.cash_flow && metrics.cash_flow.length > 0
@@ -99,7 +101,8 @@ export default function InsightsPage({
           {trends && (
             <section className="panel">
               <h2>📈 Spending trend</h2>
-              <SpendingTrendChart data={trends.monthly} />
+              <SpendingTrendChart data={trends.monthly} onSelectMonth={setDetailMonth} />
+              <p className="chart-hint">Click a month to see its expenses and income.</p>
               <div className="trend-meta">
                 {trends.change && (
                   <span>
@@ -120,12 +123,14 @@ export default function InsightsPage({
             scope={dashboardScope}
             spaceIds={dashboardSpaceIds}
             refreshKey={trends}
+            onSelectMonth={setDetailMonth}
           />
 
           {hasCashFlow && (
             <section className="panel">
               <h2>💸 Cash flow</h2>
-              <CashFlowChart data={metrics.cash_flow} />
+              <CashFlowChart data={metrics.cash_flow} onSelectMonth={setDetailMonth} />
+              <p className="chart-hint">Click a month to see its expenses and income.</p>
             </section>
           )}
 
@@ -171,6 +176,16 @@ export default function InsightsPage({
         <Suspense fallback={<p className="subtitle">Loading…</p>}>
           <PriceTrackerPage embedded onError={onError} />
         </Suspense>
+      )}
+
+      {detailMonth && (
+        <MonthDetailDialog
+          month={detailMonth}
+          scope={dashboardScope}
+          spaceIds={dashboardSpaceIds}
+          onChangeMonth={setDetailMonth}
+          onClose={() => setDetailMonth(null)}
+        />
       )}
     </>
   )

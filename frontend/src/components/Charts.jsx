@@ -34,10 +34,26 @@ function CurrencyTooltip({ active, payload, label }) {
   )
 }
 
-export function SpendingTrendChart({ data }) {
+// Clicking (or tapping) a month calls onSelectMonth("2025-01"). Recharts reports the clicked x label.
+function monthClick(onSelectMonth) {
+  if (!onSelectMonth) return undefined
+  return (state) => {
+    const month = state?.activeLabel
+    if (month) onSelectMonth(String(month))
+  }
+}
+
+const clickable = (onSelectMonth) => (onSelectMonth ? { cursor: 'pointer' } : undefined)
+
+export function SpendingTrendChart({ data, onSelectMonth }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+      <AreaChart
+        data={data}
+        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+        onClick={monthClick(onSelectMonth)}
+        style={clickable(onSelectMonth)}
+      >
         <defs>
           <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={ACCENT} stopOpacity={0.35} />
@@ -54,10 +70,15 @@ export function SpendingTrendChart({ data }) {
   )
 }
 
-export function CashFlowChart({ data }) {
+export function CashFlowChart({ data, onSelectMonth }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+      <BarChart
+        data={data}
+        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+        onClick={monthClick(onSelectMonth)}
+        style={clickable(onSelectMonth)}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="#e6e8f2" />
         <XAxis dataKey="month" {...axis} />
         <YAxis {...axis} width={52} />

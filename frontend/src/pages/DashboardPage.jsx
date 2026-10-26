@@ -7,6 +7,7 @@ import TrendMeta from '../components/TrendMeta.jsx'
 import ScopePicker from '../components/ScopePicker.jsx'
 import BudgetRiskPanel from '../components/BudgetRiskPanel.jsx'
 import { SpendingTrendChart } from '../components/Charts.jsx'
+import MonthDetailDialog from '../components/MonthDetailDialog.jsx'
 const TOTAL_BUDGET_KEY = '__total_monthly__'
 
 export default function DashboardPage({
@@ -30,6 +31,7 @@ export default function DashboardPage({
   onSetDashboardSpaceIds,
 }) {
   const [budgetFormOpen, setBudgetFormOpen] = useState(false)
+  const [detailMonth, setDetailMonth] = useState(null)
   const [budgetType, setBudgetType] = useState('total')
   const [newBudgetCategory, setNewBudgetCategory] = useState('')
   const [newBudgetAmount, setNewBudgetAmount] = useState('')
@@ -298,7 +300,8 @@ export default function DashboardPage({
             <h2>📈 Spending trend</h2>
             <Link to="/insights">More in Insights</Link>
           </div>
-          <SpendingTrendChart data={trends.monthly} />
+          <SpendingTrendChart data={trends.monthly} onSelectMonth={setDetailMonth} />
+          <p className="chart-hint">Click a month to see its expenses and income.</p>
           <div className="trend-meta">
             {trends.change && (
               <span>
@@ -310,6 +313,16 @@ export default function DashboardPage({
             )}
           </div>
         </section>
+      )}
+
+      {detailMonth && (
+        <MonthDetailDialog
+          month={detailMonth}
+          scope={dashboardScope}
+          spaceIds={dashboardSpaceIds}
+          onChangeMonth={setDetailMonth}
+          onClose={() => setDetailMonth(null)}
+        />
       )}
     </>
   )
