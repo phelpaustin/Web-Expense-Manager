@@ -64,16 +64,33 @@ export function editorMapping(mapping) {
   }
 }
 
-export function commitLabel(summary) {
+// Where the expense rows end up: straight in the expense list, or as bills to itemise later.
+export const SAVE_AS = [
+  { value: 'expenses', label: 'Expenses', help: 'Each row is saved as an expense.' },
+  { value: 'bills', label: 'Bills', help: 'Each row is saved as a bill you can attach a receipt to and itemise later.' },
+]
+
+export function commitLabel(summary, saveAs = 'expenses') {
   if (!summary) return 'Import'
   const parts = []
-  if (summary.new_expenses) parts.push(`${summary.new_expenses} expense${summary.new_expenses === 1 ? '' : 's'}`)
+  const noun = saveAs === 'bills' ? 'bill' : 'expense'
+  if (summary.new_expenses) parts.push(`${summary.new_expenses} ${noun}${summary.new_expenses === 1 ? '' : 's'}`)
   if (summary.new_income) parts.push(`${summary.new_income} income`)
   return parts.length ? `Import ${parts.join(' and ')}` : 'Nothing new to import'
 }
 
 export function resultMessage(result) {
-  const bits = [`Imported ${result.added_expenses} expense${result.added_expenses === 1 ? '' : 's'} and ${result.added_income} income.`]
+  const bills = result.save_as === 'bills'
+  const count = bills ? result.added_bills || 0 : result.added_expenses
+  const noun = bills ? 'bill' : 'expense'
+  const bits = [`Imported ${count} ${noun}${count === 1 ? '' : 's'} and ${result.added_income} income.`]
+  if (bills && result.added_bills) {
+    bits.push(
+      result.recorded_bills
+        ? `${result.recorded_bills} counted as spending; itemise them whenever you like.`
+        : 'They are waiting on the Bills page.',
+    )
+  }
   if (result.duplicates) bits.push(`${result.duplicates} already in your records.`)
   if (result.skipped) bits.push(`${result.skipped} left out.`)
   if (result.errors) bits.push(`${result.errors} could not be read.`)

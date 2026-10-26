@@ -11,7 +11,6 @@ import {
   revertBillToTotal,
   uploadReceipt,
   uploadBill,
-  bulkUploadPendingBills,
   dismissDuplicate,
   viewReceipt,
   deleteReceipt,
@@ -163,20 +162,6 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     })
   }
 
-  async function handleBulkUpload(file) {
-    await run(async () => {
-      const r = await bulkUploadPendingBills(file)
-      const parts = [`Imported ${r.created} bill${r.created === 1 ? '' : 's'}`]
-      if (r.auto_recorded > 0) parts.push(`${r.auto_recorded} counted as spending (itemise them whenever you like)`)
-      if (r.possible_duplicates > 0) parts.push(`${r.possible_duplicates} possible duplicate${r.possible_duplicates === 1 ? '' : 's'} left for you to review`)
-      if (r.skipped?.length > 0) parts.push(`${r.skipped.length} row${r.skipped.length === 1 ? '' : 's'} skipped`)
-      setNotice({ text: `${parts.join(' · ')}.`, details: (r.skipped || []).map((s) => `Row ${s.row}: ${s.reason}`) })
-      // Show what needs attention first: duplicates / nothing recorded -> the to-itemise tab.
-      setQuery({ status: r.possible_duplicates > 0 || r.auto_recorded === 0 ? 'pending' : 'total_only' })
-      await loadAll(EXPENSE_PARTS)
-    })
-  }
-
   // ── status changes ──
   async function handleRecordTotal(bill, category) {
     let amount
@@ -317,7 +302,6 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     actions: {
       add: handleAdd,
       uploadBill: handleUploadBill,
-      bulkUpload: handleBulkUpload,
       recordTotal: handleRecordTotal,
       bulkRecord: handleBulkRecord,
       undo: handleUndo,

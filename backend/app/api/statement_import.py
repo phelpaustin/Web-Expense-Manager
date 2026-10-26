@@ -6,6 +6,7 @@ written until ``/import/commit``.
 """
 import io
 import json
+from collections import Counter
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from pydantic import BaseModel, Field
 
-from app.api import bill_sync
+from app.api import bill_sync, bills as bills_api
 from app.api.deps import get_current_user
 from app.api.expenses import _price_per_unit, fetch_expenses
 from app.api.income import fetch_income
@@ -34,6 +35,9 @@ from app.logic.taxonomy import CategoryResolver
 router = APIRouter()
 
 PREVIEW_ROWS = 300
+# Where the expense rows of a statement go: straight into Expenses, or onto the Bills page as one
+# bill per row (the shop trip, itemised later whenever the person likes). Income is always income.
+SAVE_AS = ("expenses", "bills")
 GRID_HEAD_ROWS = 15
 MAX_OVERRIDES = 10_000
 
@@ -94,7 +98,37 @@ def _line_map(text: str, what: str, allowed: set[str] | None = None) -> dict[int
     return out
 
 
-def _table_and_rows(db: Session, user: models.User, file: UploadFile, mapping_json: str, overrides_json: str, categories_json: str):
+def _check_save_as(value: str) -> str:
+    value = (value or "expenses").strip() or "expenses"
+    if value not in SAVE_AS:
+        raise HTTPException(status_code=400, detail="save_as must be 'expenses' or 'bills'")
+    return value
+
+
+def _mark_bills_already_waiting(db: Session, user: models.User, rows: list) -> None:
+    """A bill that is still waiting (not counted as spending) matches no expense, so the usual duplicate
+    check misses it. Importing the same statement as bills twice must not stack up copies."""
+    waiting = Counter(
+        (b.date, quantize_money(b.amount), b.currency)
+        for b in db.query(models.PendingBill).filter(
+            models.PendingBill.user_id == user.id, models.PendingBill.status == "pending"
+        )
+        if b.amount is not None
+    )
+    for r in rows:
+        if r.status != "new" or r.kind != "expense" or r.amount is None:
+            continue
+        key = (r.date, quantize_money(r.amount), normalize_currency(r.currency))
+        if waiting[key] > 0:
+            waiting[key] -= 1
+            r.status = "duplicate"
+            r.reason = "Already waiting as a bill"
+
+
+def _table_and_rows(
+    db: Session, user: models.User, file: UploadFile, mapping_json: str, overrides_json: str, categories_json: str,
+    save_as: str = "expenses",
+):
     mapping = _parse_mapping(mapping_json)
     grid = _load_grid(file)
     table = si.build_table(grid, mapping.header_row)
@@ -120,6 +154,8 @@ def _table_and_rows(db: Session, user: models.User, file: UploadFile, mapping_js
         overrides=overrides,
         category_overrides=category_overrides,
     )
+    if save_as == "bills":
+        _mark_bills_already_waiting(db, user, rows)
     return mapping, table, [], rows
 
 
@@ -273,11 +309,12 @@ def preview(
     mapping: str = Form(...),
     overrides: str = Form(""),
     categories: str = Form(""),
+    save_as: str = Form("expenses"),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     """What importing with this mapping would do. Saves nothing."""
-    m, table, problems, rows = _table_and_rows(db, user, file, mapping, overrides, categories)
+    m, table, problems, rows = _table_and_rows(db, user, file, mapping, overrides, categories, _check_save_as(save_as))
     if problems:
         return {"problems": problems, "summary": None, "rows": [], "truncated": False}
     # Show what needs attention first (errors, then new rows), but keep file order inside each group.
@@ -303,23 +340,39 @@ def commit(
     mapping: str = Form(...),
     overrides: str = Form(""),
     categories: str = Form(""),
+    save_as: str = Form("expenses"),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Save the rows the preview called new. Duplicates and skipped rows are left alone."""
-    m, table, problems, rows = _table_and_rows(db, user, file, mapping, overrides, categories)
+    """Save the rows the preview called new. Duplicates and skipped rows are left alone.
+
+    ``save_as="bills"`` files each expense row as a bill instead (counted as spending straight away when
+    the person's setting says so, otherwise waiting on the Bills page). Income is saved as income either way.
+    """
+    save_as = _check_save_as(save_as)
+    m, table, problems, rows = _table_and_rows(db, user, file, mapping, overrides, categories, save_as)
     if problems:
         raise HTTPException(status_code=400, detail=" ".join(problems))
 
     options = get_or_create_options(db, user.id)
     resolver = CategoryResolver(list(options.categories or []))
     learned: set[tuple] = set()
-    added_expenses = added_income = 0
+    added_expenses = added_income = added_bills = recorded_bills = 0
+    new_bills: list[tuple[models.PendingBill, str]] = []
     for r in rows:
         if r.status != "new":
             continue
         amount = quantize_money(r.amount)
-        if r.kind == "expense":
+        if r.kind == "expense" and save_as == "bills":
+            category = resolver.resolve(_clip(r.category, MAX_NAME)) or si.UNCATEGORIZED
+            bill = models.PendingBill(
+                user_id=user.id, date=r.date, shop=_clip(r.shop or r.description, MAX_NAME) or "Bank statement",
+                amount=amount, currency=normalize_currency(r.currency), note="Bank statement import", status="pending",
+            )
+            db.add(bill)
+            new_bills.append((bill, category))
+            added_bills += 1
+        elif r.kind == "expense":
             category = resolver.resolve(_clip(r.category, MAX_NAME)) or si.UNCATEGORIZED
             subcategory = _clip(r.subcategory, MAX_NAME)
             shop = _clip(r.shop, MAX_NAME)
@@ -338,7 +391,19 @@ def commit(
                 note="Imported from bank statement", currency=normalize_currency(r.currency),
             ))
             added_income += 1
+    if new_bills:
+        db.flush()
+        if options.count_bills_as_spending:
+            for bill, category in new_bills:
+                # A category the statement could not work out leaves the bill in the usual "Bills" category.
+                chosen = None if category == si.UNCATEGORIZED else category
+                bills_api._record_total(db, user, bill, category=chosen)
+                recorded_bills += 1
+                if chosen:
+                    learned.add((chosen, "", "Count", bill.shop))
     db.commit()
+    if recorded_bills:
+        bills_api._learn_default_category(db, user.id)
     bill_sync.adopt_after_write(db, user.id)
     for category, subcategory, unit, shop in learned:
         ensure_options(db, user.id, category, subcategory, unit, shop)
@@ -346,6 +411,9 @@ def commit(
     return {
         "added_expenses": added_expenses,
         "added_income": added_income,
+        "added_bills": added_bills,
+        "recorded_bills": recorded_bills,
+        "save_as": save_as,
         "duplicates": summary["duplicates"],
         "skipped": summary["skipped"],
         "errors": summary["errors"],

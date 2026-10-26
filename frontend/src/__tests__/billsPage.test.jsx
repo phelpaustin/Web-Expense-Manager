@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import BillsPage from '../pages/BillsPage.jsx'
 
 const BILLS = [
@@ -10,7 +11,7 @@ const BILLS = [
   { id: 5, date: '2026-07-18', shop: 'Unreadable receipt', amount: 0, currency: 'SEK', note: 'my note', status: 'pending', has_receipt: true, possible_duplicate: false, item_count: 0 },
 ]
 
-const ACTIONS = ['add', 'uploadBill', 'bulkUpload', 'recordTotal', 'bulkRecord', 'undo', 'revertToTotal', 'itemise', 'dismissDuplicate', 'remove', 'bulkDelete', 'uploadReceipt', 'viewReceipt', 'deleteReceipt', 'toggleCount']
+const ACTIONS = ['add', 'uploadBill', 'recordTotal', 'bulkRecord', 'undo', 'revertToTotal', 'itemise', 'dismissDuplicate', 'remove', 'bulkDelete', 'uploadReceipt', 'viewReceipt', 'deleteReceipt', 'toggleCount']
 
 function makeState(overrides = {}) {
   return {
@@ -34,7 +35,7 @@ function makeState(overrides = {}) {
 const OPTIONS = { categories: ['Food', 'Transport'], currencies: ['EUR', 'SEK'], base_currency: 'SEK', count_bills_as_spending: true }
 
 const renderPage = (state = makeState(), options = OPTIONS) => {
-  render(<BillsPage state={state} options={options} />)
+  render(<MemoryRouter><BillsPage state={state} options={options} /></MemoryRouter>)
   return state
 }
 const row = (text) => screen.getByText(text).closest('tr')
@@ -95,11 +96,11 @@ describe('Bills page: actions depend on the bill status', () => {
   })
 
   it('shows the status chip only on the All tab (on a status tab it would repeat on every row)', () => {
-    const { unmount } = render(<BillsPage state={makeState()} options={OPTIONS} />)
+    const { unmount } = render(<MemoryRouter><BillsPage state={makeState()} options={OPTIONS} /></MemoryRouter>)
     expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull()
     expect(within(row('INDO PAK MALMO')).queryByText('To itemise')).toBeNull()
     unmount()
-    render(<BillsPage state={allTab()} options={OPTIONS} />)
+    render(<MemoryRouter><BillsPage state={allTab()} options={OPTIONS} /></MemoryRouter>)
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy()
     expect(within(row('INDO PAK MALMO')).getByText('To itemise')).toBeTruthy()
     expect(within(row('LIDL')).getByText('Total only')).toBeTruthy()
@@ -182,13 +183,13 @@ describe('Bills page: bills made from expenses', () => {
   })
 
   it('keeps the action buttons lined up: a row without a menu gets a spacer of the same width', () => {
-    const { container } = render(<BillsPage state={withBill(FROM_EXPENSES)} options={OPTIONS} />)
+    const { container } = render(<MemoryRouter><BillsPage state={withBill(FROM_EXPENSES)} options={OPTIONS} /></MemoryRouter>)
     expect(container.querySelector('tbody .row-menu-spacer')).not.toBeNull()
     expect(container.querySelector('tbody .row-menu')).toBeNull()
   })
 
   it('a row that has a menu has no spacer', () => {
-    const { container } = render(<BillsPage state={withBill({ ...FROM_EXPENSES, from_expenses: false })} options={OPTIONS} />)
+    const { container } = render(<MemoryRouter><BillsPage state={withBill({ ...FROM_EXPENSES, from_expenses: false })} options={OPTIONS} /></MemoryRouter>)
     expect(container.querySelector('tbody .row-menu-spacer')).toBeNull()
     expect(container.querySelector('tbody .row-menu')).not.toBeNull()
   })
@@ -342,10 +343,10 @@ describe('Bills page: pagination and empty states', () => {
   it('offers upload/import shortcuts only when there are no bills at all', () => {
     const empty = { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } }
     const query = (status) => ({ status, q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 })
-    const { unmount } = render(<BillsPage state={makeState({ data: empty, query: query('all') })} options={OPTIONS} />)
+    const { unmount } = render(<MemoryRouter><BillsPage state={makeState({ data: empty, query: query('all') })} options={OPTIONS} /></MemoryRouter>)
     expect(screen.getAllByText(/Upload receipt/)).toHaveLength(2) // header + empty state
     unmount()
-    render(<BillsPage state={makeState({ data: empty, query: query('pending') })} options={OPTIONS} />)
+    render(<MemoryRouter><BillsPage state={makeState({ data: empty, query: query('pending') })} options={OPTIONS} /></MemoryRouter>)
     expect(screen.getAllByText(/Upload receipt/)).toHaveLength(1)
   })
 
@@ -360,14 +361,14 @@ describe('Bills page: pagination and empty states', () => {
 })
 
 describe('Bills page: adding, uploading and notices', () => {
-  it('uploads a receipt and imports a statement', () => {
+  it('uploads a receipt, and sends bank statements to the one Import page', () => {
     const state = renderPage()
     const receipt = new File(['x'], 'r.pdf', { type: 'application/pdf' })
     fireEvent.change(screen.getByText(/Upload receipt/).querySelector('input'), { target: { files: [receipt] } })
     expect(state.actions.uploadBill).toHaveBeenCalledWith(receipt)
-    const sheet = new File(['x'], 's.csv', { type: 'text/csv' })
-    fireEvent.change(screen.getByText(/Import bank statement/).querySelector('input'), { target: { files: [sheet] } })
-    expect(state.actions.bulkUpload).toHaveBeenCalledWith(sheet)
+    const link = screen.getByRole('link', { name: /Import bank statement/ })
+    expect(link.getAttribute('href')).toBe('/import')
+    expect(document.querySelector('input[accept=".xlsx,.csv"]')).toBeNull()
   })
 
   it('opens the add form and submits it', () => {
@@ -396,10 +397,10 @@ describe('Bills page: adding, uploading and notices', () => {
 
   it('shows a loading skeleton only when there is nothing to show yet', () => {
     const empty = { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } }
-    const { container, unmount } = render(<BillsPage state={makeState({ loading: true, data: empty })} options={OPTIONS} />)
+    const { container, unmount } = render(<MemoryRouter><BillsPage state={makeState({ loading: true, data: empty })} options={OPTIONS} /></MemoryRouter>)
     expect(container.querySelector('.skeleton-list')).not.toBeNull()
     unmount()
-    const { container: loaded } = render(<BillsPage state={makeState({ loading: true })} options={OPTIONS} />)
+    const { container: loaded } = render(<MemoryRouter><BillsPage state={makeState({ loading: true })} options={OPTIONS} /></MemoryRouter>)
     expect(loaded.querySelector('.skeleton-list')).toBeNull() // keeps showing the rows while refreshing
   })
 

@@ -170,37 +170,6 @@ describe('uploading a receipt', () => {
   })
 })
 
-describe('importing a bank statement', () => {
-  const sheet = new File(['x'], 's.csv', { type: 'text/csv' })
-
-  it('summarises the import and lands on what needs attention', async () => {
-    client.bulkUploadPendingBills.mockResolvedValueOnce({
-      created: 10, auto_recorded: 8, possible_duplicates: 2, skipped: [{ row: 4, reason: 'bad amount' }],
-    })
-    const { result } = await setup()
-    await act(async () => { await result.current.actions.bulkUpload(sheet) })
-    expect(result.current.notice.text).toBe('Imported 10 bills · 8 counted as spending (itemise them whenever you like) · 2 possible duplicates left for you to review · 1 row skipped.')
-    expect(result.current.notice.details).toEqual(['Row 4: bad amount'])
-    expect(result.current.query.status).toBe('pending') // duplicates to review
-    expect(loadAll).toHaveBeenCalled()
-  })
-
-  it('shows the recorded totals when there is nothing to review', async () => {
-    client.bulkUploadPendingBills.mockResolvedValueOnce({ created: 5, auto_recorded: 5, possible_duplicates: 0, skipped: [] })
-    const { result } = await setup()
-    await act(async () => { await result.current.actions.bulkUpload(sheet) })
-    expect(result.current.query.status).toBe('total_only')
-  })
-
-  it('shows to-itemise when the setting is off and nothing was recorded', async () => {
-    client.bulkUploadPendingBills.mockResolvedValueOnce({ created: 5, auto_recorded: 0, possible_duplicates: 0, skipped: [] })
-    const { result } = await setup()
-    await act(async () => { await result.current.actions.bulkUpload(sheet) })
-    expect(result.current.query.status).toBe('pending')
-    expect(result.current.notice.text).not.toMatch(/counted as spending/)
-  })
-})
-
 describe('recording totals, undoing, deleting', () => {
   it('records a bill with the chosen category and refreshes the totals', async () => {
     const { result } = await setup()

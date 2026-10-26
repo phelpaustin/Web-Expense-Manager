@@ -192,6 +192,36 @@ describe('statement import page', () => {
     expect(screen.queryByLabelText('Date column')).toBeNull() // back to the start
   })
 
+  it('saves as expenses unless told otherwise', async () => {
+    setup()
+    await open()
+    expect(screen.getByRole('radio', { name: /Expenses/ }).checked).toBe(true)
+    expect(api.previewStatement.mock.calls.at(-1)[4]).toBe('expenses')
+    expect(screen.getByText('New expenses')).toBeTruthy()
+  })
+
+  it('offers to save the expenses as bills, and previews and commits that way', async () => {
+    const { onImported } = setup()
+    await open()
+    fireEvent.click(screen.getByRole('radio', { name: /Bills/ }))
+    await waitFor(() => expect(api.previewStatement.mock.calls.at(-1)[4]).toBe('bills'))
+    expect(screen.getByText('New bills')).toBeTruthy()
+    expect(screen.getByText(/count as spending straight away/)).toBeTruthy()
+    api.commitStatement.mockResolvedValue({ save_as: 'bills', added_expenses: 0, added_bills: 1, recorded_bills: 1, added_income: 1, duplicates: 1, skipped: 0, errors: 0 })
+    fireEvent.click(screen.getByText('Import 1 bill and 1 income'))
+    await screen.findByText(/Imported 1 bill and 1 income\. 1 counted as spending; itemise them whenever you like\. 1 already in your records\./)
+    expect(api.commitStatement.mock.calls[0][4]).toBe('bills')
+    expect(screen.getByRole('link', { name: 'See bills' }).getAttribute('href')).toBe('/bills')
+    expect(onImported).toHaveBeenCalledTimes(1)
+  })
+
+  it('says bills will wait when the setting is off', async () => {
+    setup({ options: { count_bills_as_spending: false } })
+    await open()
+    fireEvent.click(screen.getByRole('radio', { name: /Bills/ }))
+    expect(screen.getByText(/do not count as spending until you record them/)).toBeTruthy()
+  })
+
   it('does not offer to import when nothing is new', async () => {
     setup()
     api.previewStatement.mockResolvedValue({ ...PREVIEW, summary: { ...PREVIEW.summary, new_expenses: 0, new_income: 0 } })

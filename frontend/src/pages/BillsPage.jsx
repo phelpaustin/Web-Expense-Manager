@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import DialogHost from '../components/DialogHost.jsx'
 import Pagination from '../components/Pagination.jsx'
@@ -188,9 +189,9 @@ export default function BillsPage({ state, options }) {
             <FileButton className="btn-upload" accept="application/pdf,image/*" onFile={actions.uploadBill}>
               📤 Upload receipt
             </FileButton>
-            <FileButton className="btn-upload btn-upload-bulk" accept=".xlsx,.csv" onFile={actions.bulkUpload}>
-              📊 Import bank statement
-            </FileButton>
+            <Link className="btn-upload btn-upload-bulk" to="/import">
+              📥 Import bank statement
+            </Link>
             <button type="button" className="ghost-btn" onClick={() => setShowAdd((v) => !v)}>
               {showAdd ? '✕ Close' : '➕ Add bill'}
             </button>
@@ -335,9 +336,9 @@ export default function BillsPage({ state, options }) {
                 <FileButton className="btn-upload" accept="application/pdf,image/*" onFile={actions.uploadBill}>
                   📤 Upload receipt
                 </FileButton>
-                <FileButton className="btn-upload btn-upload-bulk" accept=".xlsx,.csv" onFile={actions.bulkUpload}>
-                  📊 Import bank statement
-                </FileButton>
+                <Link className="btn-upload btn-upload-bulk" to="/import">
+                  📥 Import bank statement
+                </Link>
               </div>
             )}
           </div>

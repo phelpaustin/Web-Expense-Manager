@@ -12,6 +12,7 @@ import {
 import {
   AMOUNT_MODES,
   RULE_ACTIONS,
+  SAVE_AS,
   STATUS_LABEL,
   amountMode,
   commitLabel,
@@ -56,11 +57,12 @@ function ColumnSelect({ label, columns, value, onChange, required }) {
   )
 }
 
-function StatementImport({ onImported, onError }) {
+function StatementImport({ onImported, onError, countBillsAsSpending = true }) {
   const [file, setFile] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [mapping, setMapping] = useState(null)
   const [mode, setMode] = useState('signed')
+  const [saveAs, setSaveAs] = useState('expenses')
   const [headerRow, setHeaderRow] = useState('')
   const [overrides, setOverrides] = useState({})
   const [categoryEdits, setCategoryEdits] = useState({})
@@ -123,7 +125,7 @@ function StatementImport({ onImported, onError }) {
     if (!file || !analysis || !mapping) return undefined
     const request = ++latest.current
     const timer = setTimeout(() => {
-      previewStatement(file, payloadMapping(mapping), overrides, categoryEdits)
+      previewStatement(file, payloadMapping(mapping), overrides, categoryEdits, saveAs)
         .then((res) => {
           if (request !== latest.current) return
           setProblems(res.problems || [])
@@ -135,7 +137,7 @@ function StatementImport({ onImported, onError }) {
         })
     }, 350)
     return () => clearTimeout(timer)
-  }, [file, analysis, mapping, overrides, categoryEdits])
+  }, [file, analysis, mapping, overrides, categoryEdits, saveAs])
 
   function change(patch) {
     setMapping((m) => ({ ...m, ...patch }))
@@ -170,7 +172,7 @@ function StatementImport({ onImported, onError }) {
     setBusy(true)
     onError(null)
     try {
-      const res = await commitStatement(file, payloadMapping(mapping), overrides, categoryEdits)
+      const res = await commitStatement(file, payloadMapping(mapping), overrides, categoryEdits, saveAs)
       setResult(res)
       setFile(null)
       setAnalysis(null)
@@ -210,7 +212,8 @@ function StatementImport({ onImported, onError }) {
 
       {result && (
         <p className="import-result" role="status">
-          {resultMessage(result)} <Link to="/expenses">See expenses</Link> · <Link to="/income">See income</Link>
+          {resultMessage(result)}{' '}
+          {result.save_as === 'bills' ? <Link to="/bills">See bills</Link> : <Link to="/expenses">See expenses</Link>} · <Link to="/income">See income</Link>
         </p>
       )}
 
@@ -318,6 +321,23 @@ function StatementImport({ onImported, onError }) {
               <input type="checkbox" checked={mapping.include_income} onChange={(e) => change({ include_income: e.target.checked })} /> Import income
             </label>
 
+            <fieldset className="import-saveas">
+              <legend>Save expenses as</legend>
+              {SAVE_AS.map((o) => (
+                <label key={o.value} className="import-mode">
+                  <input type="radio" name="save-as" value={o.value} checked={saveAs === o.value} onChange={() => setSaveAs(o.value)} /> {o.label}
+                  <span className="subtitle"> {o.help}</span>
+                </label>
+              ))}
+              {saveAs === 'bills' && (
+                <p className="subtitle">
+                  {countBillsAsSpending
+                    ? 'Bills count as spending straight away, as a single total each. Itemise them from Bills whenever you like.'
+                    : 'Bills wait on the Bills page and do not count as spending until you record them (see Settings).'}
+                </p>
+              )}
+            </fieldset>
+
             {problems.length > 0 && (
               <ul className="import-problems" role="alert">
                 {problems.map((p) => (
@@ -409,7 +429,7 @@ function StatementImport({ onImported, onError }) {
               <>
                 <div className="cards">
                   <div className="card">
-                    <div className="card-label">New expenses</div>
+                    <div className="card-label">{saveAs === 'bills' ? 'New bills' : 'New expenses'}</div>
                     <div className="card-value">{summary.new_expenses}</div>
                     <div className="subtitle">{Object.entries(summary.expense_total).map(([c, v]) => money(v, c)).join(' · ') || '—'}</div>
                   </div>
@@ -500,7 +520,7 @@ function StatementImport({ onImported, onError }) {
 
                 <div className="import-actions">
                   <button type="button" onClick={commit} disabled={!canImport}>
-                    {busy ? 'Importing…' : commitLabel(summary)}
+                    {busy ? 'Importing…' : commitLabel(summary, saveAs)}
                   </button>
                 </div>
               </>
@@ -541,7 +561,7 @@ export default function ImportPage({ options, onImported, onError }) {
         </button>
       </div>
       <div hidden={tab !== 'statement'}>
-        <StatementImport onImported={onImported} onError={onError} />
+        <StatementImport onImported={onImported} onError={onError} countBillsAsSpending={options?.count_bills_as_spending !== false} />
       </div>
       <div hidden={tab !== 'file'}>
         <ExpenseFileImport options={options} onImported={onImported} onError={onError} />

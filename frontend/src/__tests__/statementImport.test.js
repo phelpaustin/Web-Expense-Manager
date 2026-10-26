@@ -57,10 +57,18 @@ describe('wording', () => {
     expect(commitLabel({ new_expenses: 1, new_income: 0 })).toBe('Import 1 expense')
     expect(commitLabel({ new_expenses: 2, new_income: 3 })).toBe('Import 2 expenses and 3 income')
     expect(commitLabel({ new_expenses: 0, new_income: 0 })).toBe('Nothing new to import')
+    expect(commitLabel({ new_expenses: 1, new_income: 0 }, 'bills')).toBe('Import 1 bill')
+    expect(commitLabel({ new_expenses: 4, new_income: 2 }, 'bills')).toBe('Import 4 bills and 2 income')
   })
 
   it('summarises the result, mentioning only what happened', () => {
     expect(resultMessage({ added_expenses: 2, added_income: 1, duplicates: 0, skipped: 0, errors: 0 })).toBe('Imported 2 expenses and 1 income.')
+    expect(resultMessage({ save_as: 'bills', added_bills: 3, recorded_bills: 3, added_income: 0, duplicates: 0, skipped: 0, errors: 0 })).toBe(
+      'Imported 3 bills and 0 income. 3 counted as spending; itemise them whenever you like.',
+    )
+    expect(resultMessage({ save_as: 'bills', added_bills: 1, recorded_bills: 0, added_income: 0, duplicates: 0, skipped: 0, errors: 0 })).toBe(
+      'Imported 1 bill and 0 income. They are waiting on the Bills page.',
+    )
     expect(resultMessage({ added_expenses: 1, added_income: 0, duplicates: 4, skipped: 2, errors: 1 })).toBe(
       'Imported 1 expense and 0 income. 4 already in your records. 2 left out. 1 could not be read.',
     )

@@ -502,12 +502,6 @@ export function uploadBill(file, { shop = '', amount = '', attachTo } = {}) {
   return request('/api/pending-bills/upload', { method: 'POST', body })
 }
 
-export function bulkUploadPendingBills(file) {
-  const body = new FormData()
-  body.append('file', file)
-  return request('/api/pending-bills/bulk-upload', { method: 'POST', body })
-}
-
 export function dismissDuplicate(billId) {
   return request(`/api/pending-bills/${billId}/dismiss-duplicate`, { method: 'POST' })
 }
@@ -621,12 +615,13 @@ export function analyzeStatement(file, headerRow) {
   return request('/api/import/analyze', { method: 'POST', body: statementForm(file, { header_row: headerRow }) })
 }
 
-export function previewStatement(file, mapping, overrides = {}, categories = {}) {
-  return request('/api/import/preview', { method: 'POST', body: statementForm(file, { mapping, overrides, categories }) })
+// saveAs is 'expenses' (each expense row becomes an expense) or 'bills' (each becomes a bill to itemise later).
+export function previewStatement(file, mapping, overrides = {}, categories = {}, saveAs = 'expenses') {
+  return request('/api/import/preview', { method: 'POST', body: statementForm(file, { mapping, overrides, categories, save_as: saveAs }) })
 }
 
-export function commitStatement(file, mapping, overrides = {}, categories = {}) {
-  return request('/api/import/commit', { method: 'POST', body: statementForm(file, { mapping, overrides, categories }) })
+export function commitStatement(file, mapping, overrides = {}, categories = {}, saveAs = 'expenses') {
+  return request('/api/import/commit', { method: 'POST', body: statementForm(file, { mapping, overrides, categories, save_as: saveAs }) })
 }
 
 export function assistStatement(file, mapping, instruction) {

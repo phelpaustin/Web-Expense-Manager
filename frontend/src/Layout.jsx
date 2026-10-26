@@ -69,6 +69,7 @@ export default function Layout({ user, onLogout, error, loading, alerts = [], op
           {NAV.map((group, gi) => (
             <Fragment key={group.title || gi}>
               {group.title && <div className="nav-group-title">{group.title}</div>}
+              {!group.title && gi > 0 && <div className="nav-group-gap" aria-hidden="true" />}
               {group.links.map((l) => (
                 <NavLink
                   key={l.to}

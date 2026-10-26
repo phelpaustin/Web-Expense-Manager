@@ -377,3 +377,102 @@ def test_xlsx_statements_work(client, make_user):
 def test_requires_login(client):
     r = client.post("/api/import/analyze", files={"file": ("a.csv", b"a,b\n1,2\n", "text/csv")})
     assert r.status_code == 401
+
+
+# ── Save as: expenses, or bills to itemise later ─────────────────────────
+
+def _bill_counts(client, h):
+    return client.get("/api/bills?status=all", headers=h).json()["counts"]
+
+
+def _items(client, h):
+    body = client.get("/api/expenses", headers=h).json()
+    return body["items"] if isinstance(body, dict) else body
+
+
+def test_saving_as_bills_files_each_expense_as_a_bill_and_counts_it_as_spending(client, make_user):
+    _, h = make_user()
+    _, mapping = _import_flow(client, h)
+    c = _post(client, "commit", h, mapping=mapping, save_as="bills")
+    assert c.status_code == 200, c.text
+    body = c.json()
+    assert (body["added_expenses"], body["added_bills"], body["recorded_bills"], body["added_income"]) == (0, 2, 2, 1)
+    assert body["save_as"] == "bills"
+    counts = _bill_counts(client, h)
+    assert counts["total_only"] == 2 and counts["pending"] == 0
+    # each bill is one total-only expense for the whole amount, named after the shop
+    items = _items(client, h)
+    assert {e["shop"] for e in items} == {"ICA MAXI 4711", "SL BILJETT"}
+    assert sorted(float(e["amount"]) for e in items) == [39.0, 245.5]
+    # income is still income
+    assert len(client.get("/api/income", headers=h).json()) == 1
+
+
+def test_saving_as_bills_with_the_setting_off_leaves_them_waiting_on_the_bills_page(client, make_user):
+    _, h = make_user()
+    assert client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h).status_code == 200
+    _, mapping = _import_flow(client, h)
+    body = _post(client, "commit", h, mapping=mapping, save_as="bills").json()
+    assert (body["added_bills"], body["recorded_bills"]) == (2, 0)
+    assert _bill_counts(client, h)["pending"] == 2
+    assert _items(client, h) == []
+
+
+def test_importing_the_same_statement_as_bills_twice_adds_nothing(client, make_user):
+    _, h = make_user()
+    _, mapping = _import_flow(client, h)
+    _post(client, "commit", h, mapping=mapping, save_as="bills")
+    again = _post(client, "commit", h, mapping=mapping, save_as="bills").json()
+    assert (again["added_bills"], again["added_income"], again["duplicates"]) == (0, 0, 3)
+    assert _bill_counts(client, h)["all"] == 2
+
+
+def test_bills_still_waiting_count_as_already_there_so_copies_do_not_pile_up(client, make_user):
+    _, h = make_user()
+    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h)
+    _, mapping = _import_flow(client, h)
+    _post(client, "commit", h, mapping=mapping, save_as="bills")
+
+    p = _post(client, "preview", h, mapping=mapping, save_as="bills").json()
+    assert p["summary"]["new_expenses"] == 0
+    waiting = [r for r in p["rows"] if r["status"] == "duplicate" and r["kind"] == "expense"]
+    assert len(waiting) == 2 and all(r["reason"] == "Already waiting as a bill" for r in waiting)
+
+    again = _post(client, "commit", h, mapping=mapping, save_as="bills").json()
+    assert again["added_bills"] == 0 and _bill_counts(client, h)["pending"] == 2
+    # the preview is for what would be saved: as plain expenses nothing is waiting in Expenses
+    as_expenses = _post(client, "preview", h, mapping=mapping).json()
+    assert as_expenses["summary"]["new_expenses"] == 2
+
+
+def test_two_identical_purchases_on_one_day_are_not_collapsed_into_one_bill(client, make_user):
+    _, h = make_user()
+    text = "Date,Description,Amount\n2026-09-01,Coffee,-4.50\n2026-09-01,Coffee,-4.50\n"
+    _, mapping = _import_flow(client, h, text)
+    body = _post(client, "commit", h, csv_text=text, mapping=mapping, save_as="bills").json()
+    assert body["added_bills"] == 2
+
+
+def test_previewing_as_bills_saves_nothing(client, make_user):
+    _, h = make_user()
+    _, mapping = _import_flow(client, h)
+    assert _post(client, "preview", h, mapping=mapping, save_as="bills").status_code == 200
+    assert _bill_counts(client, h)["all"] == 0 and client.get("/api/income", headers=h).json() == []
+
+
+def test_unknown_save_as_is_rejected_and_expenses_stays_the_default(client, make_user):
+    _, h = make_user()
+    _, mapping = _import_flow(client, h)
+    assert _post(client, "preview", h, mapping=mapping, save_as="invoices").status_code == 400
+    assert _post(client, "commit", h, mapping=mapping, save_as="invoices").status_code == 400
+    body = _post(client, "commit", h, mapping=mapping).json()
+    assert (body["added_expenses"], body["added_bills"], body["save_as"]) == (2, 0, "expenses")
+
+
+def test_another_users_waiting_bills_do_not_hide_my_rows(client, make_user):
+    _, h1 = make_user()
+    _, h2 = make_user()
+    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h1)
+    _, mapping = _import_flow(client, h1)
+    _post(client, "commit", h1, mapping=mapping, save_as="bills")
+    assert _post(client, "commit", h2, mapping=mapping, save_as="bills").json()["added_bills"] == 2

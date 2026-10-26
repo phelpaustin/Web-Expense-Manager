@@ -160,6 +160,10 @@ h3 {
   box-shadow: 0 10px 22px -10px rgba(109, 123, 255, 0.6);
 }
 
+.nav-group-gap {
+  height: 0.6rem;
+}
+
 .nav-group-title {
   font-size: 0.7rem;
   font-weight: 700;
@@ -993,7 +997,17 @@ button {
 
 .btn-upload-bulk {
   background: #4f46e5;
+  text-decoration: none;
 }
+
+.import-saveas {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, #d9dee5);
+  border-radius: 8px;
+}
+.import-saveas legend { font-weight: 600; padding: 0 0.25rem; }
+.import-saveas .import-mode { display: block; margin: 0.25rem 0; }
 
 .notice {
   background: rgba(245, 158, 11, 0.1);
@@ -2659,7 +2673,8 @@ label.link-btn input[type='file'] {
   }
 
   /* The phone nav is one scrollable row, so group headings would only get in the way. */
-  .nav-group-title {
+  .nav-group-title,
+  .nav-group-gap {
     display: none;
   }
 }
