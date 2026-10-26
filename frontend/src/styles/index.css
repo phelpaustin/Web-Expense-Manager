@@ -1814,45 +1814,8 @@ button {
    Responsive
    ============================================================ */
 @media (max-width: 760px) {
-  .app-shell {
-    flex-direction: column;
-  }
-  .sidebar {
-    width: auto;
-    height: auto;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
-  }
-  .brand {
-    padding: 0.25rem 0.5rem;
-  }
-  .nav {
-    flex-direction: row;
-    flex-wrap: wrap;
-    flex: 1;
-    gap: 0.25rem;
-  }
-  .nav-link {
-    padding: 0.45rem 0.7rem;
-  }
-  .sidebar-footer {
-    margin-top: 0;
-    border-top: none;
-    padding-top: 0;
-    flex-direction: row;
-    align-items: center;
-  }
-  .user-email {
-    display: none;
-  }
   .main-content {
-    padding: 1.5rem 1.1rem 3rem;
+    padding: 1.1rem 1.1rem calc(6rem + env(safe-area-inset-bottom));
   }
   .table {
     display: block;
@@ -2633,49 +2596,11 @@ label.link-btn input[type='file'] {
   }
 }
 
-/* Phones, app shell: keep the page inside the screen and make the navigation one scrollable row
-   (it used to wrap into a tall block that pushed the content down). */
+/* Phones, app shell: keep the page inside the screen. Navigation is the bottom bar (MobileNav). */
 @media (max-width: 760px) {
   .main-content {
     width: 100%;
     box-sizing: border-box;
-  }
-
-  .sidebar {
-    gap: 0.35rem 0.5rem;
-    padding: 0.6rem 0.8rem;
-  }
-
-  .brand {
-    order: 1;
-    flex: 1 1 auto;
-  }
-
-  .sidebar-footer {
-    order: 2;
-  }
-
-  .nav {
-    order: 3;
-    flex: 1 1 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .nav-link {
-    flex: none;
-    white-space: nowrap;
-  }
-
-  /* The phone nav is one scrollable row, so group headings would only get in the way. */
-  .nav-group-title,
-  .nav-group-gap {
-    display: none;
   }
 }
 
@@ -2796,4 +2721,200 @@ label.link-btn input[type='file'] {
 .add-menu button span {
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+/* ============================================================
+   Phone navigation: bottom bar, Add sheet, More sheet
+   ============================================================ */
+.topbar-brand {
+  margin-right: auto;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 42;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  min-height: 64px;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.bottom-link {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.7rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.bottom-link.active {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.bottom-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.bottom-dot {
+  position: absolute;
+  top: 8px;
+  right: calc(50% - 18px);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #d92d20;
+}
+
+.bottom-add-slot {
+  display: flex;
+  justify-content: center;
+}
+
+.bottom-add {
+  width: 56px;
+  height: 56px;
+  margin-top: -22px;
+  border: 4px solid var(--surface);
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.bottom-add.open {
+  background: var(--text);
+  font-size: 1.3rem;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(22, 32, 44, 0.5);
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  padding: 0.9rem 1rem 1rem;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+}
+
+.sheet-grip {
+  align-self: center;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.sheet-title {
+  padding: 0 0.25rem 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.sheet-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+  min-height: 56px;
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sheet-item span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.sheet-item-main {
+  background: var(--grad-soft);
+}
+
+.sheet-link {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sheet-link.active {
+  background: var(--grad-soft);
+}
+
+.sheet-link span {
+  color: inherit;
+  font-size: 1rem;
+}
+
+.sheet-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.25rem 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.sheet-user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-cancel {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The bottom bar's Add button replaces the one in the Spending title row. */
+@media (max-width: 760px) {
+  .spending-head .add-menu-wrap {
+    display: none;
+  }
 }

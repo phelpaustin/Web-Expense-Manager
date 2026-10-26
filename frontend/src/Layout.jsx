@@ -1,4 +1,6 @@
 import CurrencySelect from './components/CurrencySelect.jsx'
+import MobileNav, { PHONE_QUERY } from './components/MobileNav.jsx'
+import { useMediaQuery } from './hooks/useMediaQuery.js'
 import { Fragment, Suspense, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
@@ -59,47 +61,51 @@ function NotificationBell({ alerts }) {
   )
 }
 
-export default function Layout({ user, onLogout, error, loading, alerts = [], options, onDisplayCurrencyChange, invitationCount = 0 }) {
+export default function Layout({ user, onLogout, error, loading, alerts = [], options, onDisplayCurrencyChange, invitationCount = 0, onUploadReceipt }) {
+  const phone = useMediaQuery(PHONE_QUERY)
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">💳 Expenses</div>
-        <nav className="nav" aria-label="Main">
-          {NAV.map((group, gi) => (
-            <Fragment key={group.title || gi}>
-              {group.title && <div className="nav-group-title">{group.title}</div>}
-              {!group.title && gi > 0 && <div className="nav-group-gap" aria-hidden="true" />}
-              {group.links.map((l) => (
-                <NavLink
-                  key={l.to}
-                  to={l.to}
-                  end={l.end}
-                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                >
-                  <span className="nav-icon">{l.icon}</span>
-                  {l.label}
-                  {l.badge === 'invitations' && invitationCount > 0 && (
-                    <span className="nav-badge" role="status" aria-label={`${invitationCount} invitation${invitationCount === 1 ? '' : 's'} waiting`}>
-                      {invitationCount}
-                    </span>
-                  )}
-                </NavLink>
-              ))}
-            </Fragment>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="user-email" title={user.email}>
-            {user.name || user.email}
+    <div className={phone ? 'app-shell is-phone' : 'app-shell'}>
+      {!phone && (
+        <aside className="sidebar">
+          <div className="brand">💳 Expenses</div>
+          <nav className="nav" aria-label="Main">
+            {NAV.map((group, gi) => (
+              <Fragment key={group.title || gi}>
+                {group.title && <div className="nav-group-title">{group.title}</div>}
+                {!group.title && gi > 0 && <div className="nav-group-gap" aria-hidden="true" />}
+                {group.links.map((l) => (
+                  <NavLink
+                    key={l.to}
+                    to={l.to}
+                    end={l.end}
+                    className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                  >
+                    <span className="nav-icon">{l.icon}</span>
+                    {l.label}
+                    {l.badge === 'invitations' && invitationCount > 0 && (
+                      <span className="nav-badge" role="status" aria-label={`${invitationCount} invitation${invitationCount === 1 ? '' : 's'} waiting`}>
+                        {invitationCount}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+              </Fragment>
+            ))}
+          </nav>
+          <div className="sidebar-footer">
+            <div className="user-email" title={user.email}>
+              {user.name || user.email}
+            </div>
+            <button className="logout-btn" onClick={onLogout}>
+              Log out
+            </button>
           </div>
-          <button className="logout-btn" onClick={onLogout}>
-            Log out
-          </button>
-        </div>
-      </aside>
+        </aside>
+      )}
 
       <main className="main-content">
         <div className="topbar">
+          {phone && <span className="topbar-brand">💳 Expenses</span>}
           {options && onDisplayCurrencyChange && (options.currencies || []).length > 0 && (
             <label className="topbar-currency" title="Currency totals are shown in. Stored data is never changed.">
               View in{' '}
@@ -124,6 +130,9 @@ export default function Layout({ user, onLogout, error, loading, alerts = [], op
           <Outlet />
         </Suspense>
       </main>
+      {phone && (
+        <MobileNav user={user} onLogout={onLogout} invitationCount={invitationCount} onUploadReceipt={onUploadReceipt} />
+      )}
     </div>
   )
 }

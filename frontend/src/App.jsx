@@ -114,6 +114,7 @@ export default function App() {
             options={data.options}
             onDisplayCurrencyChange={data.changeDisplayCurrency}
             invitationCount={invitationCount}
+            onUploadReceipt={bills.actions.uploadBill}
           />
         }
       >
