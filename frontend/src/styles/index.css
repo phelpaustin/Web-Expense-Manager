@@ -3067,3 +3067,17 @@ label.link-btn input[type='file'] {
   text-align: right;
   white-space: nowrap;
 }
+
+.month-detail .editing td {
+  background: var(--surface-2);
+}
+
+.month-detail-error {
+  color: var(--danger);
+}
+
+.month-detail-confirm {
+  margin-right: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}

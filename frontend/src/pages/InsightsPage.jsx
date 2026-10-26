@@ -40,6 +40,8 @@ export default function InsightsPage({
   dashboardSpaceIds,
   onSetDashboardSpaceIds,
   onError,
+  options,
+  onExpensesChanged,
 }) {
   // The month the Overview panels talk about; null lets the server pick the last finished month.
   const [month, setMonth] = useState(null)
@@ -185,6 +187,10 @@ export default function InsightsPage({
           spaceIds={dashboardSpaceIds}
           onChangeMonth={setDetailMonth}
           onClose={() => setDetailMonth(null)}
+          options={options}
+          groups={groups}
+          trips={trips}
+          onChanged={onExpensesChanged}
         />
       )}
     </>

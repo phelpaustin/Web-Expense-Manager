@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   isMonthKey, monthRange, shiftMonth, monthTitle, incomeInMonth, totalsByCurrency, includesIncome, scopeFilters,
+  editFormFor, expenseChanges, canEditExpense,
 } from '../monthDetail.js'
 
 describe('monthDetail helpers', () => {
@@ -58,5 +59,43 @@ describe('monthDetail helpers', () => {
     expect(scopeFilters('all', [])).toEqual({})
     expect(scopeFilters('personal', [])).toEqual({ scope: 'personal' })
     expect(scopeFilters('all', ['personal', '3'])).toEqual({ space_ids: 'personal,3' })
+  })
+
+  describe('editing an expense', () => {
+    const expense = { id: 1, date: '2025-01-10', description: 'Milk', shop: 'ICA', category: 'Food', amount: '25.50', currency: 'SEK', group_id: null }
+
+    it('builds the form from the expense', () => {
+      expect(editFormFor(expense)).toEqual({
+        date: '2025-01-10', description: 'Milk', shop: 'ICA', category: 'Food', amount: '25.50', currency: 'SEK',
+      })
+    })
+
+    it('sends nothing when nothing changed', () => {
+      expect(expenseChanges(expense, editFormFor(expense))).toEqual({ changes: {} })
+    })
+
+    it('sends only the fields that changed', () => {
+      const form = { ...editFormFor(expense), shop: ' Coop ', amount: '30' }
+      expect(expenseChanges(expense, form)).toEqual({ changes: { shop: 'Coop', amount: 30 } })
+    })
+
+    it('treats 25.5 and 25.50 as the same amount', () => {
+      expect(expenseChanges(expense, { ...editFormFor(expense), amount: '25.5' })).toEqual({ changes: {} })
+    })
+
+    it('rejects input the server would refuse', () => {
+      expect(expenseChanges(expense, { ...editFormFor(expense), amount: '0' }).error).toMatch(/amount/)
+      expect(expenseChanges(expense, { ...editFormFor(expense), amount: 'abc' }).error).toMatch(/amount/)
+      expect(expenseChanges(expense, { ...editFormFor(expense), category: ' ' }).error).toMatch(/category/)
+      expect(expenseChanges(expense, { ...editFormFor(expense), date: '' }).error).toMatch(/date/)
+    })
+
+    it('blocks edits in a space where you are only a viewer', () => {
+      const spaces = [{ id: 3, role: 'viewer' }, { id: 4, role: 'editor' }]
+      expect(canEditExpense({ group_id: null }, spaces)).toBe(true)
+      expect(canEditExpense({ group_id: 3 }, spaces)).toBe(false)
+      expect(canEditExpense({ group_id: 4 }, spaces)).toBe(true)
+      expect(canEditExpense({ group_id: 9 }, [])).toBe(true)
+    })
   })
 })

@@ -29,6 +29,8 @@ export default function DashboardPage({
   onSetDashboardScope,
   dashboardSpaceIds,
   onSetDashboardSpaceIds,
+  options,
+  onExpensesChanged,
 }) {
   const [budgetFormOpen, setBudgetFormOpen] = useState(false)
   const [detailMonth, setDetailMonth] = useState(null)
@@ -322,6 +324,10 @@ export default function DashboardPage({
           spaceIds={dashboardSpaceIds}
           onChangeMonth={setDetailMonth}
           onClose={() => setDetailMonth(null)}
+          options={options}
+          groups={groups}
+          trips={trips}
+          onChanged={onExpensesChanged}
         />
       )}
     </>

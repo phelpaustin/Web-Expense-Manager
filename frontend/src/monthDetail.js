@@ -57,3 +57,40 @@ export function scopeFilters(scope, spaceIds) {
   if (spaceIds && spaceIds.length > 0) return { space_ids: spaceIds.join(',') }
   return scope && scope !== 'all' ? { scope } : {}
 }
+
+// ── Editing an expense inside the dialog ──────────────────
+
+export function editFormFor(expense) {
+  return {
+    date: expense.date,
+    description: expense.description || '',
+    shop: expense.shop || '',
+    category: expense.category || '',
+    amount: String(expense.amount),
+    currency: expense.currency || '',
+  }
+}
+
+// Only the fields that changed. The server updates just those, so quantity, unit, brand and the
+// rest stay as they were. Returns { error } for input the server would refuse, { changes: {} } for none.
+export function expenseChanges(original, form) {
+  if (!form.date) return { error: 'Enter a date.' }
+  if (!form.category.trim()) return { error: 'Enter a category.' }
+  const amount = parseFloat(form.amount)
+  if (!Number.isFinite(amount) || amount <= 0) return { error: 'Enter an amount greater than zero.' }
+
+  const changes = {}
+  if (form.date !== original.date) changes.date = form.date
+  for (const key of ['description', 'shop', 'category']) {
+    if (form[key].trim() !== String(original[key] || '').trim()) changes[key] = form[key].trim()
+  }
+  if (Math.round(amount * 100) !== Math.round(Number(original.amount) * 100)) changes.amount = amount
+  if (form.currency && form.currency !== original.currency) changes.currency = form.currency
+  return { changes }
+}
+
+// Read-only spaces (viewer role) can't be changed; personal expenses always can.
+export function canEditExpense(expense, spaces) {
+  if (!expense.group_id) return true
+  return (spaces || []).find((g) => g.id === expense.group_id)?.role !== 'viewer'
+}

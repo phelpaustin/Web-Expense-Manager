@@ -140,6 +140,8 @@ export default function App() {
               onSetDashboardScope={data.handleSetDashboardScope}
               dashboardSpaceIds={data.dashboardSpaceIds}
               onSetDashboardSpaceIds={data.handleSetDashboardSpaceIds}
+              options={data.options}
+              onExpensesChanged={() => data.loadAll(EXPENSE_PARTS)}
             />
           }
         />
@@ -262,6 +264,8 @@ export default function App() {
               dashboardSpaceIds={data.dashboardSpaceIds}
               onSetDashboardSpaceIds={data.handleSetDashboardSpaceIds}
               onError={data.setError}
+              options={data.options}
+              onExpensesChanged={() => data.loadAll(EXPENSE_PARTS)}
             />
           }
         />

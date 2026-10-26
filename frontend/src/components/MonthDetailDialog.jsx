@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchExpenses, fetchIncome } from '../api/client.js'
+import { fetchExpenses, fetchIncome, updateExpense, deleteExpense } from '../api/client.js'
 import { money } from '../format.js'
+import CurrencySelect from './CurrencySelect.jsx'
 import {
   monthRange, shiftMonth, monthTitle, currentMonthKey, incomeInMonth, totalsByCurrency, includesIncome, scopeFilters,
+  editFormFor, expenseChanges, canEditExpense,
 } from '../monthDetail.js'
 
 const PAGE_SIZE = 200
@@ -37,16 +39,38 @@ function Totals({ rows }) {
 }
 
 // Every expense and every income entry of one month, opened by clicking that month on a chart.
-export default function MonthDetailDialog({ month, scope, spaceIds, onClose, onChangeMonth }) {
-  const [state, setState] = useState({ loading: true, error: null, expenses: [], expenseTotal: 0, income: [] })
+// Expenses can be edited or deleted here; onChanged lets the page refresh the charts behind it.
+export default function MonthDetailDialog({
+  month, scope, spaceIds, onClose, onChangeMonth, options, groups, trips, onChanged,
+}) {
+  const [state, setState] = useState({ loading: true, loaded: false, error: null, expenses: [], expenseTotal: 0, income: [] })
+  const [editing, setEditing] = useState(null) // { id, form }
+  const [confirmingId, setConfirmingId] = useState(null)
+  const [actionError, setActionError] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const latest = useRef(0)
   const closeRef = useRef(null)
+  const editingRef = useRef(null)
+  const viewKey = useRef('')
   const showIncome = includesIncome(scope, spaceIds)
   const idsKey = (spaceIds || []).join(',')
+  const spaces = (groups || []).concat(trips || [])
+  const opts = { categories: [], shops: [], currencies: [], ...(options || {}) }
+  editingRef.current = editing
 
   useEffect(() => {
     const request = ++latest.current
-    setState((s) => ({ ...s, loading: true, error: null }))
+    // A new month or scope starts from a blank view; a reload after an edit keeps the rows on screen.
+    const key = `${month}|${scope}|${idsKey}|${showIncome}`
+    const fresh = key !== viewKey.current
+    viewKey.current = key
+    if (fresh) {
+      setEditing(null)
+      setConfirmingId(null)
+      setActionError(null)
+    }
+    setState((s) => ({ ...s, loading: true, loaded: fresh ? false : s.loaded, error: null }))
     Promise.all([
       loadMonthExpenses(month, scope, spaceIds),
       showIncome ? fetchIncome() : Promise.resolve([]),
@@ -54,25 +78,72 @@ export default function MonthDetailDialog({ month, scope, spaceIds, onClose, onC
       .then(([exp, inc]) => {
         if (request !== latest.current) return
         setState({
-          loading: false, error: null, expenses: exp.items, expenseTotal: exp.total, income: incomeInMonth(inc, month),
+          loading: false, loaded: true, error: null, expenses: exp.items, expenseTotal: exp.total, income: incomeInMonth(inc, month),
         })
       })
       .catch((err) => {
         if (request === latest.current) setState((s) => ({ ...s, loading: false, error: err.message || 'Could not load this month.' }))
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, scope, idsKey, showIncome])
+  }, [month, scope, idsKey, showIncome, reloadKey])
 
   useEffect(() => {
     closeRef.current?.focus()
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      // Escape backs out of an edit first; a second press closes the window.
+      if (editingRef.current) setEditing(null)
+      else onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const { loading, error, expenses, expenseTotal, income } = state
+  const { loading, loaded, error, expenses, expenseTotal, income } = state
+
+  async function afterChange() {
+    setReloadKey((k) => k + 1)
+    if (onChanged) await onChanged()
+  }
+
+  async function saveEdit(expense) {
+    const { changes, error: problem } = expenseChanges(expense, editing.form)
+    if (problem) {
+      setActionError(problem)
+      return
+    }
+    if (Object.keys(changes).length === 0) {
+      setEditing(null)
+      return
+    }
+    setBusy(true)
+    setActionError(null)
+    try {
+      await updateExpense(expense.id, changes)
+      setEditing(null)
+      await afterChange()
+    } catch (err) {
+      setActionError(err.message || 'Could not save the change.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeExpense(expense) {
+    setBusy(true)
+    setActionError(null)
+    try {
+      await deleteExpense(expense.id)
+      setConfirmingId(null)
+      await afterChange()
+    } catch (err) {
+      setActionError(err.message || 'Could not delete the expense.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const setField = (field) => (value) => setEditing((cur) => ({ ...cur, form: { ...cur.form, [field]: value } }))
   const canGoNext = shiftMonth(month, 1) <= currentMonthKey()
 
   return (
@@ -91,11 +162,18 @@ export default function MonthDetailDialog({ month, scope, spaceIds, onClose, onC
           <button type="button" ref={closeRef} className="month-detail-close" aria-label="Close" onClick={onClose}>✕</button>
         </div>
 
-        {loading && <p className="subtitle">Loading…</p>}
+        {loading && !loaded && <p className="subtitle">Loading…</p>}
         {error && <p className="subtitle" role="alert">Couldn’t load this month: {error}</p>}
+        {actionError && <p className="subtitle month-detail-error" role="alert">{actionError}</p>}
 
-        {!loading && !error && (
+        {loaded && !error && (
           <>
+            <datalist id="month-detail-categories">
+              {opts.categories.map((c) => <option key={c} value={c} />)}
+            </datalist>
+            <datalist id="month-detail-shops">
+              {opts.shops.map((c) => <option key={c} value={c} />)}
+            </datalist>
             <h3>
               Expenses ({expenseTotal}) <Totals rows={expenses} />
             </h3>
@@ -105,18 +183,86 @@ export default function MonthDetailDialog({ month, scope, spaceIds, onClose, onC
               <div className="month-detail-scroll">
                 <table className="table" data-testid="month-expenses">
                   <thead>
-                    <tr><th>Date</th><th>Description</th><th>Shop</th><th>Category</th><th className="num">Amount</th></tr>
+                    <tr><th>Date</th><th>Description</th><th>Shop</th><th>Category</th><th className="num">Amount</th><th /></tr>
                   </thead>
                   <tbody>
-                    {expenses.map((e) => (
-                      <tr key={e.id}>
-                        <td>{e.date}</td>
-                        <td>{e.description}</td>
-                        <td>{e.shop}</td>
-                        <td>{e.category}</td>
-                        <td className="num">{money(e.amount, e.currency)}</td>
-                      </tr>
-                    ))}
+                    {expenses.map((e) =>
+                      editing?.id === e.id ? (
+                        <tr key={e.id} className="editing">
+                          <td colSpan={6}>
+                            <div className="edit-grid">
+                              <label className="edit-field">
+                                <span>Date</span>
+                                <input type="date" value={editing.form.date} onChange={(ev) => setField('date')(ev.target.value)} />
+                              </label>
+                              <label className="edit-field edit-field--wide">
+                                <span>Description</span>
+                                <input type="text" value={editing.form.description} onChange={(ev) => setField('description')(ev.target.value)} />
+                              </label>
+                              <label className="edit-field">
+                                <span>Shop</span>
+                                <input type="text" list="month-detail-shops" value={editing.form.shop} onChange={(ev) => setField('shop')(ev.target.value)} />
+                              </label>
+                              <label className="edit-field">
+                                <span>Category</span>
+                                <input type="text" list="month-detail-categories" value={editing.form.category} onChange={(ev) => setField('category')(ev.target.value)} />
+                              </label>
+                              <label className="edit-field">
+                                <span>Amount</span>
+                                <input type="number" step="0.01" min="0.01" value={editing.form.amount} onChange={(ev) => setField('amount')(ev.target.value)} />
+                              </label>
+                              <label className="edit-field">
+                                <span>Currency</span>
+                                <CurrencySelect value={editing.form.currency} onChange={setField('currency')} currencies={opts.currencies} allowDefault={false} />
+                              </label>
+                            </div>
+                            <div className="edit-actions">
+                              <button type="button" className="icon-btn save" disabled={busy} onClick={() => saveEdit(e)}>✓ Save</button>
+                              <button type="button" className="icon-btn" disabled={busy} onClick={() => { setEditing(null); setActionError(null) }}>✕ Cancel</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={e.id}>
+                          <td>{e.date}</td>
+                          <td>{e.description}</td>
+                          <td>{e.shop}</td>
+                          <td>{e.category}</td>
+                          <td className="num">{money(e.amount, e.currency)}</td>
+                          <td className="right nowrap">
+                            {canEditExpense(e, spaces) &&
+                              (confirmingId === e.id ? (
+                                <>
+                                  <span className="month-detail-confirm">Delete?</span>
+                                  <button type="button" className="delete-btn" disabled={busy} onClick={() => removeExpense(e)}>Yes</button>
+                                  <button type="button" className="icon-btn" disabled={busy} onClick={() => setConfirmingId(null)}>No</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="icon-btn"
+                                    title="Edit"
+                                    aria-label={`Edit ${e.description || e.category}`}
+                                    onClick={() => { setEditing({ id: e.id, form: editFormFor(e) }); setConfirmingId(null); setActionError(null) }}
+                                  >
+                                    ✎
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="delete-btn"
+                                    title="Delete"
+                                    aria-label={`Delete ${e.description || e.category}`}
+                                    onClick={() => { setConfirmingId(e.id); setEditing(null); setActionError(null) }}
+                                  >
+                                    ✕
+                                  </button>
+                                </>
+                              ))}
+                          </td>
+                        </tr>
+                      ),
+                    )}
                   </tbody>
                 </table>
               </div>
