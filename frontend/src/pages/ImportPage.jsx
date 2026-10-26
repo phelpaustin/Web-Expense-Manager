@@ -213,7 +213,7 @@ function StatementImport({ onImported, onError, countBillsAsSpending = true }) {
       {result && (
         <p className="import-result" role="status">
           {resultMessage(result)}{' '}
-          {result.save_as === 'bills' ? <Link to="/bills">See bills</Link> : <Link to="/expenses">See expenses</Link>} · <Link to="/income">See income</Link>
+          {result.save_as === 'bills' ? <Link to="/spending?view=receipts">See bills</Link> : <Link to="/spending?view=items">See expenses</Link>} · <Link to="/income">See income</Link>
         </p>
       )}
 
@@ -333,7 +333,7 @@ function StatementImport({ onImported, onError, countBillsAsSpending = true }) {
                 <p className="subtitle">
                   {countBillsAsSpending
                     ? 'Bills count as spending straight away, as a single total each. Itemise them from Bills whenever you like.'
-                    : 'Bills wait on the Bills page and do not count as spending until you record them (see Settings).'}
+                    : 'Bills wait under Spending, By receipt, and do not count as spending until you record them (see Settings).'}
                 </p>
               )}
             </fieldset>

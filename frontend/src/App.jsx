@@ -16,10 +16,9 @@ import { useBudgetHandlers } from './hooks/useBudgetHandlers.js'
 // Each page is its own chunk: charts and rarely used screens are fetched when first visited,
 // so the sign-in screen and the first paint download far less JavaScript.
 const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx'))
-const ExpensesPage = lazy(() => import('./pages/ExpensesPage.jsx'))
+const SpendingPage = lazy(() => import('./pages/SpendingPage.jsx'))
 const IncomePage = lazy(() => import('./pages/IncomePage.jsx'))
 const RecurringPage = lazy(() => import('./pages/RecurringPage.jsx'))
-const BillsPage = lazy(() => import('./pages/BillsPage.jsx'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage.jsx'))
 const TripsPage = lazy(() => import('./pages/TripsPage.jsx'))
 const InsightsPage = lazy(() => import('./pages/InsightsPage.jsx'))
@@ -144,29 +143,35 @@ export default function App() {
           }
         />
         <Route
-          path="expenses"
+          path="spending"
           element={
-            <ExpensesPage
-              form={expense.form}
-              setForm={expense.setForm}
-              saving={expense.saving}
-              onAdd={expense.handleAdd}
-              onAddBill={expense.handleAddBill}
-              editingId={expense.editingId}
-              editForm={expense.editForm}
-              setEditForm={expense.setEditForm}
-              startEdit={expense.startEdit}
-              cancelEdit={expense.cancelEdit}
-              saveEdit={expense.saveEdit}
-              onDelete={expense.handleDelete}
-              onBulkUpdate={expense.handleBulkUpdate}
-              options={data.options}
-              trips={data.trips}
-              groups={data.groups}
-              onError={data.setError}
+            <SpendingPage
+              bills={bills}
+              expenseProps={{
+                form: expense.form,
+                setForm: expense.setForm,
+                saving: expense.saving,
+                onAdd: expense.handleAdd,
+                onAddBill: expense.handleAddBill,
+                editingId: expense.editingId,
+                editForm: expense.editForm,
+                setEditForm: expense.setEditForm,
+                startEdit: expense.startEdit,
+                cancelEdit: expense.cancelEdit,
+                saveEdit: expense.saveEdit,
+                onDelete: expense.handleDelete,
+                onBulkUpdate: expense.handleBulkUpdate,
+                options: data.options,
+                trips: data.trips,
+                groups: data.groups,
+                onError: data.setError,
+              }}
             />
           }
         />
+        {/* Expenses and Bills became two views of Spending; old links and bookmarks still land there. */}
+        <Route path="expenses" element={<Navigate to="/spending?view=items" replace />} />
+        <Route path="bills" element={<Navigate to="/spending?view=receipts" replace />} />
         <Route
           path="income"
           element={
@@ -200,12 +205,6 @@ export default function App() {
               currencies={data.options.currencies}
               baseCurrency={data.options.base_currency}
             />
-          }
-        />
-        <Route
-          path="bills"
-          element={
-            <BillsPage state={bills} options={data.options} />
           }
         />
         <Route

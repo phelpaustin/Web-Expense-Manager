@@ -97,7 +97,7 @@ export default function DashboardPage({
         <div className="auth-error" role="alert">
           {summary.unconverted_count} expense{summary.unconverted_count === 1 ? '' : 's'} in a currency without
           an exchange rate {summary.unconverted_count === 1 ? 'is' : 'are'} left out of these totals. Edit{' '}
-          {summary.unconverted_count === 1 ? 'it' : 'them'} on the Expenses page and choose a supported currency.
+          {summary.unconverted_count === 1 ? 'it' : 'them'} on the Spending page (All items) and choose a supported currency.
         </div>
       )}
       {(summary || metrics) && (

@@ -24,7 +24,7 @@ const EMPTY_BILL = { date: '', shop: '', amount: '', note: '', currency: '' }
 export const DEFAULT_QUERY = { status: 'pending', q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 }
 export const EMPTY_BILLS = { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } }
 
-// What the Expenses page needs to start itemising a bill.
+// What the Spending page's "All items" view needs to start itemising a bill.
 export function billForItemising(bill) {
   return {
     id: bill.id,
@@ -38,7 +38,7 @@ export function billForItemising(bill) {
 }
 
 // loadAll refreshes the dashboard/budgets/expenses totals, which change whenever a bill is
-// recorded, undone or itemised. navigate opens the Expenses page to itemise a bill.
+// recorded, undone or itemised. navigate opens the "All items" view of Spending to itemise a bill.
 // enabled: only load once the user is signed in (otherwise the first request would be a 401).
 export function useBillsHandlers(loadAll, setError, setOptions, navigate, enabled = true) {
   const [query, setQueryState] = useState(DEFAULT_QUERY)
@@ -213,10 +213,10 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     }
   }
 
-  // Itemise a pending / total-only bill, or edit the items of an itemised one: the Expenses page
+  // Itemise a pending / total-only bill, or edit the items of an itemised one: the "All items" view
   // works out which from the bill's status.
   function handleItemise(bill) {
-    navigate('/expenses', { state: { itemiseBill: billForItemising(bill) } })
+    navigate('/spending?view=items', { state: { itemiseBill: billForItemising(bill) } })
   }
 
   async function handleDismissDuplicate(id) {
@@ -286,6 +286,7 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
 
   return {
     data,
+    reload: () => loadBills(queryRef.current),
     query,
     setQuery,
     loading,

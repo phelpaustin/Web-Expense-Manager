@@ -29,12 +29,14 @@ export default function ExpensesPage({
   trips,
   groups,
   onError,
+  embedded = false, // inside the Spending page, which supplies the title
+  initialBillMode = false,
 }) {
   // What an empty currency choice resolves to on the server: the chosen space's currency, else base.
   const defaultCurrency =
     groups.find((g) => String(g.id) === String(form.group_id))?.currency || options.base_currency || 'SEK'
   const effectiveCurrency = form.currency || defaultCurrency
-  const [billMode, setBillMode] = useState(false)
+  const [billMode, setBillMode] = useState(initialBillMode)
   const [billItems, setBillItems] = useState([])
   const [submittingBill, setSubmittingBill] = useState(false)
   const [receiptTotal, setReceiptTotal] = useState('')
@@ -58,7 +60,8 @@ export default function ExpensesPage({
   const [bulkNotice, setBulkNotice] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  const [groupByBill, setGroupByBill] = useState(true)
+  // Under Spending the "By receipt" view already lists bills, so this view starts as a flat list of items.
+  const [groupByBill, setGroupByBill] = useState(!embedded)
   const [filterTotalOnly, setFilterTotalOnly] = useState(false)
   // The bill whose items are being entered (set when coming from the Bills page or a total-only row).
   const [itemisingBill, setItemisingBill] = useState(null)
@@ -396,7 +399,7 @@ export default function ExpensesPage({
     const bill = location.state?.itemiseBill
     if (!bill) return
     beginItemising(bill)
-    navigate(location.pathname, { replace: true, state: null })
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
@@ -549,7 +552,7 @@ export default function ExpensesPage({
 
   return (
     <>
-      <h1 className="page-title">🧾 Expenses</h1>
+      {!embedded && <h1 className="page-title">🧾 Expenses</h1>}
 
       <AddExpensePanel
         form={form}

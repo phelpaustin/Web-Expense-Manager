@@ -155,7 +155,7 @@ function SkeletonRows() {
 }
 
 // state is the object returned by useBillsHandlers.
-export default function BillsPage({ state, options }) {
+export default function BillsPage({ state, options, embedded = false }) {
   const { data, query, setQuery, loading, selected, toggleSelect, selectPage, clearSelection, notice, setNotice, form, setForm, actions } = state
   const [showAdd, setShowAdd] = useState(false)
   const [searchText, setSearchText] = useState(query.q)
@@ -181,7 +181,7 @@ export default function BillsPage({ state, options }) {
 
   return (
     <>
-      <h1 className="page-title">📒 Bills</h1>
+      {!embedded && <h1 className="page-title">📒 Bills</h1>}
 
       <section className="panel bills-panel">
         <div className="bills-head">

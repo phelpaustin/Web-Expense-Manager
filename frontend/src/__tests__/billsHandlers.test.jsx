@@ -292,7 +292,7 @@ describe('reverting an itemised bill to a total', () => {
   it('"Edit items" opens the Expenses page with the bill and its itemised status', async () => {
     const { result } = await setup()
     act(() => result.current.actions.itemise(ITEMISED))
-    expect(navigate).toHaveBeenCalledWith('/expenses', { state: { itemiseBill: expect.objectContaining({ id: 3, status: 'itemised' }) } })
+    expect(navigate).toHaveBeenCalledWith('/spending?view=items', { state: { itemiseBill: expect.objectContaining({ id: 3, status: 'itemised' }) } })
   })
 })
 
@@ -300,7 +300,7 @@ describe('itemising later', () => {
   it('opens the Expenses page prefilled with the bill', async () => {
     const { result } = await setup()
     act(() => result.current.actions.itemise(BILL(2, { status: 'total_only', has_receipt: true, note: 'ignored', possible_duplicate: true })))
-    expect(navigate).toHaveBeenCalledWith('/expenses', {
+    expect(navigate).toHaveBeenCalledWith('/spending?view=items', {
       state: { itemiseBill: { id: 2, date: '2026-07-21', shop: 'Shop 2', amount: 10, currency: 'SEK', status: 'total_only', has_receipt: true } },
     })
   })

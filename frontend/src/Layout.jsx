@@ -8,8 +8,7 @@ const NAV = [
   {
     title: 'Money',
     links: [
-      { to: '/expenses', label: 'Expenses', icon: '🧾' },
-      { to: '/bills', label: 'Bills', icon: '📒' },
+      { to: '/spending', label: 'Spending', icon: '🧾' },
       { to: '/income', label: 'Income', icon: '💵' },
       { to: '/recurring', label: 'Recurring', icon: '🔁' },
       { to: '/import', label: 'Import', icon: '📥' },

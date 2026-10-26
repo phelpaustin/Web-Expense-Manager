@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 // App.jsx loads these with React.lazy, which needs a default export that is a component.
 const PAGES = [
-  'Dashboard', 'Expenses', 'Income', 'Recurring', 'Bills', 'Settings', 'Trips',
+  'Dashboard', 'Spending', 'Expenses', 'Income', 'Recurring', 'Bills', 'Settings', 'Trips',
   'PriceTracker', 'Shops', 'Import', 'Groups', 'ResetPassword', 'VerifyEmail', 'Unsubscribe',
 ]
 

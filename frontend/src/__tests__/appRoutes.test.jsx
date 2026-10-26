@@ -25,6 +25,9 @@ vi.mock('../api/client.js', async (importOriginal) => {
 
 import App from '../App.jsx'
 
+// Pages load as separate chunks; under a busy full run the default one second is not always enough.
+const SLOW = { timeout: 5000 }
+
 beforeEach(() => vi.clearAllMocks())
 
 function renderAt(path) {
@@ -38,22 +41,32 @@ function renderAt(path) {
 describe('routes after the restructure', () => {
   it('sends the old /groups address to the Spaces tab in Settings', async () => {
     renderAt('/groups')
-    expect(await screen.findByRole('heading', { name: /New Expense Space/ })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: /New Expense Space/ }, SLOW)).toBeTruthy()
     expect(screen.getByRole('heading', { level: 1, name: /Settings/ })).toBeTruthy()
   })
 
   it('sends /prices and /shops to their tabs in Insights', async () => {
     const { unmount } = renderAt('/prices')
-    expect(await screen.findByRole('tab', { name: 'Prices', selected: true })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Prices', selected: true }, SLOW)).toBeTruthy()
     expect(screen.getByRole('heading', { level: 1, name: /Insights/ })).toBeTruthy()
     unmount()
     renderAt('/shops')
-    expect(await screen.findByRole('tab', { name: 'Shops', selected: true })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Shops', selected: true }, SLOW)).toBeTruthy()
+  })
+
+  it('sends the old /expenses and /bills addresses to the matching Spending view', async () => {
+    const { unmount } = renderAt('/expenses')
+    expect(await screen.findByRole('heading', { level: 1, name: /Spending/ }, SLOW)).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'All items' }).getAttribute('aria-pressed')).toBe('true'))
+    unmount()
+    renderAt('/bills')
+    expect(await screen.findByRole('heading', { level: 1, name: /Spending/ }, SLOW)).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'By receipt' }).getAttribute('aria-pressed')).toBe('true'))
   })
 
   it('shows the waiting-invitation badge on Settings in the sidebar', async () => {
     renderAt('/')
-    expect(await screen.findByRole('status', { name: '1 invitation waiting' })).toBeTruthy()
+    expect(await screen.findByRole('status', { name: '1 invitation waiting' }, SLOW)).toBeTruthy()
   })
 
   it('has no Expense Spaces entry in the sidebar', async () => {

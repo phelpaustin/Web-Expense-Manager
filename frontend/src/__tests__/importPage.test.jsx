@@ -211,7 +211,7 @@ describe('statement import page', () => {
     fireEvent.click(screen.getByText('Import 1 bill and 1 income'))
     await screen.findByText(/Imported 1 bill and 1 income\. 1 counted as spending; itemise them whenever you like\. 1 already in your records\./)
     expect(api.commitStatement.mock.calls[0][4]).toBe('bills')
-    expect(screen.getByRole('link', { name: 'See bills' }).getAttribute('href')).toBe('/bills')
+    expect(screen.getByRole('link', { name: 'See bills' }).getAttribute('href')).toBe('/spending?view=receipts')
     expect(onImported).toHaveBeenCalledTimes(1)
   })
 

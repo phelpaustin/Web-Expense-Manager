@@ -67,7 +67,7 @@ describe('wording', () => {
       'Imported 3 bills and 0 income. 3 counted as spending; itemise them whenever you like.',
     )
     expect(resultMessage({ save_as: 'bills', added_bills: 1, recorded_bills: 0, added_income: 0, duplicates: 0, skipped: 0, errors: 0 })).toBe(
-      'Imported 1 bill and 0 income. They are waiting on the Bills page.',
+      'Imported 1 bill and 0 income. They are waiting under Spending, By receipt.',
     )
     expect(resultMessage({ added_expenses: 1, added_income: 0, duplicates: 4, skipped: 2, errors: 1 })).toBe(
       'Imported 1 expense and 0 income. 4 already in your records. 2 left out. 1 could not be read.',

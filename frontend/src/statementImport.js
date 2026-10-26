@@ -88,7 +88,7 @@ export function resultMessage(result) {
     bits.push(
       result.recorded_bills
         ? `${result.recorded_bills} counted as spending; itemise them whenever you like.`
-        : 'They are waiting on the Bills page.',
+        : 'They are waiting under Spending, By receipt.',
     )
   }
   if (result.duplicates) bits.push(`${result.duplicates} already in your records.`)

@@ -594,3 +594,28 @@ describe('editing expenses together', () => {
     expect(screen.queryByLabelText('Select Milk')).toBeNull()
   })
 })
+
+describe('ExpensesPage inside Spending (embedded)', () => {
+  it('hides its own title and starts as a flat list of items', async () => {
+    loadAll = vi.fn()
+    setError = vi.fn()
+    function Embedded() {
+      const e = useExpenseHandlers(loadAll, setError)
+      return (
+        <ExpensesPage
+          embedded form={e.form} setForm={e.setForm} saving={e.saving} onAdd={e.handleAdd} onAddBill={e.handleAddBill}
+          editingId={e.editingId} editForm={e.editForm} setEditForm={e.setEditForm} startEdit={e.startEdit}
+          cancelEdit={e.cancelEdit} saveEdit={e.saveEdit} onDelete={e.handleDelete} options={OPTIONS}
+          onBulkUpdate={e.handleBulkUpdate} trips={[]} groups={[]} onError={setError}
+        />
+      )
+    }
+    render(
+      <MemoryRouter initialEntries={['/spending?view=items']}>
+        <Embedded />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(client.fetchExpenses).toHaveBeenCalled())
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+  })
+})

@@ -2724,3 +2724,76 @@ label.link-btn input[type='file'] {
 .risk-row > .subtitle {
   margin-top: 0.2rem;
 }
+
+/* ============================================================
+   Spending page: title row with the Add menu
+   ============================================================ */
+.spending-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.spending-head .page-title {
+  margin-bottom: 1.5rem;
+}
+
+.add-menu-wrap {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.add-menu-btn {
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--grad);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 21;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 0.35rem;
+}
+
+.add-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  min-height: 44px;
+  padding: 0.6rem 0.8rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.add-menu button:hover,
+.add-menu button:focus-visible {
+  background: var(--surface-2);
+}
+
+.add-menu button span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
