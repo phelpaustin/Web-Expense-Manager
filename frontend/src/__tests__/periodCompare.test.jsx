@@ -81,10 +81,13 @@ describe('PeriodComparePanel', () => {
     expect(client.fetchPeriodCompare).toHaveBeenCalledWith({ month: null, scope: 'all', spaceIds: [] })
   })
 
-  it('reads the comparison again for another month', async () => {
-    render(<PeriodComparePanel scope="all" spaceIds={[]} refreshKey={null} />)
+  it('asks the page to change month, and reads the comparison for the month it is given', async () => {
+    const onMonthChange = vi.fn()
+    const { rerender } = render(<PeriodComparePanel scope="all" spaceIds={[]} refreshKey={null} onMonthChange={onMonthChange} />)
     await screen.findAllByRole('group')
     fireEvent.change(screen.getByLabelText('Compare month'), { target: { value: '2026-07' } })
+    expect(onMonthChange).toHaveBeenCalledWith('2026-07')
+    rerender(<PeriodComparePanel month="2026-07" scope="all" spaceIds={[]} refreshKey={null} onMonthChange={onMonthChange} />)
     await waitFor(() => expect(client.fetchPeriodCompare).toHaveBeenLastCalledWith({ month: '2026-07', scope: 'all', spaceIds: [] }))
   })
 

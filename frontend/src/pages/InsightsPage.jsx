@@ -3,6 +3,7 @@ import ScopePicker from '../components/ScopePicker.jsx'
 import CategoryBreakdown from '../components/CategoryBreakdown.jsx'
 import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
 import PeriodComparePanel from '../components/PeriodComparePanel.jsx'
+import MoversPanel from '../components/MoversPanel.jsx'
 import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
 import ForecastPanel from '../components/ForecastPanel.jsx'
 import { SpendingTrendChart, CashFlowChart } from '../components/Charts.jsx'
@@ -38,6 +39,8 @@ export default function InsightsPage({
   onSetDashboardSpaceIds,
   onError,
 }) {
+  // The month the Overview panels talk about; null lets the server pick the last finished month.
+  const [month, setMonth] = useState(null)
   const [tab, setTab] = useState(TAB_KEYS.includes(initialTab) ? initialTab : 'overview')
   const scopeKey = `${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`
   const hasCashFlow = metrics && metrics.cash_flow && metrics.cash_flow.length > 0
@@ -77,6 +80,16 @@ export default function InsightsPage({
         <>
           <PeriodComparePanel
             key={`compare|${scopeKey}`}
+            month={month}
+            onMonthChange={setMonth}
+            scope={dashboardScope}
+            spaceIds={dashboardSpaceIds}
+            refreshKey={trends}
+          />
+
+          <MoversPanel
+            key={`movers|${scopeKey}`}
+            month={month}
             scope={dashboardScope}
             spaceIds={dashboardSpaceIds}
             refreshKey={trends}

@@ -10,6 +10,7 @@ from app.api.options import convert_rows, get_reporting_currency
 from app.logic import analytics as analytics_logic
 from app.logic import category_change as category_change_logic
 from app.logic import forecast as forecast_logic
+from app.logic import movers as movers_logic
 from app.logic import period_compare as period_compare_logic
 from app.logic import spending_mix as spending_mix_logic
 from app.logic import shop_scorecard as shop_scorecard_logic
@@ -140,6 +141,31 @@ def analytics_compare(
     result = period_compare_logic.period_compare(expenses, chosen)
     result["currency"] = get_reporting_currency(db, user.id)
     # Expenses left out because their currency has no exchange rate (same as the other totals).
+    result["unconverted_count"] = unconverted
+    return result
+
+
+@router.get("/analytics/movers")
+def analytics_movers(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+    top: int = Query(default=movers_logic.DEFAULT_TOP, ge=1, le=20),
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """The categories and shops that rose most, fell most, or are new, against the month before.
+
+    `month` is YYYY-MM; by default the last finished month. The month in progress is compared
+    like for like (days so far against the same days). Shop names follow the user's saved
+    merges, as on the shop scorecard.
+    """
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+    item_aliases, shop_aliases = load_alias_maps(db, user.id)
+    rows = names.canonicalise(shop_scorecard_logic.with_bill_shops(expenses), item_aliases, shop_aliases)
+    chosen = month or movers_logic.default_month(rows)
+    result = movers_logic.movers(rows, chosen, top=top)
+    result["currency"] = get_reporting_currency(db, user.id)
     result["unconverted_count"] = unconverted
     return result
 

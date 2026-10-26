@@ -265,6 +265,14 @@ export function fetchPeriodCompare({ month, scope, spaceIds } = {}) {
   return request(`/api/analytics/compare${joined ? `?${joined}` : ''}`)
 }
 
+// The categories and shops that rose most, fell most or are new against the month before.
+export function fetchMovers({ month, scope, spaceIds } = {}) {
+  const query = scopeQuery(scope, spaceIds)
+  const extra = month ? `month=${encodeURIComponent(month)}` : ''
+  const joined = [query.replace(/^\?/, ''), extra].filter(Boolean).join('&')
+  return request(`/api/analytics/movers${joined ? `?${joined}` : ''}`)
+}
+
 // Forecast of this month's baseline spending, with a range and a backtest.
 export function fetchForecast({ scope, spaceIds } = {}) {
   return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)

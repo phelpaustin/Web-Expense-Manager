@@ -2951,3 +2951,51 @@ label.link-btn input[type='file'] {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Biggest movers (Insights, Overview) ──────────────────────────── */
+.movers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+.movers-col h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.movers-group {
+  margin-bottom: 0.9rem;
+}
+
+.movers-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+}
+
+.mover-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.mover-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mover-change {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .movers-grid {
+    grid-template-columns: 1fr;
+  }
+}

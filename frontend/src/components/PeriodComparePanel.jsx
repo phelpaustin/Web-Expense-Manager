@@ -11,8 +11,8 @@ function currentMonthKey() {
 
 // "How does this month compare?": against last month, the same month last year and your usual
 // (3-month average). Spending going up is red and going down is green, as everywhere else.
-export default function PeriodComparePanel({ scope, spaceIds, refreshKey }) {
-  const [month, setMonth] = useState(null) // null = let the server pick the last finished month
+// `month` is chosen on the page (null = the server picks the last finished month) so the movers below follow it.
+export default function PeriodComparePanel({ month = null, onMonthChange, scope, spaceIds, refreshKey }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const latest = useRef(0)
@@ -56,7 +56,7 @@ export default function PeriodComparePanel({ scope, spaceIds, refreshKey }) {
         <h2>⚖️ Compared with</h2>
         <label>
           Month{' '}
-          <select aria-label="Compare month" value={data.month} onChange={(e) => setMonth(e.target.value)}>
+          <select aria-label="Compare month" value={data.month} onChange={(e) => onMonthChange?.(e.target.value)}>
             {months.map((m) => (
               <option key={m} value={m}>
                 {monthLabel(m)}
