@@ -2999,3 +2999,11 @@ label.link-btn input[type='file'] {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Recurring costs (Insights, Overview) ─────────────────────────── */
+.recurring-rises {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(249, 115, 22, 0.12);
+}

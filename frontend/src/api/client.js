@@ -273,6 +273,11 @@ export function fetchMovers({ month, scope, spaceIds } = {}) {
   return request(`/api/analytics/movers${joined ? `?${joined}` : ''}`)
 }
 
+// What the recurring payments cost per month and per year, with next due dates and price rises.
+export function fetchRecurringCosts() {
+  return request('/api/analytics/recurring-costs')
+}
+
 // Forecast of this month's baseline spending, with a range and a backtest.
 export function fetchForecast({ scope, spaceIds } = {}) {
   return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)

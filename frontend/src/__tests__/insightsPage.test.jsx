@@ -37,6 +37,7 @@ const MOVERS = {
   month: '2026-09', compare_month: '2026-08', partial: false, through_day: null, available: false, currency: 'SEK', unconverted_count: 0, months: ['2026-09'],
   categories: { rose: [], fell: [], new: [] }, shops: { rose: [], fell: [], new: [] },
 }
+const RECURRING = { count: 0, monthly_total: 0, yearly_total: 0, price_rises: 0, currency: 'SEK', unconverted_count: 0, items: [] }
 const METRICS = {
   monthly_savings: 1500, savings_rate: 12.5, monthly_projection: 9000, volatility_cv: 18.2, daily_burn: 300, cash_flow: [],
 }
@@ -48,6 +49,7 @@ beforeEach(() => {
   client.fetchCategoryChange.mockImplementation(async () => CHANGE)
   client.fetchPeriodCompare.mockImplementation(async () => COMPARE)
   client.fetchMovers.mockImplementation(async () => MOVERS)
+  client.fetchRecurringCosts.mockImplementation(async () => RECURRING)
 })
 
 function insights(props = {}) {

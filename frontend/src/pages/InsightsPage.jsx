@@ -4,6 +4,7 @@ import CategoryBreakdown from '../components/CategoryBreakdown.jsx'
 import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
 import PeriodComparePanel from '../components/PeriodComparePanel.jsx'
 import MoversPanel from '../components/MoversPanel.jsx'
+import RecurringCostsPanel from '../components/RecurringCostsPanel.jsx'
 import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
 import ForecastPanel from '../components/ForecastPanel.jsx'
 import { SpendingTrendChart, CashFlowChart } from '../components/Charts.jsx'
@@ -111,6 +112,8 @@ export default function InsightsPage({
               </div>
             </section>
           )}
+
+          <RecurringCostsPanel refreshKey={trends} />
 
           <SpendingMixPanel
             key={`mix|${scopeKey}`}

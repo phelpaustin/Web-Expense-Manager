@@ -1,3 +1,5 @@
+import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,7 @@ from app.logic import analytics as analytics_logic
 from app.logic import category_change as category_change_logic
 from app.logic import forecast as forecast_logic
 from app.logic import movers as movers_logic
+from app.logic import recurring_costs as recurring_costs_logic
 from app.logic import period_compare as period_compare_logic
 from app.logic import spending_mix as spending_mix_logic
 from app.logic import shop_scorecard as shop_scorecard_logic
@@ -165,6 +168,40 @@ def analytics_movers(
     rows = names.canonicalise(shop_scorecard_logic.with_bill_shops(expenses), item_aliases, shop_aliases)
     chosen = month or movers_logic.default_month(rows)
     result = movers_logic.movers(rows, chosen, top=top)
+    result["currency"] = get_reporting_currency(db, user.id)
+    result["unconverted_count"] = unconverted
+    return result
+
+
+@router.get("/analytics/recurring-costs")
+def analytics_recurring_costs(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """What the user's recurring payments cost per month and per year, with next due dates and
+    price rises (what a template posted last against what it posted before).
+
+    Recurring templates are personal, so there is no space scope. Totals are in the reporting
+    currency; a template whose currency has no exchange rate is left out and counted.
+    """
+    today = datetime.date.today()
+    templates = db.query(models.RecurringTemplate).filter(models.RecurringTemplate.user_id == user.id).all()
+    rows = [
+        {"id": t.id, "item": t.item, "category": t.category, "frequency": t.frequency, "last_applied": t.last_applied,
+         "schedule_anchor": t.schedule_anchor, "native_amount": t.amount, "native_currency": t.currency,
+         "date": today, "amount": t.amount, "currency": t.currency}
+        for t in templates
+    ]
+    converted, unconverted = convert_rows(db, user.id, rows)
+    posted = (
+        db.query(models.Expense.id, models.Expense.recurring_template_id, models.Expense.date,
+                 models.Expense.amount, models.Expense.currency)
+        .filter(models.Expense.user_id == user.id, models.Expense.recurring_template_id.in_([t.id for t in templates] or [0]))
+        .all()
+    )
+    payments = [{"id": p.id, "template_id": p.recurring_template_id, "date": p.date, "amount": p.amount, "currency": p.currency}
+                for p in posted]
+    result = recurring_costs_logic.recurring_costs(converted, payments, today)
     result["currency"] = get_reporting_currency(db, user.id)
     result["unconverted_count"] = unconverted
     return result

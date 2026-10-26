@@ -113,6 +113,27 @@ def due_dates(
     return dates
 
 
+def next_due(
+    last_applied: date | None,
+    frequency: str,
+    today: date | None = None,
+    schedule_anchor: date | None = None,
+) -> date:
+    """The next scheduled date after ``last_applied``.
+
+    A template never applied is due today. A date in the past means the template is overdue
+    (the same dates ``due_dates`` would post to catch up).
+    """
+    today = today or date.today()
+    if last_applied is None:
+        return today
+    unit, amount = _frequency_parts(frequency)
+    if unit == "days":
+        return last_applied + timedelta(days=amount)
+    anchor = schedule_anchor or last_applied
+    return _date_at_period(anchor, frequency, _first_period_after(anchor, last_applied, frequency))
+
+
 def backfill_dates(start: date, end: date, frequency: str) -> list[date]:
     """Return scheduled dates from ``start`` through ``end`` (inclusive).
 
