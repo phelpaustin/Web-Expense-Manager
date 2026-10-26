@@ -278,6 +278,11 @@ export function fetchRecurringCosts() {
   return request('/api/analytics/recurring-costs')
 }
 
+// Items where a shop you use less is cheaper than your usual one. `months` 0 = all time.
+export function fetchCheapestShops({ months } = {}) {
+  return request(`/api/analytics/price-trends/cheapest-shops${months != null ? `?months=${encodeURIComponent(months)}` : ''}`)
+}
+
 // Forecast of this month's baseline spending, with a range and a backtest.
 export function fetchForecast({ scope, spaceIds } = {}) {
   return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)

@@ -16,6 +16,7 @@ also apply the user's aliases do so first, with names.canonicalise().
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from datetime import date
 from decimal import Decimal
 from statistics import mean as _mean_any, pstdev as _pstdev_any
 
@@ -169,6 +170,106 @@ def price_trends(expenses: list[dict]) -> list[dict]:
         results.append({"item": item, "category": category, "unit": unit, **price_summary(rows)})
 
     return sorted(results, key=lambda r: r["change_pct"], reverse=True)
+
+
+DEFAULT_CHEAPEST_MONTHS = 12
+DEFAULT_MIN_SAVING_PCT = 5.0
+
+
+def _months_ago_start(today: date, months: int) -> date:
+    index = today.year * 12 + today.month - 1 - months
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def _as_day(value) -> date | None:
+    if isinstance(value, date):
+        return value.date() if hasattr(value, "date") and callable(value.date) else value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def cheapest_shops(
+    expenses: list[dict],
+    today: date | None = None,
+    months: int = DEFAULT_CHEAPEST_MONTHS,
+    min_saving_pct: float = DEFAULT_MIN_SAVING_PCT,
+    top: int = 10,
+) -> dict:
+    """Items bought at more than one shop, where a shop you use less is cheaper than your usual one.
+
+    The same product is compared: item, unit, category and brand all have to match, so a cheaper
+    shop is not just a cheaper brand. Prices are per base unit, averaged per shop over the last
+    `months` months (0 = all time), so an old price does not decide today's answer. Purchases with
+    no shop are left out, since "Unknown" cannot be recommended. "Your usual shop" is where you
+    bought the item most often (a tie goes to the one you used last).
+
+    An item is listed only when the cheapest shop is not your usual one and saves at least
+    `min_saving_pct` percent per unit. Items where your usual shop is already the cheapest are
+    only counted, so you can be told so.
+    """
+    today = today or date.today()
+    cutoff = _months_ago_start(today, months) if months > 0 else None
+
+    groups: dict[tuple, list[dict]] = defaultdict(list)
+    for e in expenses:
+        if not _is_item_purchase(e) or not str(e.get("description") or "").strip() or not clean_name(e.get("shop")):
+            continue
+        day = _as_day(e.get("date"))
+        if day is None or (cutoff is not None and day < cutoff):
+            continue
+        groups[(name_key(e["description"]), _unit(e), _category(e), name_key(e.get("brand")))].append({**e, "_day": day})
+
+    listed, compared, already = [], 0, 0
+    for (_, unit, category, _brand), rows in groups.items():
+        by_shop: dict[str, list[dict]] = defaultdict(list)
+        for r in rows:
+            by_shop[name_key(_shop_label(r))].append(r)
+        if len(by_shop) < 2:
+            continue
+        compared += 1
+
+        stats = []
+        for shop_rows in by_shop.values():
+            prices = [_price(r) for r in shop_rows]
+            stats.append({
+                "shop": _most_used_spelling([_shop_label(r) for r in shop_rows]),
+                "avg_price": quantize_money(mean(prices)),
+                "times_bought": len(prices),
+                "last_date": _iso(max(r["_day"] for r in shop_rows)),
+            })
+        cheapest = min(stats, key=lambda x: (x["avg_price"], -x["times_bought"], x["shop"].casefold()))
+        usual = max(stats, key=lambda x: (x["times_bought"], x["last_date"]))
+        if cheapest is usual or usual["avg_price"] <= 0:
+            already += 1
+            continue
+        saving = usual["avg_price"] - cheapest["avg_price"]
+        pct = round(float(saving / usual["avg_price"] * 100), 1)
+        if saving <= 0 or pct < min_saving_pct:
+            if saving <= 0:
+                already += 1  # the usual shop is as cheap as any
+            continue
+        listed.append({
+            "item": _most_used_spelling([" ".join(str(r["description"]).split()) for r in rows]),
+            "brand": _most_used_spelling([clean_name(r.get("brand")) for r in rows]),
+            "unit": unit,
+            "category": category,
+            "shops_compared": len(stats),
+            "cheapest": cheapest,
+            "usual": usual,
+            "saving_per_unit": quantize_money(saving),
+            "saving_pct": pct,
+        })
+
+    listed.sort(key=lambda i: (-i["saving_pct"], -i["usual"]["times_bought"], i["item"].casefold()))
+    return {
+        "months": months,
+        "compared": compared,
+        "already_cheapest": already,
+        "items": listed[:top],
+        "total_found": len(listed),
+    }
 
 
 def comparison_options(matches: list[dict]) -> dict:

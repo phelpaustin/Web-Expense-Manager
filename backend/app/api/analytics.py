@@ -258,6 +258,24 @@ def analytics_price_trends(
     return price_tracker.price_trends(_price_rows(db, user)[0])
 
 
+@router.get("/analytics/price-trends/cheapest-shops")
+def analytics_cheapest_shops(
+    months: int = Query(default=price_tracker.DEFAULT_CHEAPEST_MONTHS, ge=0, le=120),
+    top: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Items where a shop you use less is cheaper than the one you usually buy them at.
+
+    The same product is compared (item, unit, category and brand), with prices per base unit
+    averaged per shop over the last `months` months (0 = all time). Names follow the user's
+    saved merges.
+    """
+    result = price_tracker.cheapest_shops(_price_rows(db, user)[0], months=months, top=top)
+    result["currency"] = get_reporting_currency(db, user.id)
+    return result
+
+
 @router.get("/analytics/price-trends/shops")
 def analytics_price_shop_comparison(
     item: str,
