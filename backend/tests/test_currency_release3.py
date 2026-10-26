@@ -73,14 +73,11 @@ def test_new_records_still_default_to_base_not_display(client, make_user):
     assert client.post("/api/pending-bills", json={"date": TODAY, "shop": "s", "amount": "5"}, headers=h).json()["currency"] == "EUR"
 
 
-def test_income_metrics_and_ledger_use_display_currency(client, make_user):
+def test_income_summary_uses_display_currency(client, make_user):
     _, h = make_user()  # base SEK
     client.post("/api/income", json={"date": TODAY, "amount": "100", "source": "Job", "currency": "EUR"}, headers=h)
-    client.post("/api/pending-bills", json={"date": TODAY, "shop": "Hotel", "amount": "100", "currency": "EUR"}, headers=h)
     _set_display(client, h, "USD")
     assert Decimal(str(client.get("/api/income/summary", headers=h).json()["total"])) == Decimal("50")  # EUR->USD 0.5
-    ledger = {r["shop"]: r for r in client.get("/api/bills-ledger", headers=h).json()}
-    assert Decimal(str(ledger["Hotel"]["amount"])) == Decimal("50") and ledger["Hotel"]["currency"] == "USD"
 
 
 # ── budgets ──────────────────────────────────────────────────────────────

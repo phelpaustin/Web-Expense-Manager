@@ -1,13 +1,6 @@
-"""Pure bills-ledger projection, ported from bills_ledger.py.
+"""Parsing a bank-statement spreadsheet into bill rows (date, shop, amount).
 
-The ledger is a read-only, de-duplicated view over three sources:
-itemised expenses (collapsed per date+label), pending bills, and manual
-bills. Duplicates across sources are removed by a (date, label, amount, currency) key,
-keeping the richest source first: Expense > Pending > Manual.
-
-Storage and Streamlit UI are dropped; rows come in as plain dicts. Because
-the new expense schema has no "shop" field, the expense's `description` is
-used as the ledger label.
+The older bulk-upload route still uses this; the Import page has its own, richer parser.
 """
 from __future__ import annotations
 
@@ -19,90 +12,6 @@ from app.core.file_upload import ensure_xlsx_within_limits
 from app.core.money import quantize_money
 from app.core.parsing import parse_amount, read_csv_bytes, unescape_formula
 from app.core.import_limits import MAX_IMPORT_ROWS
-
-SOURCE_EXPENSE = "Expense"
-SOURCE_PENDING = "Pending"
-SOURCE_MANUAL = "Manual"
-
-_SOURCE_PRIORITY = {SOURCE_EXPENSE: 0, SOURCE_PENDING: 1, SOURCE_MANUAL: 2}
-
-
-def _key(date, label, amount, currency) -> tuple[str, str, object, str]:
-    try:
-        amt = quantize_money(amount)
-    except (TypeError, ValueError):
-        amt = quantize_money(0)
-    return (
-        str(date),
-        str(label or "").strip().lower(),
-        amt,
-        str(currency or "SEK").upper(),
-    )
-
-
-def build_ledger(
-    expenses: list[dict], pending: list[dict], manual: list[dict], base_currency: str = "SEK"
-) -> list[dict]:
-    """Return the consolidated, de-duplicated ledger, newest first."""
-    rows: list[dict] = []
-
-    # Collapse itemised expenses by date, label, and currency so raw values
-    # from different currencies can never be added together.
-    groups: dict[tuple[str, str, str], object] = {}
-    for e in expenses:
-        label = (e.get("shop") or e.get("description") or "").strip()
-        currency = str(e.get("currency") or base_currency).upper()
-        gkey = (str(e["date"]), label, currency)
-        groups[gkey] = groups.get(gkey, quantize_money(0)) + quantize_money(e.get("amount"))
-    for (date_str, label, currency), amount in groups.items():
-        rows.append(
-            {
-                "date": date_str,
-                "shop": label,
-                "amount": quantize_money(amount),
-                "currency": currency,
-                "source": SOURCE_EXPENSE,
-                "id": None,
-            }
-        )
-
-    for p in pending:
-        rows.append(
-            {
-                "date": str(p["date"]),
-                "shop": p.get("shop", ""),
-                "amount": quantize_money(p["amount"]),
-                "currency": str(p.get("currency") or base_currency).upper(),
-                "source": SOURCE_PENDING,
-                "id": p.get("id"),
-            }
-        )
-    for m in manual:
-        rows.append(
-            {
-                "date": str(m["date"]),
-                "shop": m.get("shop", ""),
-                "amount": quantize_money(m["amount"]),
-                "currency": str(m.get("currency") or base_currency).upper(),
-                "source": SOURCE_MANUAL,
-                "id": m.get("id"),
-            }
-        )
-
-    # De-duplicate keeping the highest-priority source.
-    rows.sort(key=lambda r: _SOURCE_PRIORITY.get(r["source"], 9))
-    seen: set[tuple[str, str, object, str]] = set()
-    unique: list[dict] = []
-    for r in rows:
-        k = _key(r["date"], r["shop"], r["amount"], r["currency"])
-        if k in seen:
-            continue
-        seen.add(k)
-        unique.append(r)
-
-    unique.sort(key=lambda r: r["date"], reverse=True)
-    return unique
-
 
 # ═══════════════════════════════════════════════════════════════
 # BULK IMPORT (bank statement spreadsheet → pending bills)

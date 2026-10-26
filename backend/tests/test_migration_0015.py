@@ -23,6 +23,12 @@ def test_upgrade_backfills_currency_from_owners_base_currency():
     assert r.returncode == 0, r.stderr
 
     con = sqlite3.connect(path)
+    # manual_bills is no longer a model (0028 drops it), but databases that old still have it.
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS manual_bills (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), "
+        "date DATE NOT NULL, shop VARCHAR NOT NULL DEFAULT '', amount NUMERIC(12,2) NOT NULL, note VARCHAR NOT NULL DEFAULT '', "
+        "currency VARCHAR NOT NULL DEFAULT 'SEK')"
+    )
     # Turn the fresh DB into the pre-0015 shape (no per-record currency, no fx cache).
     for t in TABLES:
         con.execute(f"ALTER TABLE {t} DROP COLUMN currency")

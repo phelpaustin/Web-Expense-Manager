@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
-from sqlalchemy import func
+from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -485,13 +485,16 @@ def delete_account(
             models.Income,
             models.RecurringTemplate,
             models.PendingBill,
-            models.ManualBill,
             models.UserOptions,
             models.NameAlias,
             models.ImportProfile,
             models.Trip,
         ):
             db.query(model).filter(model.user_id == user.id).delete(synchronize_session=False)
+        # A manual_bills table left behind by the old ledger (migration 0028 drops it only when empty)
+        # still points at the user, so its rows must go before the user does.
+        if inspect(db.get_bind()).has_table("manual_bills"):
+            db.execute(text("DELETE FROM manual_bills WHERE user_id = :u"), {"u": user.id})
 
         db.delete(user)
         db.commit()

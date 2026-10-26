@@ -114,16 +114,6 @@ def test_recorded_bills_keep_the_bills_currency(client, make_user):
     assert d["currency"] == "EUR"  # default = base
 
 
-def test_ledger_converts_bills_into_base_currency(client, make_user):
-    _, h = make_user()  # base SEK
-    client.post("/api/pending-bills", json={"date": TODAY, "shop": "Hotel", "amount": "100", "currency": "EUR"}, headers=h)
-    client.post("/api/bills-ledger/manual", json={"date": TODAY, "shop": "Rent", "amount": "20", "currency": "EUR"}, headers=h)
-    rows = {r["shop"]: r for r in client.get("/api/bills-ledger", headers=h).json()}
-    assert Decimal(str(rows["Hotel"]["amount"])) == Decimal("1000")  # 100 EUR * 10
-    assert Decimal(str(rows["Rent"]["amount"])) == Decimal("200")
-    assert rows["Hotel"]["currency"] == "SEK"
-
-
 # ── income ───────────────────────────────────────────────────────────────
 def test_income_currency_and_converted_summary(client, make_user):
     _, h = make_user()  # base SEK

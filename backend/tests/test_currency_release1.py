@@ -80,7 +80,7 @@ def test_aggregates_survive_unconvertible_row(client, make_user):
     assert body["count"] == 1  # only the convertible expense is aggregated
 
     for path in ["/api/analytics/trends", "/api/analytics/categories", "/api/budgets/status",
-                 "/api/budgets/period-status", "/api/metrics", "/api/alerts", "/api/bills-ledger"]:
+                 "/api/budgets/period-status", "/api/metrics", "/api/alerts"]:
         assert client.get(path, headers=h).status_code == 200, path
 
     # the expense list never depended on FX and still shows every row

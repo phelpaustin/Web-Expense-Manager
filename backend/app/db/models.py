@@ -149,18 +149,6 @@ class PendingBill(Base):
     )
 
 
-class ManualBill(Base):
-    __tablename__ = "manual_bills"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    date = Column(Date, nullable=False, index=True)
-    shop = Column(String, nullable=False, default="")
-    amount = Column(Numeric(12, 2), nullable=False)
-    note = Column(String, nullable=False, default="")
-    currency = Column(String, nullable=False)
-
-
 class Receipt(Base):
     __tablename__ = "receipts"
 

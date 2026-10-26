@@ -64,7 +64,7 @@ def test_overlong_text_is_rejected(client, make_user):
     _, h = make_user()
     assert client.post("/api/expenses", json=_expense(description="x" * 1001), headers=h).status_code == 422
     assert client.post("/api/income", json={"date": TODAY, "amount": "5", "source": "Job", "note": "n" * 1001}, headers=h).status_code == 422
-    assert client.post("/api/bills-ledger/manual", json={"date": TODAY, "shop": "Coop", "amount": "5", "note": "n" * 1001}, headers=h).status_code == 422
+    assert client.post("/api/pending-bills", json={"date": TODAY, "shop": "Coop", "amount": "5", "note": "n" * 1001}, headers=h).status_code == 422
 
 
 def test_bulk_create_is_capped(client, make_user):
@@ -98,11 +98,10 @@ def test_money_fields_are_numbers_in_every_response(client, make_user):
         client.post("/api/expenses", json=_expense(), headers=h),
         client.post("/api/expenses/bulk", json={"items": [_expense(amount="3")]}, headers=h),
         client.post("/api/income", json={"date": TODAY, "amount": "100", "source": "Job"}, headers=h),
-        client.post("/api/bills-ledger/manual", json={"date": TODAY, "shop": "Coop", "amount": "20"}, headers=h),
+        client.post("/api/pending-bills", json={"date": TODAY, "shop": "Coop", "amount": "20"}, headers=h),
         client.get("/api/expenses", headers=h),
         client.get("/api/income", headers=h),
         client.get("/api/bills", headers=h),
-        client.get("/api/bills-ledger/manual", headers=h),
     ]
     seen = set()
     for r in responses:

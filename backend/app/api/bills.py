@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,6 @@ from app.api.options import (
     default_currency_for,
     ensure_options,
     get_or_create_options,
-    get_reporting_currency,
 )
 from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type
@@ -22,9 +21,9 @@ from app.core.import_limits import MAX_IMPORT_FILE_BYTES
 from app.core.validation import MAX_NAME, Name, Text
 from app.api import bill_sync
 from app.core import receipt_storage
-from app.api.expenses import ExpenseOut, fetch_expenses, fetch_expenses_in_reporting_currency
+from app.api.expenses import ExpenseOut, fetch_expenses
 from app.db.database import get_db
-from app.core.money import MAX_MONEY, JsonDecimal
+from app.core.money import MAX_MONEY
 from app.db import models
 from app.logic import bills as bills_logic
 from app.logic.search import LIKE_ESCAPE, like_pattern
@@ -754,95 +753,3 @@ def delete_receipt(
     db.query(models.Receipt).filter(models.Receipt.pending_bill_id == bill.id).delete()
     db.commit()
     receipt_storage.delete_objects(keys)
-
-
-# ── Manual bills ──────────────────────────────────────────────
-class ManualOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    date: datetime.date
-    shop: str
-    amount: JsonDecimal
-    note: str
-    currency: str
-
-
-class ManualCreate(BaseModel):
-    date: datetime.date
-    shop: Name
-    amount: Decimal = Field(gt=0, le=MAX_MONEY)
-    note: Text = ""
-    currency: str | None = None  # None = the user's base currency
-
-    check_currency = field_validator("currency")(lambda cls, v: _valid_currency(v))
-
-
-@router.get("/bills-ledger/manual", response_model=list[ManualOut])
-def list_manual(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    return (
-        db.query(models.ManualBill)
-        .filter(models.ManualBill.user_id == user.id)
-        .order_by(models.ManualBill.date.desc())
-        .all()
-    )
-
-
-@router.post("/bills-ledger/manual", response_model=ManualOut, status_code=201)
-def create_manual(
-    payload: ManualCreate,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    data = payload.model_dump()
-    data["currency"] = data["currency"] or default_currency_for(db, user.id)
-    m = models.ManualBill(user_id=user.id, **data)
-    db.add(m)
-    db.commit()
-    db.refresh(m)
-    return m
-
-
-@router.delete("/bills-ledger/manual/{manual_id}", status_code=204)
-def delete_manual(
-    manual_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    m = db.get(models.ManualBill, manual_id)
-    if m is None or m.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Manual bill not found")
-    db.delete(m)
-    db.commit()
-
-
-# ── Consolidated ledger ───────────────────────────────────────
-@router.get("/bills-ledger")
-def get_ledger(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    expenses = fetch_expenses_in_reporting_currency(db, user.id)
-    reporting = get_reporting_currency(db, user.id)
-    pending = convert_rows(
-        db,
-        user.id,
-        [
-            {"id": b.id, "date": b.date, "shop": b.shop, "amount": b.amount, "currency": b.currency}
-            for b in db.query(models.PendingBill)
-            .filter(models.PendingBill.user_id == user.id, models.PendingBill.status == "pending")
-            .all()
-        ],
-    )[0]
-    manual = convert_rows(
-        db,
-        user.id,
-        [
-            {"id": m.id, "date": m.date, "shop": m.shop, "amount": m.amount, "currency": m.currency}
-            for m in db.query(models.ManualBill).filter(models.ManualBill.user_id == user.id).all()
-        ],
-    )[0]
-    return bills_logic.build_ledger(expenses, pending, manual, reporting)
