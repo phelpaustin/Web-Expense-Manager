@@ -5,10 +5,15 @@
       "Read(./frontend/package-lock.json)",
       "Read(./frontend/src/styles/index.css)",
       "Read(**/dist/**)",
-      "Read(**/node_modules/**)"
+      "Read(**/node_modules/**)",
+      "Read(**/.venv/**)",
+      "Read(**/__pycache__/**)",
+      "Read(**/.env)"
     ],
     "ask": [
-      "Read(./backend/alembic/versions/**)"
+      "Read(./backend/alembic/versions/**)",
+      "Read(./backend/tests/**)",
+      "Read(./frontend/src/__tests__/**)"
     ]
   }
 }
