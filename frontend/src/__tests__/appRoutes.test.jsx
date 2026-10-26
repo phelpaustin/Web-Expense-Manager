@@ -16,6 +16,11 @@ vi.mock('../api/client.js', async (importOriginal) => {
   mocked.fetchMe = vi.fn(async () => ({ email: 'a@b.c', name: 'A', has_password: true }))
   mocked.fetchOptions = vi.fn(async () => OPTIONS)
   mocked.fetchExpenses = vi.fn(async () => ({ items: [], total: 0 }))
+  // The default [] has no `budgets`, which crashes DashboardPage if it mounts before the test ends.
+  mocked.fetchDashboard = vi.fn(async () => ({
+    summary: null, trends: [], categories: [], category_months: [], budgets: [],
+    metrics: null, period_status: null, budget_risk: null, alerts: [],
+  }))
   mocked.fetchGroups = vi.fn(async () => [
     { id: 1, name: 'Household', role: 'owner', space_type: 'household', currency: 'SEK', member_count: 1 },
   ])
