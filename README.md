@@ -186,7 +186,7 @@ GitHub Actions runs both on every push to `main` and on pull requests.
 
 ## Dashboard and Insights
 
-The **Dashboard** answers "how am I doing right now?": total spent, net this month, savings rate, projected spend, budget status, the chance of going over a budget, and a small spending trend. **Insights** answers "why, and what next?" in tabs: Overview (trend, committed vs everyday, cash flow, volatility), Forecast, Categories (what changed, category breakdown), Shops and Prices. `/prices` and `/shops` redirect to their tabs.
+The **Dashboard** answers "how am I doing right now?": total spent, net this month, savings rate, projected spend, budget status, the chance of going over a budget, and a small spending trend. **Insights** answers "why, and what next?" in tabs: Overview (a month compared with last month, the same month last year and your 3-month average; trend; committed vs everyday; cash flow; volatility), Forecast, Categories (what changed, category breakdown), Shops and Prices. `/prices` and `/shops` redirect to their tabs.
 
 ## Dashboard numbers
 

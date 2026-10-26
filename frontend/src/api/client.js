@@ -256,6 +256,15 @@ export function fetchCategoryChange({ month, scope, spaceIds } = {}) {
   return request(`/api/analytics/category-change${joined ? `?${joined}` : ''}`)
 }
 
+// A month against last month, the same month last year and the 3-month average. The server picks the
+// last finished month when `month` is left out.
+export function fetchPeriodCompare({ month, scope, spaceIds } = {}) {
+  const query = scopeQuery(scope, spaceIds)
+  const extra = month ? `month=${encodeURIComponent(month)}` : ''
+  const joined = [query.replace(/^\?/, ''), extra].filter(Boolean).join('&')
+  return request(`/api/analytics/compare${joined ? `?${joined}` : ''}`)
+}
+
 // Forecast of this month's baseline spending, with a range and a backtest.
 export function fetchForecast({ scope, spaceIds } = {}) {
   return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)

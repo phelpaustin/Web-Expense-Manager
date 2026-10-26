@@ -10,6 +10,7 @@ from app.api.options import convert_rows, get_reporting_currency
 from app.logic import analytics as analytics_logic
 from app.logic import category_change as category_change_logic
 from app.logic import forecast as forecast_logic
+from app.logic import period_compare as period_compare_logic
 from app.logic import spending_mix as spending_mix_logic
 from app.logic import shop_scorecard as shop_scorecard_logic
 from app.logic import names, price_tracker
@@ -114,6 +115,29 @@ def analytics_category_change(
     expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
     chosen = month or category_change_logic.default_month(expenses)
     result = category_change_logic.category_change(expenses, chosen, top=top)
+    result["currency"] = get_reporting_currency(db, user.id)
+    # Expenses left out because their currency has no exchange rate (same as the other totals).
+    result["unconverted_count"] = unconverted
+    return result
+
+
+@router.get("/analytics/compare")
+def analytics_compare(
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """A month against last month, the same month last year, and your 3-month average.
+
+    `month` is YYYY-MM; by default the last finished month (as in /analytics/category-change).
+    The month in progress is compared like for like, days so far against the same days.
+    A comparison with no history behind it comes back with `available: false`.
+    """
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+    chosen = month or period_compare_logic.default_month(expenses)
+    result = period_compare_logic.period_compare(expenses, chosen)
     result["currency"] = get_reporting_currency(db, user.id)
     # Expenses left out because their currency has no exchange rate (same as the other totals).
     result["unconverted_count"] = unconverted

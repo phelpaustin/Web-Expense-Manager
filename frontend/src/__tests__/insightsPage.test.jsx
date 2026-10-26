@@ -30,6 +30,9 @@ const CHANGE = {
   month: '2026-09', compare_month: '2026-08', partial: false, through_day: null, available: false, currency: 'SEK', unconverted_count: 0,
   total: { now: 0, before: 0, change: 0, pct_change: null, direction: 'flat' }, categories: [], other: null, unchanged_count: 0, months: [],
 }
+const COMPARE = {
+  month: '2026-09', partial: false, through_day: null, total: 0, currency: 'SEK', unconverted_count: 0, months: ['2026-09'], comparisons: [],
+}
 const METRICS = {
   monthly_savings: 1500, savings_rate: 12.5, monthly_projection: 9000, volatility_cv: 18.2, daily_burn: 300, cash_flow: [],
 }
@@ -39,6 +42,7 @@ beforeEach(() => {
   client.fetchForecast.mockImplementation(async () => ({ available: false, reason: 'no_spending', month: '2026-10', months_available: 0, level: 80, requirements: {} }))
   client.fetchSpendingMix.mockImplementation(async () => ({}))
   client.fetchCategoryChange.mockImplementation(async () => CHANGE)
+  client.fetchPeriodCompare.mockImplementation(async () => COMPARE)
 })
 
 function insights(props = {}) {

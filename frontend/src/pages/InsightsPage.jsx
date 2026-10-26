@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import ScopePicker from '../components/ScopePicker.jsx'
 import CategoryBreakdown from '../components/CategoryBreakdown.jsx'
 import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
+import PeriodComparePanel from '../components/PeriodComparePanel.jsx'
 import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
 import ForecastPanel from '../components/ForecastPanel.jsx'
 import { SpendingTrendChart, CashFlowChart } from '../components/Charts.jsx'
@@ -74,6 +75,13 @@ export default function InsightsPage({
 
       {tab === 'overview' && (
         <>
+          <PeriodComparePanel
+            key={`compare|${scopeKey}`}
+            scope={dashboardScope}
+            spaceIds={dashboardSpaceIds}
+            refreshKey={trends}
+          />
+
           {trends && (
             <section className="panel">
               <h2>📈 Spending trend</h2>
