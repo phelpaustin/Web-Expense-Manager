@@ -5,7 +5,7 @@ import zipfile
 
 import pytest
 
-from app.api import auth, bills, expenses
+from app.api import auth, bills, expenses, statement_import
 from app.core.config import settings
 from app.core.file_upload import ensure_xlsx_within_limits
 from app.core.import_limits import MAX_XLSX_UNCOMPRESSED_BYTES
@@ -16,7 +16,7 @@ from app.db.database import SessionLocal
 # ── imports no longer block the event loop ───────────────────────────────
 @pytest.mark.parametrize(
     "endpoint",
-    [expenses.import_expenses, bills.bulk_upload_pending, bills.upload_pending, bills.upload_receipt],
+    [expenses.import_expenses, statement_import.analyze, statement_import.commit, bills.upload_pending, bills.upload_receipt],
 )
 def test_upload_endpoints_are_plain_functions_so_they_run_in_a_worker_thread(endpoint):
     assert not inspect.iscoroutinefunction(endpoint)
@@ -50,10 +50,10 @@ def test_import_endpoint_answers_400_for_a_zip_bomb(client, make_user):
     assert "too large" in r.text
 
 
-def test_bill_statement_endpoint_answers_400_for_a_zip_bomb(client, make_user):
+def test_statement_import_answers_400_for_a_zip_bomb(client, make_user):
     _, h = make_user()
     bomb = _zip_declaring(MAX_XLSX_UNCOMPRESSED_BYTES + 1)
-    r = client.post("/api/pending-bills/bulk-upload", files={"file": ("big.xlsx", bomb)}, headers=h)
+    r = client.post("/api/import/analyze", files={"file": ("big.xlsx", bomb)}, headers=h)
     assert r.status_code == 400
 
 

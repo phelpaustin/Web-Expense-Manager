@@ -1,5 +1,6 @@
 """Bills workflow: to itemise -> total only -> itemised, counted as spending from the start."""
 import datetime as dt
+import json
 import os
 import sqlite3
 import tempfile
@@ -7,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.core.rate_limit import limiter
 from app.db import models
 from app.db.database import SessionLocal
 from tests.test_migration_0015 import _alembic
@@ -49,9 +51,25 @@ def _statement(rows):
 
 
 def _import(client, h, rows):
-    r = client.post("/api/pending-bills/bulk-upload", files={"file": ("s.csv", _statement(rows), "text/csv")}, headers=h)
-    assert r.status_code == 201, r.text
+    """File a bank statement as bills through the Import page's endpoints."""
+    limiter.reset()
+    csv = _statement(rows)
+    analysis = client.post("/api/import/analyze", files={"file": ("s.csv", csv, "text/csv")}, headers=h).json()
+    r = client.post(
+        "/api/import/commit",
+        data={"mapping": json.dumps(analysis["mapping"]), "save_as": "bills"},
+        files={"file": ("s.csv", csv, "text/csv")},
+        headers=h,
+    )
+    assert r.status_code == 200, r.text
     return r.json()
+
+
+def _flag_duplicate(bill_id):
+    """Bills carried over from the older bulk upload can be flagged as possible duplicates."""
+    with SessionLocal() as db:
+        db.query(models.PendingBill).filter(models.PendingBill.id == bill_id).update({"possible_duplicate": True})
+        db.commit()
 
 
 # ── the setting ──────────────────────────────────────────────────────────
@@ -93,18 +111,17 @@ def test_total_only_expenses_count_against_budgets(client, make_user):
 
 
 # ── bank statement import ────────────────────────────────────────────────
-def test_statement_import_records_totals_but_not_possible_duplicates(client, make_user):
+def test_statement_import_records_totals_and_leaves_out_duplicates(client, make_user):
     _, h = make_user()
-    client.post("/api/expenses", json={"date": "2026-09-02", "category": "Food", "amount": "120.50", "currency": "SEK"}, headers=h)
+    # the same purchase typed in earlier (same date, description and amount) is a duplicate
+    client.post("/api/expenses", json={"date": "2026-09-02", "category": "Food", "description": "Coop", "amount": "120.50", "currency": "SEK"}, headers=h)
     out = _import(client, h, [("2026-09-01", "ICA", "-80"), ("2026-09-02", "Coop", "-120.50"), ("2026-09-03", "Willys", "-45.30")])
-    assert out["created"] == 3 and out["possible_duplicates"] == 1 and out["auto_recorded"] == 2
+    assert out["added_bills"] == 2 and out["recorded_bills"] == 2 and out["duplicates"] == 1
     counts = _bills(client, h)["counts"]
     # the expense typed in earlier is also a bill now (made from expenses, itemised)
-    assert counts == {"pending": 1, "total_only": 2, "itemised": 1, "all": 4}
+    assert counts == {"pending": 0, "total_only": 2, "itemised": 1, "all": 3}
     [typed] = _bills(client, h, status="itemised")["items"]
     assert typed["from_expenses"] is True and typed["item_count"] == 1
-    [dup] = _bills(client, h, status="pending")["items"]
-    assert dup["shop"] == "Coop" and dup["possible_duplicate"] is True
     assert _spent(client, h) == D("120.50") + D("80") + D("45.30")  # the pre-existing expense + 2 recorded; no double count
 
 
@@ -112,7 +129,7 @@ def test_statement_import_with_the_setting_off_records_nothing(client, make_user
     _, h = make_user()
     _setting(client, h, False)
     out = _import(client, h, [("2026-09-01", "ICA", "-80"), ("2026-09-03", "Willys", "-45.30")])
-    assert out["created"] == 2 and out["auto_recorded"] == 0
+    assert out["added_bills"] == 2 and out["recorded_bills"] == 0
     assert _bills(client, h)["counts"]["pending"] == 2 and _spent(client, h) == 0
 
 
@@ -135,8 +152,8 @@ def test_bulk_record_total_skips_what_it_should(client, make_user):
     done = _bill(client, h, shop="Done", amount="5")
     client.post(f"/api/bills/{done['id']}/record-total", headers=h)
     client.post("/api/expenses", json={"date": "2026-09-02", "category": "Food", "amount": "7", "currency": "SEK"}, headers=h)
-    dup = _import(client, h, [("2026-09-02", "Dup", "-7")])
-    [dup_bill] = [b for b in _bills(client, h)["items"] if b["shop"] == "Dup"]
+    dup_bill = _bill(client, h, shop="Dup", date="2026-09-02", amount="7")
+    _flag_duplicate(dup_bill["id"])
     out = client.post(
         "/api/bills/record-total",
         json={"ids": [ok1["id"], ok2["id"], done["id"], dup_bill["id"], 999999], "category": "Bills"},

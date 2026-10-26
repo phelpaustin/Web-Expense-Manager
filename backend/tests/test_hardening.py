@@ -1,8 +1,6 @@
 """Hardening release: null updates, amount caps, itemise, receipts, month, statement import."""
 import datetime as dt
 import os
-import subprocess
-import sys
 from decimal import Decimal
 
 import pytest
@@ -11,7 +9,6 @@ from app.core.file_upload import content_disposition, safe_filename
 from app.core.parsing import parse_amount, read_csv_bytes
 from app.db import models
 from app.db.database import SessionLocal
-from app.logic import bills as bills_logic
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TODAY = dt.date.today().isoformat()
@@ -212,58 +209,6 @@ def test_read_csv_detects_delimiter_and_encoding():
     assert list(read_csv_bytes(bom).columns) == ["Date", "Shop", "Amount"]
     assert list(read_csv_bytes(b"A\tB\n1\t2\n").columns) == ["A", "B"]
     assert list(read_csv_bytes(b"A|B\n1|2\n").columns) == ["A", "B"]
-
-
-# ── bank statement import ────────────────────────────────────────────────
-def test_signed_statement_imports_only_outflows():
-    csv = b"Date,Description,Amount\n2026-10-01,Salary,25000\n2026-10-02,ICA,-120.50\n2026-10-03,Refund,40\n2026-10-04,Coop,-8\n"
-    rows, skipped = bills_logic.parse_bill_rows(csv, "s.csv")
-    assert [(r["shop"], r["amount"]) for r in rows] == [("ICA", Decimal("120.50")), ("Coop", Decimal("8.00"))]
-    assert [s["row"] for s in skipped] == [2, 4]
-    assert all("deposit" in s["reason"].lower() for s in skipped)
-
-
-def test_expenses_only_statement_keeps_every_row():
-    csv = b"Date,Description,Amount\n2026-10-02,ICA,120.50\n2026-10-04,Coop,8\n"
-    rows, skipped = bills_logic.parse_bill_rows(csv, "s.csv")
-    assert len(rows) == 2 and skipped == []
-
-
-def test_debit_column_statement_treats_all_values_as_outflows():
-    csv = b"Date,Description,Debit\n2026-10-02,ICA,120.50\n2026-10-04,Coop,8\n"
-    rows, skipped = bills_logic.parse_bill_rows(csv, "s.csv")
-    assert [r["amount"] for r in rows] == [Decimal("120.50"), Decimal("8.00")] and skipped == []
-
-
-def test_swedish_bank_export_parses():
-    csv = "Bokföringsdatum;Text;Belopp\n2026-10-01;ICA Maxi;-1 234,56\n2026-10-02;Lön;25 000,00\n".encode("cp1252")
-    rows, skipped = bills_logic.parse_bill_rows(csv, "export.csv")
-    assert [(r["shop"], r["amount"]) for r in rows] == [("ICA Maxi", Decimal("1234.56"))]
-    assert len(skipped) == 1
-
-
-def test_unusable_rows_are_reported_not_fatal():
-    csv = b"Date,Description,Amount\n2026-10-01,ICA,abc\n2026-10-02,,5\nnot-a-date,Coop,5\n2026-10-03,OK,0\n2026-10-04,Fine,-3\n"
-    rows, skipped = bills_logic.parse_bill_rows(csv, "s.csv")
-    assert [r["shop"] for r in rows] == ["Fine"]
-    assert sorted(s["row"] for s in skipped) == [2, 3, 4, 5]
-
-
-def test_column_choice_is_identical_across_processes():
-    """With several candidate columns the pick used to depend on hash order."""
-    script = (
-        "import sys; sys.path.insert(0, '.');"
-        "from app.logic import bills;"
-        "csv = b'Date,Description,Merchant,Name,Amount,Debit,Value\\n2026-10-01,desc-col,merchant-col,name-col,1,2,3\\n';"
-        "r, _ = bills.parse_bill_rows(csv, 's.csv'); print(r[0]['shop'], r[0]['amount'])"
-    )
-    outputs = set()
-    for seed in range(8):
-        env = {**os.environ, "PYTHONHASHSEED": str(seed), "DATABASE_URL": "sqlite://", "SECRET_KEY": "k" * 40}
-        done = subprocess.run([sys.executable, "-c", script], cwd=BACKEND, env=env, capture_output=True, text=True)
-        assert done.returncode == 0, done.stderr
-        outputs.add(done.stdout.strip())
-    assert outputs == {"merchant-col 1.00"}
 
 
 def test_expense_import_accepts_a_semicolon_decimal_comma_file(client, make_user):

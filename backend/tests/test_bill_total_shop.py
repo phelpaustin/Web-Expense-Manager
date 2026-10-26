@@ -1,5 +1,6 @@
 """A bill recorded as a single total is a shop trip: it carries its shop, and is never an item price."""
 import datetime as dt
+import json
 from decimal import Decimal as D
 
 import pytest
@@ -8,6 +9,7 @@ import sqlalchemy as sa
 from app.db import models
 from app.db.bill_shop_cleanup import fill_bill_total_shops
 from app.db.database import SessionLocal
+from app.core.rate_limit import limiter
 from app.logic import price_tracker as pt
 
 
@@ -64,13 +66,25 @@ def test_recording_several_totals_at_once_carries_each_shop(client, make_user):
     assert sorted(e["shop"] for e in stored(client, h)) == ["Coop", "Lidl"]
 
 
+def _statement_import(client, h, csv):
+    """File a statement as bills through the Import page's endpoints."""
+    limiter.reset()
+    analysis = client.post("/api/import/analyze", files={"file": ("statement.csv", csv, "text/csv")}, headers=h).json()
+    return client.post(
+        "/api/import/commit",
+        data={"mapping": json.dumps(analysis["mapping"]), "save_as": "bills"},
+        files={"file": ("statement.csv", csv, "text/csv")},
+        headers=h,
+    )
+
+
 def test_a_statement_upload_records_each_row_under_its_merchant(client, make_user):
     _, h = make_user()
     csv = f"Date,Shop,Amount\n{day(6)},ICA MAXI MALMO,300\n{day(4)},WILLYS,120\n".encode()
 
-    r = client.post("/api/pending-bills/bulk-upload", files={"file": ("statement.csv", csv, "text/csv")}, headers=h)
+    r = _statement_import(client, h, csv)
 
-    assert r.status_code == 201, r.text
+    assert r.status_code == 200, r.text
     assert sorted(e["shop"] for e in stored(client, h)) == ["ICA MAXI MALMO", "WILLYS"]
 
 

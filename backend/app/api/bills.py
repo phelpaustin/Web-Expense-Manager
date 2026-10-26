@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.api.options import (
-    convert_rows,
     default_currency_for,
     ensure_options,
     get_or_create_options,
@@ -21,11 +20,10 @@ from app.core.import_limits import MAX_IMPORT_FILE_BYTES
 from app.core.validation import MAX_NAME, Name, Text
 from app.api import bill_sync
 from app.core import receipt_storage
-from app.api.expenses import ExpenseOut, fetch_expenses
+from app.api.expenses import ExpenseOut
 from app.db.database import get_db
 from app.core.money import MAX_MONEY
 from app.db import models
-from app.logic import bills as bills_logic
 from app.logic.search import LIKE_ESCAPE, like_pattern
 
 router = APIRouter()
@@ -383,75 +381,6 @@ def upload_pending(
     db.refresh(b)
     response.status_code = 201
     return {"result": "created", "bill": _serialize_one(db, user.id, b)}
-
-
-@router.post("/pending-bills/bulk-upload", status_code=201)
-def bulk_upload_pending(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    """Import bills in bulk from a bank-statement spreadsheet (date, shop, amount columns).
-
-    No receipt is attached; attach one later per bill. Rows whose (date, amount) match an
-    existing expense or bill are flagged as possible duplicates so they can be reviewed.
-    With "count bills as spending" on, every row that is not a possible duplicate is
-    recorded as a total-only expense (itemise it later whenever you like).
-    """
-    name = file.filename or ""
-    if not name.lower().endswith((".xlsx", ".csv")):
-        raise HTTPException(status_code=400, detail="Only .xlsx or .csv files are allowed")
-    data = read_upload_limited_sync(file, _MAX_RECEIPT_BYTES)
-
-    try:
-        rows, skipped = bills_logic.parse_bill_rows(data, name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if not rows:
-        return {"created": 0, "possible_duplicates": 0, "auto_recorded": 0, "skipped": skipped}
-
-    # A bank statement is in the account's currency (the base currency), so compare in that
-    # currency regardless of which currency totals are displayed in.
-    statement_currency = default_currency_for(db, user.id)
-    existing = [
-        (e["date"], e["amount"])
-        for e in convert_rows(db, user.id, fetch_expenses(db, user.id, scope="personal"), statement_currency)[0]
-    ]
-    pending_rows = [
-        {"date": p.date, "amount": p.amount, "currency": p.currency}
-        for p in db.query(models.PendingBill)
-        .filter(models.PendingBill.user_id == user.id, models.PendingBill.status == STATUS_PENDING)
-        .all()
-    ]
-    existing += [(p["date"], p["amount"]) for p in convert_rows(db, user.id, pending_rows, statement_currency)[0]]
-    bills_logic.flag_duplicates(rows, existing)
-
-    new_bills = []
-    for row in rows:
-        b = models.PendingBill(
-            user_id=user.id,
-            date=row["date"],
-            shop=row["shop"],
-            amount=row["amount"],
-            currency=statement_currency,
-            note="Bulk import",
-            status=STATUS_PENDING,
-            possible_duplicate=row["possible_duplicate"],
-        )
-        db.add(b)
-        new_bills.append(b)
-    db.flush()
-    recorded = _auto_record(db, user, new_bills)
-    db.commit()
-    if recorded:
-        _learn_default_category(db, user.id)
-    return {
-        "created": len(rows),
-        "possible_duplicates": sum(1 for r in rows if r["possible_duplicate"]),
-        "auto_recorded": recorded,
-        "skipped": skipped,
-    }
 
 
 @router.post("/pending-bills/{bill_id}/dismiss-duplicate")
