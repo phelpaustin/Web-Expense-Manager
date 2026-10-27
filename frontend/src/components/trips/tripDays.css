@@ -42,3 +42,30 @@
   align-items: center;
   gap: 0.4rem;
 }
+
+/* The shared .icon-btn is a fixed 28px square for single icons; buttons with words must size to their text. */
+.trip-view-toggle .icon-btn,
+.trip-days-editor .icon-btn {
+  width: auto;
+  height: auto;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0.25rem 0.7rem;
+  margin-left: 0;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+/* .subtitle pulls up under a page title; inside a card it would sit on top of the line above. */
+.trip-day .subtitle {
+  margin: 0.35rem 0 0.5rem;
+}
+
+.trip-day-head {
+  gap: 1rem;
+}
+
+.trip-days-empty-toggle {
+  display: block;
+  margin: 0.75rem 0 0;
+}

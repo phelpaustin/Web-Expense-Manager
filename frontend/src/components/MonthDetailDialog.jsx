@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchExpenses, fetchIncome, updateExpense, deleteExpense, bulkUpdateExpenses, bulkCopyExpenses } from '../api/client.js'
 import { money } from '../format.js'
 import CurrencySelect from './CurrencySelect.jsx'
+import './monthDetail.css'
 import {
   monthRange, shiftMonth, monthTitle, currentMonthKey, incomeInMonth, totalsByCurrency, includesIncome, scopeFilters,
   editFormFor, expenseChanges, canEditExpense, tripCategoryIds, movableTrips, spaceName, moveChanges, movedMessage, copiedMessage,

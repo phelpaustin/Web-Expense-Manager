@@ -15,3 +15,18 @@
 .trip-pick-notice {
   color: var(--ok);
 }
+
+.trip-pick .icon-btn {
+  width: auto;
+  height: auto;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0.25rem 0.7rem;
+  margin-left: 0;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.trip-pick .subtitle {
+  margin: 0.5rem 0 0;
+}

@@ -1,4 +1,5 @@
 import { SPACE_TYPE_ICONS, KEEP } from './shared.jsx'
+import './bulkCopy.css'
 
 export default function BulkEditPanel({
   pageExpenses,

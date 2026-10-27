@@ -76,7 +76,7 @@ export default function TripDayPlan({ expenses, days, currency }) {
       )}
 
       {empty > 0 && (
-        <label className="subtitle">
+        <label className="subtitle trip-days-empty-toggle">
           <input type="checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} /> Show the {empty} day
           {empty === 1 ? '' : 's'} with nothing on them
         </label>

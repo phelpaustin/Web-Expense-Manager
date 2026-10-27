@@ -1,0 +1,19 @@
+/* Month detail window. Buttons with words must size to their text (the shared .icon-btn is a 28px
+   square for single icons), and .subtitle must not pull up over the line above it. */
+.month-detail .icon-btn {
+  width: auto;
+  height: auto;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.month-detail .subtitle {
+  margin: 0.4rem 0 0.6rem;
+}
+
+.month-detail-head button {
+  white-space: nowrap;
+}
