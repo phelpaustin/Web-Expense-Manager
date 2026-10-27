@@ -278,7 +278,7 @@ def _visible_expenses_query(db: Session, user_id: int, scope: str | None = None,
 _FETCH_KEYS = (
     "id", "date", "category", "subcategory", "description", "amount", "quantity", "unit",
     "shop", "brand", "currency", "price_per_unit", "bill_total_only", "recurring_template_id",
-    "group_id", "user_id",
+    "group_id", "user_id", "source_bill_id",
 )
 _FETCH_COLUMNS = tuple(getattr(models.Expense, k) for k in _FETCH_KEYS)
 

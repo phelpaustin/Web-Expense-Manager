@@ -172,7 +172,7 @@ def test_fetch_expenses_returns_every_field_the_logic_modules_read(client, make_
         db.close()
     assert set(row) == {
         "id", "date", "category", "subcategory", "description", "amount", "quantity", "unit",
-        "shop", "brand", "currency", "price_per_unit", "bill_total_only", "recurring_template_id", "group_id", "user_id",
+        "shop", "brand", "currency", "price_per_unit", "bill_total_only", "recurring_template_id", "group_id", "user_id", "source_bill_id",
     }
     assert row["bill_total_only"] is False  # a real bool, as the shop scorecard expects
     assert row["recurring_template_id"] is None  # typed by hand, so not committed (spending mix reads this)

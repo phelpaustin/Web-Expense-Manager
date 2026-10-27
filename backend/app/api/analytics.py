@@ -14,6 +14,7 @@ from app.logic import category_change as category_change_logic
 from app.logic import forecast as forecast_logic
 from app.logic import movers as movers_logic
 from app.logic import recurring_costs as recurring_costs_logic
+from app.logic import unusual as unusual_logic
 from app.logic import period_compare as period_compare_logic
 from app.logic import spending_mix as spending_mix_logic
 from app.logic import shop_scorecard as shop_scorecard_logic
@@ -205,6 +206,44 @@ def analytics_recurring_costs(
     result["currency"] = get_reporting_currency(db, user.id)
     result["unconverted_count"] = unconverted
     return result
+
+
+@router.get("/analytics/unusual")
+def analytics_unusual(
+    recent_days: int = Query(default=unusual_logic.DEFAULT_RECENT_DAYS, ge=1, le=366),
+    duplicate_days: int = Query(default=unusual_logic.DEFAULT_DUPLICATE_DAYS, ge=1, le=366),
+    top: int = Query(default=10, ge=1, le=50),
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Spending worth a second look: recent expenses far above the usual for their category, and
+    entries that may have been recorded twice (same date, amount, description and shop).
+
+    Payments posted by a recurring template are never flagged as unusual, and lines of one bill
+    count as one entry for duplicates. Amounts are in the reporting currency.
+    """
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+
+    def receipt_bills(ids: set) -> set:
+        # A bill the user created or imported is a receipt; a derived bill ("expenses" origin) only
+        # files unrelated entries together, so its lines are not one entry.
+        found: set = set()
+        wanted = sorted(ids)
+        for i in range(0, len(wanted), 500):
+            rows = db.query(models.PendingBill.id).filter(
+                models.PendingBill.id.in_(wanted[i : i + 500]), models.PendingBill.origin.is_(None)
+            )
+            found.update(r[0] for r in rows)
+        return found
+
+    return {
+        "unusual": unusual_logic.unusual_expenses(expenses, recent_days=recent_days, top=top),
+        "duplicates": unusual_logic.possible_duplicates(expenses, recent_days=duplicate_days, top=top, receipt_bills=receipt_bills),
+        "currency": get_reporting_currency(db, user.id),
+        "unconverted_count": unconverted,
+    }
 
 
 @router.get("/analytics/shops")

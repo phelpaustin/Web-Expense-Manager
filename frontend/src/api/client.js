@@ -288,6 +288,11 @@ export function fetchPriceRises({ recentDays } = {}) {
   return request(`/api/analytics/price-trends/rises${recentDays != null ? `?recent_days=${encodeURIComponent(recentDays)}` : ''}`)
 }
 
+// Recent expenses far above the usual for their category, and entries that look entered twice.
+export function fetchUnusual({ scope, spaceIds } = {}) {
+  return request(`/api/analytics/unusual${scopeQuery(scope, spaceIds)}`)
+}
+
 // Forecast of this month's baseline spending, with a range and a backtest.
 export function fetchForecast({ scope, spaceIds } = {}) {
   return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)
