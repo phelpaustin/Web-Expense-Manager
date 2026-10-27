@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   isMonthKey, monthRange, shiftMonth, monthTitle, incomeInMonth, totalsByCurrency, includesIncome, scopeFilters,
-  editFormFor, expenseChanges, canEditExpense,
+  editFormFor, expenseChanges, canEditExpense, tripCategoryIds, movableTrips, spaceName, moveChanges, movedMessage, copiedMessage,
 } from '../monthDetail.js'
 
 describe('monthDetail helpers', () => {
@@ -96,6 +96,47 @@ describe('monthDetail helpers', () => {
       expect(canEditExpense({ group_id: 3 }, spaces)).toBe(false)
       expect(canEditExpense({ group_id: 4 }, spaces)).toBe(true)
       expect(canEditExpense({ group_id: 9 }, [])).toBe(true)
+    })
+  })
+
+  describe('moving expenses into a trip', () => {
+    it('finds the Trip-categorised expenses that are not in a trip yet', () => {
+      const rows = [
+        { id: 1, category: 'Trip', group_id: null },
+        { id: 2, category: ' trips ', group_id: null },
+        { id: 3, category: 'Trip', group_id: 5 },
+        { id: 4, category: 'Food', group_id: null },
+      ]
+      expect(tripCategoryIds(rows)).toEqual([1, 2])
+    })
+
+    it('offers only trips you may add to', () => {
+      const trips = [{ id: 1, role: 'owner' }, { id: 2, role: 'viewer' }, { id: 3, role: 'editor' }]
+      expect(movableTrips(trips).map((t) => t.id)).toEqual([1, 3])
+    })
+
+    it('names the space an expense sits in', () => {
+      expect(spaceName({ group_id: 5 }, [{ id: 5, name: 'Goa' }])).toBe('Goa')
+      expect(spaceName({ group_id: null }, [{ id: 5, name: 'Goa' }])).toBe('')
+    })
+
+    it('turns the select value into a change', () => {
+      expect(moveChanges('7')).toEqual({ group_id: 7 })
+      expect(moveChanges('personal')).toEqual({ group_id: null })
+      expect(moveChanges('')).toBeNull()
+    })
+
+    it('words a copy result, including rows skipped as already there', () => {
+      const trips = [{ id: 7, name: 'Goa' }]
+      expect(copiedMessage({ copied: 2, skipped: 0 }, '7', trips)).toBe('Copied 2 expenses to Goa.')
+      expect(copiedMessage({ copied: 1, skipped: 3 }, '7', trips)).toBe('Copied 1 expense to Goa. 3 already there, skipped.')
+    })
+
+    it('words the result', () => {
+      const trips = [{ id: 7, name: 'Goa' }]
+      expect(movedMessage(3, '7', trips)).toBe('Moved 3 expenses to Goa.')
+      expect(movedMessage(1, '7', trips)).toBe('Moved 1 expense to Goa.')
+      expect(movedMessage(2, 'personal', trips)).toBe('Moved 2 expenses back to personal.')
     })
   })
 })

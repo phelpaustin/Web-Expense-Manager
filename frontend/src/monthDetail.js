@@ -94,3 +94,45 @@ export function canEditExpense(expense, spaces) {
   if (!expense.group_id) return true
   return (spaces || []).find((g) => g.id === expense.group_id)?.role !== 'viewer'
 }
+
+// ── Moving expenses into a trip ───────────────────────────
+
+const TRIP_CATEGORIES = new Set(['trip', 'trips'])
+
+// Statement rows categorised "Trip" that aren't in a trip yet.
+export function tripCategoryIds(expenses) {
+  return (expenses || [])
+    .filter((e) => !e.group_id && TRIP_CATEGORIES.has(String(e.category || '').trim().toLowerCase()))
+    .map((e) => e.id)
+}
+
+// Trips the person may add expenses to (viewers may not).
+export function movableTrips(trips) {
+  return (trips || []).filter((t) => t.role !== 'viewer')
+}
+
+export function spaceName(expense, spaces) {
+  if (!expense.group_id) return ''
+  return (spaces || []).find((g) => g.id === expense.group_id)?.name || ''
+}
+
+// The <select> value: "" = nothing chosen, "personal" = back to personal, otherwise a trip id.
+export function moveChanges(choice) {
+  if (choice === 'personal') return { group_id: null }
+  const id = parseInt(choice, 10)
+  return Number.isInteger(id) ? { group_id: id } : null
+}
+
+export function copiedMessage({ copied, skipped }, choice, trips) {
+  const name = (trips || []).find((t) => String(t.id) === String(choice))?.name || 'the trip'
+  const noun = copied === 1 ? 'expense' : 'expenses'
+  const already = skipped ? ` ${skipped} already there, skipped.` : ''
+  return `Copied ${copied} ${noun} to ${name}.${already}`
+}
+
+export function movedMessage(count, choice, trips) {
+  const noun = count === 1 ? 'expense' : 'expenses'
+  if (choice === 'personal') return `Moved ${count} ${noun} back to personal.`
+  const name = (trips || []).find((t) => String(t.id) === String(choice))?.name
+  return `Moved ${count} ${noun} to ${name || 'the trip'}.`
+}

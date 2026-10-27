@@ -28,6 +28,7 @@ const TOTAL_ONLY = {
 }
 
 let loadAll, setError, where
+let spaces = { trips: [], groups: [] }
 function Where() {
   where = useLocation()
   return null
@@ -43,7 +44,8 @@ function Harness() {
         form={e.form} setForm={e.setForm} saving={e.saving} onAdd={e.handleAdd} onAddBill={e.handleAddBill}
         editingId={e.editingId} editForm={e.editForm} setEditForm={e.setEditForm} startEdit={e.startEdit}
         cancelEdit={e.cancelEdit} saveEdit={e.saveEdit} onDelete={e.handleDelete} options={OPTIONS}
-        onExport={e.handleExport} onBulkUpdate={e.handleBulkUpdate} trips={[]} groups={[]} onError={setError}
+        onExport={e.handleExport} onBulkUpdate={e.handleBulkUpdate} onBulkCopy={e.handleBulkCopy}
+        trips={spaces.trips} groups={spaces.groups} onError={setError}
       />
     </>
   )
@@ -62,6 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   loadAll = vi.fn(async () => {})
   setError = vi.fn()
+  spaces = { trips: [], groups: [] }
   client.fetchExpenses.mockImplementation(async () => ({ items: [NORMAL, TOTAL_ONLY], total: 2 }))
 })
 
@@ -505,6 +508,46 @@ describe('editing expenses together', () => {
     expect(await screen.findByText('Updated 1 expense.')).toBeTruthy()
     expect(loadAll).toHaveBeenCalled() // the dashboard and other pages follow
     expect(screen.getByTestId('bulk-count').textContent).toContain('Nothing selected yet') // selection is cleared
+  })
+
+  describe('copying to a space', () => {
+    const GOA = { id: 7, name: 'Goa', space_type: 'trip', role: 'owner' }
+    const OSLO = { id: 8, name: 'Oslo', space_type: 'trip', role: 'viewer' }
+    const copyBtn = (n) => within(screen.getByTestId('bulk-bar')).getByRole('button', { name: new RegExp(`Copy ${n} expense`) })
+    beforeEach(() => {
+      spaces = { trips: [GOA, OSLO], groups: [] }
+      client.bulkCopyExpenses.mockResolvedValue({ copied: 1, skipped: 0 })
+    })
+
+    it('copies only the ticked expenses into the chosen space and keeps the originals', async () => {
+      await start()
+      expect(copyBtn(0).disabled).toBe(true)
+      fireEvent.click(screen.getByLabelText('Select Milk'))
+      expect(copyBtn(1).disabled).toBe(true) // no space chosen yet
+      fill('Copy to space', '7')
+      fireEvent.click(copyBtn(1))
+      await waitFor(() => expect(client.bulkCopyExpenses).toHaveBeenCalledWith({ ids: [1], group_id: 7 }))
+      expect(client.bulkUpdateExpenses).not.toHaveBeenCalled()
+      expect(await screen.findByText('Copied 1 expense to Goa.')).toBeTruthy()
+      expect(loadAll).toHaveBeenCalled()
+      expect(screen.getByTestId('bulk-count').textContent).toContain('Nothing selected yet')
+    })
+
+    it('does not offer a space where you are only a viewer', async () => {
+      await start()
+      const options = [...within(screen.getByTestId('bulk-bar')).getByLabelText('Copy to space').querySelectorAll('option')].map((o) => o.textContent)
+      expect(options.some((o) => o.includes('Goa'))).toBe(true)
+      expect(options.some((o) => o.includes('Oslo'))).toBe(false)
+    })
+
+    it('says how many were skipped because they were already there', async () => {
+      client.bulkCopyExpenses.mockResolvedValue({ copied: 0, skipped: 1 })
+      await start()
+      fireEvent.click(screen.getByLabelText('Select Milk'))
+      fill('Copy to space', '7')
+      fireEvent.click(copyBtn(1))
+      expect(await screen.findByText('Copied 0 expenses to Goa. 1 already there, skipped.')).toBeTruthy()
+    })
   })
 
   it('the header box selects every row on the page', async () => {

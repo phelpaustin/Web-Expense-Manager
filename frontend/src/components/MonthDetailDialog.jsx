@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchExpenses, fetchIncome, updateExpense, deleteExpense } from '../api/client.js'
+import { fetchExpenses, fetchIncome, updateExpense, deleteExpense, bulkUpdateExpenses, bulkCopyExpenses } from '../api/client.js'
 import { money } from '../format.js'
 import CurrencySelect from './CurrencySelect.jsx'
 import {
   monthRange, shiftMonth, monthTitle, currentMonthKey, incomeInMonth, totalsByCurrency, includesIncome, scopeFilters,
-  editFormFor, expenseChanges, canEditExpense,
+  editFormFor, expenseChanges, canEditExpense, tripCategoryIds, movableTrips, spaceName, moveChanges, movedMessage, copiedMessage,
 } from '../monthDetail.js'
 
 const PAGE_SIZE = 200
@@ -48,6 +48,9 @@ export default function MonthDetailDialog({
   const [confirmingId, setConfirmingId] = useState(null)
   const [actionError, setActionError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const [moveChoice, setMoveChoice] = useState('')
+  const [notice, setNotice] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const latest = useRef(0)
   const closeRef = useRef(null)
@@ -69,6 +72,8 @@ export default function MonthDetailDialog({
       setEditing(null)
       setConfirmingId(null)
       setActionError(null)
+      setSelected(new Set())
+      setNotice(null)
     }
     setState((s) => ({ ...s, loading: true, loaded: fresh ? false : s.loaded, error: null }))
     Promise.all([
@@ -143,6 +148,56 @@ export default function MonthDetailDialog({
     }
   }
 
+  const trips_ = movableTrips(trips)
+  const editable = expenses.filter((e) => canEditExpense(e, spaces))
+  const allSelected = editable.length > 0 && editable.every((e) => selected.has(e.id))
+  const tripCategory = tripCategoryIds(expenses).filter((id) => editable.some((e) => e.id === id))
+
+  const toggle = (id) =>
+    setSelected((cur) => {
+      const next = new Set(cur)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  async function moveSelected() {
+    const changes = moveChanges(moveChoice)
+    if (!changes || selected.size === 0) return
+    const ids = [...selected]
+    setBusy(true)
+    setActionError(null)
+    try {
+      await bulkUpdateExpenses({ ids, changes })
+      setSelected(new Set())
+      setMoveChoice('')
+      setNotice(movedMessage(ids.length, moveChoice, trips_))
+      await afterChange()
+    } catch (err) {
+      setActionError(err.message || 'Could not move the expenses.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function copySelected() {
+    const changes = moveChanges(moveChoice)
+    if (!changes || changes.group_id === null || selected.size === 0) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      const result = await bulkCopyExpenses({ ids: [...selected], group_id: changes.group_id })
+      setSelected(new Set())
+      setMoveChoice('')
+      setNotice(copiedMessage(result, moveChoice, trips_))
+      await afterChange()
+    } catch (err) {
+      setActionError(err.message || 'Could not copy the expenses.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const setField = (field) => (value) => setEditing((cur) => ({ ...cur, form: { ...cur.form, [field]: value } }))
   const canGoNext = shiftMonth(month, 1) <= currentMonthKey()
 
@@ -177,19 +232,62 @@ export default function MonthDetailDialog({
             <h3>
               Expenses ({expenseTotal}) <Totals rows={expenses} />
             </h3>
+            {notice && <p className="subtitle month-detail-notice" role="status">{notice}</p>}
+            {expenses.length > 0 && editable.length > 0 && (
+              <div className="month-detail-bulk">
+                {tripCategory.length > 0 && (
+                  <button type="button" className="icon-btn" onClick={() => setSelected(new Set(tripCategory))}>
+                    Select the {tripCategory.length} categorised Trip
+                  </button>
+                )}
+                {selected.size > 0 && (
+                  <>
+                    <span>{selected.size} selected</span>
+                    <select aria-label="Trip" value={moveChoice} onChange={(ev) => setMoveChoice(ev.target.value)}>
+                      <option value="">Choose a trip…</option>
+                      {trips_.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      <option value="personal">Back to personal (no trip)</option>
+                    </select>
+                    <button type="button" className="icon-btn save" disabled={busy || !moveChoice} onClick={moveSelected}>
+                      Move {selected.size}
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      title="Adds a copy in the trip and keeps the original. Both count in your spending."
+                      disabled={busy || !moveChoice || moveChoice === 'personal'}
+                      onClick={copySelected}
+                    >
+                      Copy {selected.size}
+                    </button>
+                    <button type="button" className="icon-btn" disabled={busy} onClick={() => setSelected(new Set())}>Clear</button>
+                  </>
+                )}
+              </div>
+            )}
             {expenses.length === 0 ? (
               <p className="subtitle">No expenses this month.</p>
             ) : (
               <div className="month-detail-scroll">
                 <table className="table" data-testid="month-expenses">
                   <thead>
-                    <tr><th>Date</th><th>Description</th><th>Shop</th><th>Category</th><th className="num">Amount</th><th /></tr>
+                    <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          aria-label="Select all expenses"
+                          checked={allSelected}
+                          disabled={editable.length === 0}
+                          onChange={() => setSelected(allSelected ? new Set() : new Set(editable.map((e) => e.id)))}
+                        />
+                      </th>
+                      <th>Date</th><th>Description</th><th>Shop</th><th>Category</th><th className="num">Amount</th><th /></tr>
                   </thead>
                   <tbody>
                     {expenses.map((e) =>
                       editing?.id === e.id ? (
                         <tr key={e.id} className="editing">
-                          <td colSpan={6}>
+                          <td colSpan={7}>
                             <div className="edit-grid">
                               <label className="edit-field">
                                 <span>Date</span>
@@ -224,10 +322,23 @@ export default function MonthDetailDialog({
                         </tr>
                       ) : (
                         <tr key={e.id}>
+                          <td>
+                            {canEditExpense(e, spaces) && (
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${e.description || e.category}`}
+                                checked={selected.has(e.id)}
+                                onChange={() => toggle(e.id)}
+                              />
+                            )}
+                          </td>
                           <td>{e.date}</td>
                           <td>{e.description}</td>
                           <td>{e.shop}</td>
-                          <td>{e.category}</td>
+                          <td>
+                            {e.category}
+                            {spaceName(e, spaces) && <span className="month-detail-space">🧳 {spaceName(e, spaces)}</span>}
+                          </td>
                           <td className="num">{money(e.amount, e.currency)}</td>
                           <td className="right nowrap">
                             {canEditExpense(e, spaces) &&

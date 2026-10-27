@@ -161,6 +161,21 @@ class ExpenseBulkUpdate(BaseModel):
         return self
 
 
+class ExpenseBulkCopy(BaseModel):
+    """Copy expenses into a space (a trip, say): the ids given, or everything matching a search &
+    filter. The copies are new expenses owned by the person copying; the originals are untouched."""
+
+    ids: list[int] | None = Field(default=None, min_length=1, max_length=MAX_BULK_UPDATE)
+    filters: ExpenseBulkFilters | None = None
+    group_id: int
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if (self.ids is None) == (self.filters is None):
+            raise ValueError("send either ids or filters")
+        return self
+
+
 class ExpenseBulkCreate(BaseModel):
     items: list[ExpenseCreate] = Field(min_length=1, max_length=1000)
     # Itemising a bill: the bill these line items break down. Once saved the bill is
@@ -574,6 +589,57 @@ def update_expenses_bulk(
     for category, subcategory, unit, shop in seen:
         ensure_options(db, user.id, category, subcategory, unit, shop)
     return {"updated": len(expenses)}
+
+
+@router.post("/expenses/bulk-copy")
+def copy_expenses_bulk(
+    payload: ExpenseBulkCopy,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Copy many expenses into a space, e.g. bank-statement rows into the trip they belong to.
+
+    Reading the originals is enough (they are not changed); writing to the target space is what is
+    checked. Rows already in that space are skipped, so a double click can't double them. The copies
+    are plain expenses: they are not tied to the original's bill or recurring template. All or
+    nothing, like the other bulk actions."""
+    if payload.ids is not None:
+        ids = list(dict.fromkeys(payload.ids))
+        sources = [_get_visible_or_404(db, i, user.id) for i in ids]
+    else:
+        f = payload.filters
+        q = _visible_expenses_query(db, user.id, f.scope, f.space_ids)
+        if q is None:
+            return {"copied": 0, "skipped": 0}
+        q = _apply_list_filters(q, f.search, f.category, f.shop, f.date_from, f.date_to, f.total_only)
+        if q.count() > MAX_BULK_UPDATE:
+            raise HTTPException(status_code=422, detail=f"That is more than {MAX_BULK_UPDATE} expenses; narrow the filters first")
+        sources = q.all()
+
+    _require_group_write_access(db, payload.group_id, user.id)
+    to_copy = [e for e in sources if e.group_id != payload.group_id]
+    skipped = len(sources) - len(to_copy)
+
+    for e in to_copy:
+        db.add(
+            models.Expense(
+                user_id=user.id,
+                date=e.date,
+                category=e.category,
+                subcategory=e.subcategory,
+                description=e.description,
+                amount=e.amount,
+                quantity=e.quantity,
+                unit=e.unit,
+                shop=e.shop,
+                brand=e.brand,
+                currency=e.currency,
+                price_per_unit=e.price_per_unit,
+                group_id=payload.group_id,
+            )
+        )
+    db.commit()
+    return {"copied": len(to_copy), "skipped": skipped}
 
 
 @router.put("/expenses/{expense_id}", response_model=ExpenseOut)

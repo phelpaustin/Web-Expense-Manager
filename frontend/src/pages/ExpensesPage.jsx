@@ -25,6 +25,7 @@ export default function ExpensesPage({
   saveEdit,
   onDelete,
   onBulkUpdate,
+  onBulkCopy,
   options,
   trips,
   groups,
@@ -263,6 +264,43 @@ export default function ExpensesPage({
       setBulkNotice(`Updated ${res.updated} expense${res.updated === 1 ? '' : 's'}.`)
       clearSelection()
       setBulk(EMPTY_BULK)
+    } catch (err) {
+      onError?.(err.message)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  // Copy the selection into a space (a trip, say). The originals stay where they are.
+  const [copyTarget, setCopyTarget] = useState('')
+
+  async function applyCopy() {
+    const group_id = parseInt(copyTarget, 10)
+    if (!Number.isInteger(group_id)) return
+    const body = allMatching
+      ? {
+          filters: {
+            scope: filterGroup || undefined,
+            search: debouncedSearch || undefined,
+            category: filterCategory || undefined,
+            shop: filterShop || undefined,
+            date_from: dateFrom || undefined,
+            date_to: dateTo || undefined,
+            total_only: filterTotalOnly ? true : undefined,
+          },
+          group_id,
+        }
+      : { ids: [...selectedIds], group_id }
+    setBulkBusy(true)
+    setBulkNotice('')
+    try {
+      const res = await onBulkCopy(body)
+      await refetch()
+      const where = groupName(group_id) || 'that space'
+      const skipped = res.skipped ? ` ${res.skipped} already there, skipped.` : ''
+      setBulkNotice(`Copied ${res.copied} expense${res.copied === 1 ? '' : 's'} to ${where}.${skipped}`)
+      clearSelection()
+      setCopyTarget('')
     } catch (err) {
       onError?.(err.message)
     } finally {
@@ -628,6 +666,9 @@ export default function ExpensesPage({
         hasBulkChanges={hasBulkChanges}
         describeBulkChanges={describeBulkChanges}
         applyBulk={applyBulk}
+        copyTarget={copyTarget}
+        setCopyTarget={setCopyTarget}
+        applyCopy={applyCopy}
       />
       )}
 

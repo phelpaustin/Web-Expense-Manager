@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createExpense, createExpensesBulk, updateExpense, deleteExpense, exportExpenses, bulkUpdateExpenses } from '../api/client.js'
+import { createExpense, createExpensesBulk, updateExpense, deleteExpense, exportExpenses, bulkUpdateExpenses, bulkCopyExpenses } from '../api/client.js'
 import { EXPENSE_PARTS } from './useAppData.js'
 
 const EMPTY_FORM = {
@@ -89,6 +89,12 @@ export function useExpenseHandlers(loadAll, setError) {
     return result
   }
 
+  async function handleBulkCopy(body) {
+    const result = await bulkCopyExpenses(body)
+    await loadAll(EXPENSE_PARTS)
+    return result
+  }
+
   function startEdit(expense) {
     setEditingId(expense.id)
     setEditForm({
@@ -148,6 +154,7 @@ export function useExpenseHandlers(loadAll, setError) {
     handleAddBill,
     handleExport,
     handleBulkUpdate,
+    handleBulkCopy,
     startEdit,
     cancelEdit,
     saveEdit,

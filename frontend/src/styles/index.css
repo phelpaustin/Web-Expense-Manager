@@ -3086,3 +3086,31 @@ label.link-btn input[type='file'] {
 .price-rise-big {
   font-weight: 700;
 }
+
+.month-detail-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0;
+}
+
+.month-detail-notice {
+  color: var(--ok);
+}
+
+.month-detail-space {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--faint);
+}
+
+.bulk-copy {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.bulk-copy h3 {
+  margin: 0 0 0.25rem;
+}

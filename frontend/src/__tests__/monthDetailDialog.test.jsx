@@ -6,9 +6,11 @@ vi.mock('../api/client.js', () => ({
   fetchIncome: vi.fn(),
   updateExpense: vi.fn(),
   deleteExpense: vi.fn(),
+  bulkUpdateExpenses: vi.fn(),
+  bulkCopyExpenses: vi.fn(),
 }))
 
-import { fetchExpenses, fetchIncome, updateExpense, deleteExpense } from '../api/client.js'
+import { fetchExpenses, fetchIncome, updateExpense, deleteExpense, bulkUpdateExpenses, bulkCopyExpenses } from '../api/client.js'
 import MonthDetailDialog from '../components/MonthDetailDialog.jsx'
 
 const EXPENSE = { id: 1, date: '2025-01-10', description: 'Milk', shop: 'ICA', category: 'Food', amount: '25.50', currency: 'SEK' }
@@ -23,6 +25,8 @@ beforeEach(() => {
   fetchIncome.mockResolvedValue(INCOME)
   updateExpense.mockResolvedValue({})
   deleteExpense.mockResolvedValue({})
+  bulkUpdateExpenses.mockResolvedValue({ updated: 1 })
+  bulkCopyExpenses.mockResolvedValue({ copied: 1, skipped: 0 })
 })
 
 describe('MonthDetailDialog', () => {
@@ -144,6 +148,107 @@ describe('MonthDetailDialog', () => {
       await screen.findByTestId('month-expenses')
       expect(screen.queryByLabelText('Edit Milk')).toBeNull()
       expect(screen.queryByLabelText('Delete Milk')).toBeNull()
+    })
+  })
+
+  describe('moving expenses into a trip', () => {
+    const TRIPS = [{ id: 7, name: 'Goa', role: 'owner' }, { id: 8, name: 'Oslo', role: 'viewer' }]
+    const ROWS = [
+      { ...EXPENSE, id: 1, description: 'Hotel', category: 'Trip' },
+      { ...EXPENSE, id: 2, description: 'Taxi', category: 'Trip' },
+      { ...EXPENSE, id: 3, description: 'Milk', category: 'Food' },
+    ]
+    const open = (props = {}) =>
+      render(
+        <MonthDetailDialog
+          month="2025-01" scope="all" spaceIds={[]} trips={TRIPS} onClose={() => {}} onChangeMonth={() => {}} {...props}
+        />,
+      )
+    beforeEach(() => fetchExpenses.mockResolvedValue({ items: ROWS, total: 3 }))
+
+    it('moves the selected expenses into the chosen trip and refreshes', async () => {
+      const onChanged = vi.fn()
+      open({ onChanged })
+      fireEvent.click(await screen.findByLabelText('Select Hotel'))
+      fireEvent.click(screen.getByLabelText('Select Milk'))
+      fireEvent.change(screen.getByLabelText('Trip'), { target: { value: '7' } })
+      fireEvent.click(screen.getByText('Move 2'))
+      await waitFor(() => expect(bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [1, 3], changes: { group_id: 7 } }))
+      await waitFor(() => expect(onChanged).toHaveBeenCalled())
+      expect((await screen.findByRole('status')).textContent).toBe('Moved 2 expenses to Goa.')
+      expect(screen.queryByText('Move 2')).toBeNull() // selection cleared
+    })
+
+    it('selects everything categorised Trip in one click', async () => {
+      open()
+      fireEvent.click(await screen.findByText('Select the 2 categorised Trip'))
+      expect(screen.getByLabelText('Select Hotel').checked).toBe(true)
+      expect(screen.getByLabelText('Select Taxi').checked).toBe(true)
+      expect(screen.getByLabelText('Select Milk').checked).toBe(false)
+      expect(screen.getByText('2 selected')).toBeTruthy()
+    })
+
+    it('does not offer a trip where you are only a viewer, but can send expenses back to personal', async () => {
+      open()
+      fireEvent.click(await screen.findByLabelText('Select Hotel'))
+      const options = [...screen.getByLabelText('Trip').querySelectorAll('option')].map((o) => o.textContent)
+      expect(options).toContain('Goa')
+      expect(options).not.toContain('Oslo')
+      fireEvent.change(screen.getByLabelText('Trip'), { target: { value: 'personal' } })
+      fireEvent.click(screen.getByText('Move 1'))
+      await waitFor(() => expect(bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [1], changes: { group_id: null } }))
+    })
+
+    it('keeps Move disabled until a trip is chosen', async () => {
+      open()
+      fireEvent.click(await screen.findByLabelText('Select Hotel'))
+      expect(screen.getByText('Move 1').disabled).toBe(true)
+    })
+
+    it('copies the selected expenses into the trip and keeps the originals', async () => {
+      bulkCopyExpenses.mockResolvedValue({ copied: 2, skipped: 1 })
+      const onChanged = vi.fn()
+      open({ onChanged })
+      fireEvent.click(await screen.findByText('Select the 2 categorised Trip'))
+      fireEvent.change(screen.getByLabelText('Trip'), { target: { value: '7' } })
+      fireEvent.click(screen.getByText('Copy 2'))
+      await waitFor(() => expect(bulkCopyExpenses).toHaveBeenCalledWith({ ids: [1, 2], group_id: 7 }))
+      expect(bulkUpdateExpenses).not.toHaveBeenCalled()
+      await waitFor(() => expect(onChanged).toHaveBeenCalled())
+      expect((await screen.findByRole('status')).textContent).toBe('Copied 2 expenses to Goa. 1 already there, skipped.')
+    })
+
+    it('cannot copy "back to personal" or before a trip is chosen', async () => {
+      open()
+      fireEvent.click(await screen.findByLabelText('Select Hotel'))
+      expect(screen.getByText('Copy 1').disabled).toBe(true)
+      fireEvent.change(screen.getByLabelText('Trip'), { target: { value: 'personal' } })
+      expect(screen.getByText('Copy 1').disabled).toBe(true)
+      expect(screen.getByText('Move 1').disabled).toBe(false)
+    })
+
+    it('shows the server’s message when the copy fails', async () => {
+      bulkCopyExpenses.mockRejectedValue(new Error('Viewers can’t add expenses'))
+      open()
+      fireEvent.click(await screen.findByLabelText('Select Hotel'))
+      fireEvent.change(screen.getByLabelText('Trip'), { target: { value: '7' } })
+      fireEvent.click(screen.getByText('Copy 1'))
+      expect((await screen.findByRole('alert')).textContent).toContain('Viewers')
+    })
+
+    it('shows which trip an expense is already in', async () => {
+      fetchExpenses.mockResolvedValue({ items: [{ ...ROWS[0], group_id: 7 }], total: 1 })
+      open({ groups: [{ id: 7, name: 'Goa', role: 'owner' }] })
+      expect(await screen.findByText('🧳 Goa')).toBeTruthy()
+    })
+
+    it('shows the server’s message when the move fails', async () => {
+      bulkUpdateExpenses.mockRejectedValue(new Error('Not allowed'))
+      open()
+      fireEvent.click(await screen.findByLabelText('Select Hotel'))
+      fireEvent.change(screen.getByLabelText('Trip'), { target: { value: '7' } })
+      fireEvent.click(screen.getByText('Move 1'))
+      expect((await screen.findByRole('alert')).textContent).toContain('Not allowed')
     })
   })
 })

@@ -16,6 +16,9 @@ export default function BulkEditPanel({
   hasBulkChanges,
   describeBulkChanges,
   applyBulk,
+  copyTarget,
+  setCopyTarget,
+  applyCopy,
 }) {
   return (
     <section className="panel bulk-bar" data-testid="bulk-bar">
@@ -112,6 +115,35 @@ export default function BulkEditPanel({
           {bulkBusy ? 'Saving…' : `Apply to ${selectedCount} expense${selectedCount === 1 ? '' : 's'}`}
         </button>
       </div>
+      {allSpaces.some((g) => g.role !== 'viewer') && (
+        <div className="bulk-copy">
+          <h3>Copy to a space</h3>
+          <p className="subtitle">
+            Makes a new copy of each selected expense in the space and leaves the original where it is. Both count in your
+            spending. To move one instead, use Space above.
+          </p>
+          <div className="edit-actions">
+            <select aria-label="Copy to space" value={copyTarget} onChange={(e) => setCopyTarget(e.target.value)}>
+              <option value="">Choose a space…</option>
+              {allSpaces
+                .filter((g) => g.role !== 'viewer')
+                .map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {SPACE_TYPE_ICONS[g.space_type] || '✈️'} {g.name}
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={bulkBusy || selectedCount === 0 || !copyTarget}
+              onClick={applyCopy}
+            >
+              {bulkBusy ? 'Copying…' : `Copy ${selectedCount} expense${selectedCount === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        </div>
+      )}
       {bulkNotice && (
         <p role="status" className="subtitle">
           {bulkNotice}

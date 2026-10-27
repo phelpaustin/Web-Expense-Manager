@@ -164,6 +164,7 @@ export default function App() {
                 saveEdit: expense.saveEdit,
                 onDelete: expense.handleDelete,
                 onBulkUpdate: expense.handleBulkUpdate,
+                onBulkCopy: expense.handleBulkCopy,
                 options: data.options,
                 trips: data.trips,
                 groups: data.groups,

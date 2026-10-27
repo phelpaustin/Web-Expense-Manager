@@ -360,6 +360,15 @@ export function updateExpense(id, changes) {
   })
 }
 
+// Copy many expenses into a space: { ids, group_id } or { filters, group_id }. Resolves to { copied, skipped }.
+export function bulkCopyExpenses(body) {
+  return request('/api/expenses/bulk-copy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 // Apply the same changes to many expenses: { ids, changes } or { filters, changes }.
 export function bulkUpdateExpenses(body) {
   return request('/api/expenses/bulk-update', {
