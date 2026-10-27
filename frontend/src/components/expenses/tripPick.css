@@ -1,0 +1,17 @@
+/* "Move or copy to a trip" panel on the Spending page. Kept in its own file so it never collides with index.css. */
+.trip-pick {
+  border-left: 4px solid var(--primary, #6366f1);
+}
+
+.trip-pick h2 {
+  margin-top: 0;
+}
+
+.trip-pick-what {
+  margin: 0.25rem 0 0.75rem;
+  font-weight: 600;
+}
+
+.trip-pick-notice {
+  color: var(--ok);
+}

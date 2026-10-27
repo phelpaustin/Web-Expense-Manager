@@ -8,6 +8,7 @@ import BulkEditPanel from '../components/expenses/BulkEditPanel.jsx'
 import ExpenseFilters from '../components/expenses/ExpenseFilters.jsx'
 import ExpensePager from '../components/expenses/ExpensePager.jsx'
 import ExpenseTable from '../components/expenses/ExpenseTable.jsx'
+import TripPickPanel from '../components/expenses/TripPickPanel.jsx'
 import OptionLists from '../components/expenses/OptionLists.jsx'
 import { EMPTY_BULK, KEEP } from '../components/expenses/shared.jsx'
 
@@ -565,6 +566,38 @@ export default function ExpensesPage({
     }
   }
 
+  // The ✈ buttons on a bill or an expense: move or copy just that into a trip.
+  const [tripPick, setTripPick] = useState(null)
+  const [tripNotice, setTripNotice] = useState('')
+
+  function pickTrip(ids, label) {
+    setTripNotice('')
+    setTripPick({ ids, label })
+  }
+
+  async function runTripAction(mode, target) {
+    const group_id = target === 'personal' ? null : parseInt(target, 10)
+    if (!tripPick || (mode === 'copy' && group_id === null)) return
+    const where = group_id === null ? 'personal expenses' : groupName(group_id) || 'that space'
+    setBulkBusy(true)
+    try {
+      if (mode === 'move') {
+        const res = await onBulkUpdate({ ids: tripPick.ids, changes: { group_id } })
+        setTripNotice(`Moved ${res.updated} expense${res.updated === 1 ? '' : 's'} to ${where}.`)
+      } else {
+        const res = await onBulkCopy({ ids: tripPick.ids, group_id })
+        const skipped = res.skipped ? ` ${res.skipped} already there, skipped.` : ''
+        setTripNotice(`Copied ${res.copied} expense${res.copied === 1 ? '' : 's'} to ${where}.${skipped}`)
+      }
+      await refetch()
+      setTripPick(null)
+    } catch (err) {
+      onError?.(err.message)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   const rowProps = {
       editingId,
       editForm,
@@ -585,6 +618,7 @@ export default function ExpensesPage({
       itemiseFromExpense,
       afterMutation,
       afterDelete,
+      onPickTrip: pickTrip,
     }
 
 
@@ -672,6 +706,22 @@ export default function ExpensesPage({
       />
       )}
 
+      {tripPick && (
+        <TripPickPanel
+          key={tripPick.ids.join(',')}
+          pick={tripPick}
+          allSpaces={allSpaces}
+          busy={bulkBusy}
+          onRun={runTripAction}
+          onCancel={() => setTripPick(null)}
+        />
+      )}
+      {tripNotice && !tripPick && (
+        <p role="status" className="subtitle trip-pick-notice">
+          {tripNotice}
+        </p>
+      )}
+
       {loadingExpenses && <p className="subtitle">Loading…</p>}
 
       {!loadingExpenses && total > 0 && (
@@ -690,6 +740,7 @@ export default function ExpensesPage({
           itemiseFromExpense={itemiseFromExpense}
           editItemsOfBill={editItemsOfBill}
           billGroups={billGroups}
+          onPickTrip={pickTrip}
         />
       )}
 

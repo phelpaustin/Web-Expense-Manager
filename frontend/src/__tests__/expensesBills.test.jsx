@@ -482,6 +482,94 @@ describe('date filter', () => {
   })
 })
 
+describe('the ✈ trip button on a bill or an expense', () => {
+  const GOA = { id: 7, name: 'Goa', space_type: 'trip', role: 'owner' }
+  const OSLO = { id: 8, name: 'Oslo', space_type: 'trip', role: 'viewer' }
+  const panel = () => screen.getByRole('region', { name: 'Move or copy to a trip' })
+  const choose = (value) => fireEvent.change(within(panel()).getByLabelText('Trip or space'), { target: { value } })
+
+  beforeEach(() => {
+    spaces = { trips: [GOA, OSLO], groups: [] }
+    client.bulkUpdateExpenses.mockResolvedValue({ updated: 1 })
+    client.bulkCopyExpenses.mockResolvedValue({ copied: 1, skipped: 0 })
+  })
+
+  it('moves one expense into the chosen trip', async () => {
+    renderAt(undefined)
+    await flatView()
+    fireEvent.click(await screen.findByLabelText('Move or copy Milk to a trip'))
+    expect(within(panel()).getByText(/Milk · 1 item$/)).toBeTruthy()
+    expect(within(panel()).getByRole('button', { name: 'Move' }).disabled).toBe(true) // no trip chosen yet
+    choose('7')
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Move' }))
+    await waitFor(() => expect(client.bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [1], changes: { group_id: 7 } }))
+    expect(await screen.findByText('Moved 1 expense to Goa.')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Move or copy to a trip' })).toBeNull() // closes when done
+    expect(loadAll).toHaveBeenCalled()
+  })
+
+  it('copies one expense and leaves the original', async () => {
+    renderAt(undefined)
+    await flatView()
+    fireEvent.click(await screen.findByLabelText('Move or copy Milk to a trip'))
+    choose('7')
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Copy' }))
+    await waitFor(() => expect(client.bulkCopyExpenses).toHaveBeenCalledWith({ ids: [1], group_id: 7 }))
+    expect(client.bulkUpdateExpenses).not.toHaveBeenCalled()
+    expect(await screen.findByText('Copied 1 expense to Goa.')).toBeTruthy()
+  })
+
+  it('can send an expense back to personal, but not copy it there', async () => {
+    renderAt(undefined)
+    await flatView()
+    fireEvent.click(await screen.findByLabelText('Move or copy Milk to a trip'))
+    choose('personal')
+    expect(within(panel()).getByRole('button', { name: 'Copy' }).disabled).toBe(true)
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Move' }))
+    await waitFor(() => expect(client.bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [1], changes: { group_id: null } }))
+    expect(await screen.findByText('Moved 1 expense to personal expenses.')).toBeTruthy()
+  })
+
+  it('moves a whole bill from its header', async () => {
+    renderAt(undefined)
+    const bill = await header('LIDL145MALMOBA')
+    fireEvent.click(within(bill).getByRole('button', { name: /Move or copy LIDL145MALMOBA to a trip/ }))
+    choose('7')
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Move' }))
+    await waitFor(() => expect(client.bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [2], changes: { group_id: 7 } }))
+  })
+
+  it('offers trips first, never one where you are only a viewer, and Cancel closes it', async () => {
+    renderAt(undefined)
+    await flatView()
+    fireEvent.click(await screen.findByLabelText('Move or copy Milk to a trip'))
+    const options = [...within(panel()).getByLabelText('Trip or space').querySelectorAll('option')].map((o) => o.textContent)
+    expect(options.some((o) => o.includes('Goa'))).toBe(true)
+    expect(options.some((o) => o.includes('Oslo'))).toBe(false)
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('region', { name: 'Move or copy to a trip' })).toBeNull()
+  })
+
+  it('shows the server’s message and keeps the panel open when the move fails', async () => {
+    client.bulkUpdateExpenses.mockRejectedValue(new Error('Not allowed'))
+    renderAt(undefined)
+    await flatView()
+    fireEvent.click(await screen.findByLabelText('Move or copy Milk to a trip'))
+    choose('7')
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Move' }))
+    await waitFor(() => expect(setError).toHaveBeenCalledWith('Not allowed'))
+    expect(panel()).toBeTruthy()
+  })
+
+  it('is not shown when there is no trip or space to put it in', async () => {
+    spaces = { trips: [], groups: [] }
+    renderAt(undefined)
+    await flatView()
+    await screen.findByText('Milk')
+    expect(screen.queryByLabelText('Move or copy Milk to a trip')).toBeNull()
+  })
+})
+
 describe('editing expenses together', () => {
   const start = async () => {
     renderAt(undefined)
