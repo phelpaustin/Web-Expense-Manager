@@ -276,6 +276,24 @@ def analytics_cheapest_shops(
     return result
 
 
+@router.get("/analytics/price-trends/rises")
+def analytics_price_rises(
+    recent_days: int = Query(default=price_tracker.DEFAULT_RECENT_DAYS, ge=1, le=366),
+    min_rise_pct: float = Query(default=price_tracker.DEFAULT_RISE_PCT, ge=0, le=1000),
+    top: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Items that went up in price at the shop you bought them at, in the last `recent_days` days.
+
+    The newest purchase of the same product at the same shop (item, unit, category, brand, shop)
+    is set against the average of the earlier ones; names follow the user's saved merges.
+    """
+    result = price_tracker.price_rises(_price_rows(db, user)[0], recent_days=recent_days, min_rise_pct=min_rise_pct, top=top)
+    result["currency"] = get_reporting_currency(db, user.id)
+    return result
+
+
 @router.get("/analytics/price-trends/shops")
 def analytics_price_shop_comparison(
     item: str,

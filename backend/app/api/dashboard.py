@@ -45,7 +45,7 @@ def dashboard(
     alerts = None
     if include_alerts:
         all_spaces = (scope is None or scope == "all") and not space_ids
-        alerts = _alerts_for_user(db, user.id, expenses if all_spaces else None, budgets)
+        alerts = _alerts_for_user(db, user.id, expenses if all_spaces else None, budgets, include_prices=True)
 
     category_statuses = budgets_logic.calculate_budget_status(expenses, budgets, None)
     period_status = budgets_logic.period_budget_status(

@@ -3,6 +3,7 @@ import { money } from '../format.js'
 import { fetchPriceTrends } from '../api/client.js'
 import PriceDetail from '../components/PriceDetail.jsx'
 import CheapestShopsPanel from '../components/CheapestShopsPanel.jsx'
+import PriceRisesPanel from '../components/PriceRisesPanel.jsx'
 import TidyNames from '../components/TidyNames.jsx'
 
 const PAGE_SIZE = 200
@@ -54,6 +55,8 @@ export default function PriceTrackerPage({ onError, embedded = false }) {
         numbers. Names that differ only by case or spacing count as the same item; different names ("Milk" and "Arla
         Milk") stay separate. Open an item to compare it by brand and to choose which shops to include.
       </p>
+
+      <PriceRisesPanel refreshKey={trends} />
 
       <CheapestShopsPanel refreshKey={trends} />
 

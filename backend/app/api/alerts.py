@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.aliases import load_alias_maps
 from app.api.budgets import fetch_budgets
 from app.api.options import get_or_create_options
 from app.api.expenses import fetch_expenses_in_reporting_currency
@@ -20,6 +21,7 @@ from app.db import models
 from app.logic import alerts as alerts_logic
 from app.logic import budgets as budgets_logic
 from app.logic import budget_risk as budget_risk_logic
+from app.logic import names, price_tracker
 from app.logic.budgets import TOTAL_BUDGET_KEY
 
 router = APIRouter()
@@ -27,10 +29,18 @@ log = logging.getLogger("alerts")
 
 
 def _alerts_for_user(
-    db: Session, user_id: int, expenses: list[dict] | None = None, budgets: dict | None = None
+    db: Session,
+    user_id: int,
+    expenses: list[dict] | None = None,
+    budgets: dict | None = None,
+    include_prices: bool = False,
 ) -> list[dict]:
-    """Current budget alerts. `expenses` (all spaces, converted) and `budgets` may be passed in
-    when the caller already has them, to avoid loading and converting everything again."""
+    """Current alerts: budget alerts, and with `include_prices` also items that went up in price.
+
+    `expenses` (all spaces, converted) and `budgets` may be passed in when the caller already
+    has them, to avoid loading and converting everything again. The daily digest email stays
+    budget-only (it is called without `include_prices`); the bell shows both.
+    """
     if expenses is None:
         expenses = fetch_expenses_in_reporting_currency(db, user_id)
     if budgets is None:
@@ -42,7 +52,14 @@ def _alerts_for_user(
         expenses, budgets.get(TOTAL_BUDGET_KEY), opts.budget_period, opts.budget_rollover
     )
     risk = budget_risk_logic.budget_risk(expenses, category_statuses, period_status)
-    return alerts_logic.generate_alerts(category_statuses, period_status, risk)
+    alerts = alerts_logic.generate_alerts(category_statuses, period_status, risk)
+    if include_prices:
+        item_aliases, shop_aliases = load_alias_maps(db, user_id)
+        # Only recent purchases matter, so only those are renamed by the user's merges.
+        priced = names.canonicalise(price_tracker.rows_for_price_rises(expenses), item_aliases, shop_aliases)
+        alerts += alerts_logic.price_rise_alerts(price_tracker.price_rises(priced))
+        alerts.sort(key=lambda a: alerts_logic.SEVERITY_RANK[a["severity"]], reverse=True)
+    return alerts
 
 
 @router.get("/alerts")
@@ -50,7 +67,7 @@ def get_alerts(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    return _alerts_for_user(db, user.id)
+    return _alerts_for_user(db, user.id, include_prices=True)
 
 
 def unsubscribe_link(user_id: int) -> str:

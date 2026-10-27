@@ -104,6 +104,40 @@ def _category_risk_alert(item: dict) -> dict | None:
     }
 
 
+PRICE_ALERTS_SHOWN = 3
+PRICE_WARNING_PCT = 25.0
+
+
+def price_rise_alerts(rises: dict, shown: int = PRICE_ALERTS_SHOWN) -> list[dict]:
+    """Bell alerts for items that went up in price (see price_tracker.price_rises).
+
+    The biggest few get an alert each, "warning" from 25% up and "caution" below; the rest are
+    rolled into one line so a shopping trip of price rises cannot bury the budget alerts.
+    """
+    items = rises.get("items", [])
+    out = []
+    for i in items[:shown]:
+        brand = f" ({i['brand']})" if i.get("brand") else ""
+        out.append({
+            "id": "price:" + "|".join([i["item"], i.get("brand") or "", i["shop"], i["unit"], i["category"]]).lower(),
+            "severity": "warning" if i["rise_pct"] >= PRICE_WARNING_PCT else "caution",
+            "category": "Prices",
+            "message": (
+                f"{i['item']}{brand} at {i['shop']} now costs {i['latest_price']:.2f} per {i['unit']}, "
+                f"{i['rise_pct']:.0f}% more than your usual {i['usual_price']:.2f}"
+            ),
+        })
+    more = rises.get("total_found", len(items)) - len(out)
+    if more > 0:
+        out.append({
+            "id": "price:more",
+            "severity": "info",
+            "category": "Prices",
+            "message": f"{more} more {'item has' if more == 1 else 'items have'} gone up in price. See Insights, Prices.",
+        })
+    return out
+
+
 def generate_alerts(category_statuses: list[dict], period_status: dict | None, risk: dict | None = None) -> list[dict]:
     """Budget alerts. `risk` (see budget_risk) adds "likely to be exceeded" alerts and replaces the
     straight-line pace warning where there is enough history; without it the alerts are as before."""

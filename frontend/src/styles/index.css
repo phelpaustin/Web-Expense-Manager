@@ -3081,3 +3081,8 @@ label.link-btn input[type='file'] {
   font-size: 0.85rem;
   color: var(--muted);
 }
+
+/* ── Price rises (Insights, Prices) ───────────────────────────────── */
+.price-rise-big {
+  font-weight: 700;
+}

@@ -16,7 +16,7 @@ also apply the user's aliases do so first, with names.canonicalise().
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from statistics import mean as _mean_any, pstdev as _pstdev_any
 
@@ -269,6 +269,106 @@ def cheapest_shops(
         "already_cheapest": already,
         "items": listed[:top],
         "total_found": len(listed),
+    }
+
+
+DEFAULT_RISE_PCT = 10.0
+DEFAULT_RECENT_DAYS = 30
+DEFAULT_BASELINE_MONTHS = 12
+MIN_EARLIER_PURCHASES = 2
+
+
+def rows_for_price_rises(expenses: list[dict], today: date | None = None, baseline_months: int = DEFAULT_BASELINE_MONTHS) -> list[dict]:
+    """The expenses that can matter to `price_rises`: item purchases within the baseline window.
+
+    Used before the (costly) renaming by the user's merges, so the bell does not rename years of
+    history it will never look at. Everything is kept when `baseline_months` is 0.
+    """
+    today = today or date.today()
+    start = _months_ago_start(today, baseline_months) if baseline_months > 0 else None
+    out = []
+    for e in expenses:
+        if e.get("bill_total_only"):
+            continue
+        day = _as_day(e.get("date"))
+        if day is None or day > today or (start is not None and day < start):
+            continue
+        out.append(e)
+    return out
+
+
+def price_rises(
+    expenses: list[dict],
+    today: date | None = None,
+    recent_days: int = DEFAULT_RECENT_DAYS,
+    min_rise_pct: float = DEFAULT_RISE_PCT,
+    baseline_months: int = DEFAULT_BASELINE_MONTHS,
+    min_earlier: int = MIN_EARLIER_PURCHASES,
+    top: int = 10,
+) -> dict:
+    """Items whose latest price, at the shop you bought it at, is well above what you usually paid.
+
+    The same product at the same shop is followed (item, unit, category, brand and shop), so
+    switching shop or brand is never mistaken for a price rise. The newest purchase has to be from the
+    last `recent_days` days, and is set against the average of the earlier purchases within
+    `baseline_months` months (at least `min_earlier` of them, so one odd price cannot be "usual").
+    A rise is reported from `min_rise_pct` percent. Prices are per base unit.
+    """
+    today = today or date.today()
+    window_start = today - timedelta(days=recent_days)
+    baseline_start = _months_ago_start(today, baseline_months) if baseline_months > 0 else None
+
+    # Purchases from before the baseline can be neither the newest nor an "earlier" one, so they are
+    # skipped at once: with years of history that is most rows.
+    groups: dict[tuple, list[tuple]] = defaultdict(list)
+    for e in expenses:
+        day = _as_day(e.get("date"))
+        if day is None or day > today or (baseline_start is not None and day < baseline_start):
+            continue
+        if not _is_item_purchase(e) or not str(e.get("description") or "").strip():
+            continue
+        key = (name_key(e["description"]), _unit(e), _category(e), name_key(e.get("brand")), name_key(_shop_label(e)))
+        groups[key].append((day, e.get("id") or 0, e))
+
+    found, checked = [], 0
+    for entries in groups.values():
+        entries.sort(key=lambda t: (t[0], t[1]))
+        if entries[-1][0] < window_start:
+            continue
+        rows = [{**t[2], "_day": t[0]} for t in entries]
+        latest = rows[-1]
+        earlier = rows[:-1]
+        if len(earlier) < min_earlier:
+            continue
+        checked += 1
+        usual = mean([_price(r) for r in earlier])
+        now = _price(latest)
+        if usual <= 0 or now <= usual:
+            continue
+        pct = round(float((now - usual) / usual * 100), 1)
+        if pct < min_rise_pct:
+            continue
+        found.append({
+            "item": _most_used_spelling([" ".join(str(r["description"]).split()) for r in rows]),
+            "brand": _most_used_spelling([clean_name(r.get("brand")) for r in rows]),
+            "shop": _most_used_spelling([_shop_label(r) for r in rows]),
+            "unit": _unit(latest),
+            "category": _category(latest),
+            "latest_price": quantize_money(now),
+            "latest_date": _iso(latest["_day"]),
+            "usual_price": quantize_money(usual),
+            "rise_per_unit": quantize_money(now - usual),
+            "rise_pct": pct,
+            "earlier_purchases": len(earlier),
+        })
+
+    found.sort(key=lambda i: (-i["rise_pct"], i["item"].casefold(), i["shop"].casefold()))
+    return {
+        "recent_days": recent_days,
+        "min_rise_pct": min_rise_pct,
+        "checked": checked,
+        "items": found[:top],
+        "total_found": len(found),
     }
 
 
