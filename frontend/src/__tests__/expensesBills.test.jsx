@@ -434,6 +434,61 @@ describe('editing an expense in the list', () => {
   })
 })
 
+describe('editing a single-expense bill straight from its header', () => {
+  it('edits a total-only expense (rent, an Airbnb stay…) without itemising it', async () => {
+    client.updateExpense.mockResolvedValue({})
+    renderAt(undefined)
+    const bill = await header('LIDL145MALMOBA')
+    expect(document.querySelector('tr.editing')).toBeNull()
+    fireEvent.click(within(bill).getByRole('button', { name: 'Edit LIDL145MALMOBA' }))
+    const panel = document.querySelector('tr.editing') // the bill opened and the editor is in it
+    expect(panel).toBeTruthy()
+    expect(within(panel).getByLabelText('Category').value).toBe('Bills')
+    fireEvent.change(within(panel).getByLabelText('Category'), { target: { value: 'Housing' } })
+    fireEvent.change(within(panel).getByLabelText('Amount'), { target: { value: '36.5' } })
+    fireEvent.click(within(panel).getByTitle('Save'))
+    await waitFor(() => expect(client.updateExpense).toHaveBeenCalledTimes(1))
+    const [id, body] = client.updateExpense.mock.calls[0]
+    expect(id).toBe(2)
+    expect(body).toMatchObject({ category: 'Housing', amount: 36.5, group_id: null, date: '2026-07-21' })
+    await waitFor(() => expect(loadAll).toHaveBeenCalled())
+  })
+
+  it('can put it in a trip while editing', async () => {
+    spaces = { trips: [{ id: 7, name: 'Goa', space_type: 'trip', role: 'owner' }], groups: [] }
+    client.updateExpense.mockResolvedValue({})
+    renderAt(undefined)
+    const bill = await header('LIDL145MALMOBA')
+    fireEvent.click(within(bill).getByRole('button', { name: 'Edit LIDL145MALMOBA' }))
+    const panel = document.querySelector('tr.editing')
+    fireEvent.change(within(panel).getByLabelText('Space'), { target: { value: '7' } })
+    fireEvent.click(within(panel).getByTitle('Save'))
+    await waitFor(() => expect(client.updateExpense).toHaveBeenCalled())
+    expect(client.updateExpense.mock.calls[0][1]).toMatchObject({ group_id: 7 })
+  })
+
+  it('is not offered on a bill with several items (open the bill and edit an item)', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({
+      items: [
+        { ...NORMAL, id: 1, shop: 'ICA', description: 'Milk' },
+        { ...NORMAL, id: 3, shop: 'ICA', description: 'Bread' },
+      ],
+      total: 2,
+    }))
+    renderAt(undefined)
+    const bill = await header('ICA')
+    expect(within(bill).queryByRole('button', { name: /^Edit / })).toBeNull()
+  })
+
+  it('is not offered when you may not edit the expense (viewer in that space)', async () => {
+    spaces = { trips: [], groups: [{ id: 3, name: 'Home', space_type: 'household', role: 'viewer' }] }
+    client.fetchExpenses.mockImplementation(async () => ({ items: [{ ...TOTAL_ONLY, group_id: 3 }], total: 1 }))
+    renderAt(undefined)
+    const bill = await header('LIDL145MALMOBA')
+    expect(within(bill).queryByRole('button', { name: /^Edit / })).toBeNull()
+  })
+})
+
 const lastFetch = () => client.fetchExpenses.mock.calls.at(-1)[0]
 
 describe('date filter', () => {

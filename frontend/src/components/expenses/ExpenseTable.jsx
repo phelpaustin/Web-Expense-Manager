@@ -82,6 +82,22 @@ export default function ExpenseTable({
                         group.currency,
                       )}
                       {totalOnlyItems.length > 0 && <TotalOnlyBadge />}
+                      {single && canEditExpense(single) && (
+                        <button
+                          type="button"
+                          className="mini-btn"
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            // The editor opens inside the bill's rows, so open the bill first.
+                            if (!isExpanded) toggleBillGroup(group.key)
+                            rowProps.startEdit(single)
+                          }}
+                          title="Edit the category, space and every other detail"
+                          aria-label={`Edit ${name}`}
+                        >
+                          ✎ Edit
+                        </button>
+                      )}
                       {itemisedBillId && group.items.every(canEditExpense) && (
                         <button
                           type="button"
