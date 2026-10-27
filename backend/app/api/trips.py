@@ -2,7 +2,7 @@ import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, is_group_member, require_role_at_least
@@ -37,6 +37,12 @@ class TripCreate(BaseModel):
     @classmethod
     def _valid_currency(cls, value: str | None) -> str | None:
         return normalize_convertible_currency(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def _ends_after_it_starts(self):
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("A trip can't end before it starts")
+        return self
 
 
 class TripUpdate(PartialUpdate):
@@ -196,6 +202,12 @@ def update_trip(
     trip = _trip_or_404(db, trip_id)
     member = _require_trip_manage(db, trip_id, user.id)
     data = payload.model_dump(exclude_unset=True)
+    if "start_date" in data or "end_date" in data:
+        # Compared with what is stored when only one end is sent; left alone if neither date changes.
+        start = data["start_date"] if "start_date" in data else trip.start_date
+        end = data["end_date"] if "end_date" in data else trip.end_date
+        if start and end and end < start:
+            raise HTTPException(status_code=422, detail="A trip can't end before it starts")
     if "parent_group_id" in data:
         _validate_parent(db, user.id, data["parent_group_id"])
     for field, value in data.items():

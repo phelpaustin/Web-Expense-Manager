@@ -3,6 +3,7 @@ import { money } from '../format.js'
 import { dayList } from '../tripDays.js'
 import DaysCell from '../components/trips/DaysCell.jsx'
 import TripDayPlan from '../components/trips/TripDayPlan.jsx'
+import TripEditForm from '../components/trips/TripEditForm.jsx'
 import {
   fetchTripSummary,
   fetchTripExpenses,
@@ -13,6 +14,7 @@ import {
   cancelGroupInvite,
   changeMemberRole,
   setMyMapping,
+  updateTrip,
 } from '../api/client.js'
 
 const INVITE_ROLES = [
@@ -44,6 +46,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
   const [localName, setLocalName] = useState('')
   const [localParent, setLocalParent] = useState('')
   const [view, setView] = useState('list') // 'list' or 'days'
+  const [editingTripId, setEditingTripId] = useState(null)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -90,6 +93,14 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
     setExpandedId(trip.id)
     setView('list')
     loadDetail(trip)
+  }
+
+  // Throws on failure so the form can show the server's message and stay open.
+  async function saveTripDetails(trip, changes) {
+    await updateTrip(trip.id, changes)
+    await onRefresh()
+    setEditingTripId(null)
+    if (expandedId === trip.id) await loadDetail(trip) // budget, currency and dates feed the open card
   }
 
   function handleStatusChange(trip, status) {
@@ -256,6 +267,16 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                   ) : (
                     <span className="subtitle">{t.status}</span>
                   )}
+                  {(t.role === 'owner' || t.role === 'admin') && (
+                    <button
+                      className="icon-btn"
+                      onClick={() => setEditingTripId(editingTripId === t.id ? null : t.id)}
+                      title="Edit the trip’s name, dates and budget"
+                      aria-label={`Edit trip ${t.name}`}
+                    >
+                      ✎
+                    </button>
+                  )}
                   {t.role === 'owner' && (
                     <button className="delete-btn" onClick={() => onDeleteTrip(t.id)} title="Delete trip">
                       ✕
@@ -263,6 +284,10 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                   )}
                 </div>
               </div>
+
+              {editingTripId === t.id && (
+                <TripEditForm trip={t} onSave={(changes) => saveTripDetails(t, changes)} onCancel={() => setEditingTripId(null)} />
+              )}
 
               {expandedId === t.id && (
                 <div className="trip-detail">

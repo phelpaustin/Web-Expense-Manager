@@ -69,3 +69,19 @@
   display: block;
   margin: 0.75rem 0 0;
 }
+
+/* Editing a trip's details inside its card. */
+.trip-edit-form {
+  margin: 0.75rem 0;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.trip-edit-form .subtitle {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.trip-edit-error {
+  color: var(--danger);
+  margin: 0.25rem 0 0.5rem;
+}
