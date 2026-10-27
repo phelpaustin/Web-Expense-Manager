@@ -293,6 +293,13 @@ export function fetchUnusual({ scope, spaceIds } = {}) {
   return request(`/api/analytics/unusual${scopeQuery(scope, spaceIds)}`)
 }
 
+// Average spending per calendar day for each weekday and each part of the month, over `months` months.
+export function fetchPatterns({ months, scope, spaceIds } = {}) {
+  const query = scopeQuery(scope, spaceIds)
+  const joined = [query.replace(/^\?/, ''), months != null ? `months=${encodeURIComponent(months)}` : ''].filter(Boolean).join('&')
+  return request(`/api/analytics/patterns${joined ? `?${joined}` : ''}`)
+}
+
 // Forecast of this month's baseline spending, with a range and a backtest.
 export function fetchForecast({ scope, spaceIds } = {}) {
   return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)

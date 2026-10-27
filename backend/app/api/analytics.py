@@ -14,6 +14,7 @@ from app.logic import category_change as category_change_logic
 from app.logic import forecast as forecast_logic
 from app.logic import movers as movers_logic
 from app.logic import recurring_costs as recurring_costs_logic
+from app.logic import patterns as patterns_logic
 from app.logic import unusual as unusual_logic
 from app.logic import period_compare as period_compare_logic
 from app.logic import spending_mix as spending_mix_logic
@@ -241,6 +242,25 @@ def analytics_unusual(
     return {
         "unusual": unusual_logic.unusual_expenses(expenses, recent_days=recent_days, top=top),
         "duplicates": unusual_logic.possible_duplicates(expenses, recent_days=duplicate_days, top=top, receipt_bills=receipt_bills),
+        "currency": get_reporting_currency(db, user.id),
+        "unconverted_count": unconverted,
+    }
+
+
+@router.get("/analytics/patterns")
+def analytics_patterns(
+    months: int = Query(default=patterns_logic.DEFAULT_MONTHS, ge=1, le=36),
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """When you spend: average per calendar day for each weekday and for each part of the month
+    (days 1-7, 8-14, 15-21, 22-31) over the last `months` months. Payments posted by a recurring
+    template are left out. Amounts are in the reporting currency."""
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
+    return {
+        **patterns_logic.spending_patterns(expenses, months=months),
         "currency": get_reporting_currency(db, user.id),
         "unconverted_count": unconverted,
     }

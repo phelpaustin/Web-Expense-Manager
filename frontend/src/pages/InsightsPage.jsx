@@ -6,6 +6,7 @@ import PeriodComparePanel from '../components/PeriodComparePanel.jsx'
 import MoversPanel from '../components/MoversPanel.jsx'
 import RecurringCostsPanel from '../components/RecurringCostsPanel.jsx'
 import UnusualPanel from '../components/UnusualPanel.jsx'
+import PatternsPanel from '../components/PatternsPanel.jsx'
 import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
 import ForecastPanel from '../components/ForecastPanel.jsx'
 import { SpendingTrendChart, CashFlowChart } from '../components/Charts.jsx'
@@ -96,6 +97,13 @@ export default function InsightsPage({
           <MoversPanel
             key={`movers|${scopeKey}`}
             month={month}
+            scope={dashboardScope}
+            spaceIds={dashboardSpaceIds}
+            refreshKey={trends}
+          />
+
+          <PatternsPanel
+            key={`patterns|${scopeKey}`}
             scope={dashboardScope}
             spaceIds={dashboardSpaceIds}
             refreshKey={trends}
