@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { money } from '../format.js'
+import { dayList } from '../tripDays.js'
+import DaysCell from '../components/trips/DaysCell.jsx'
+import TripDayPlan from '../components/trips/TripDayPlan.jsx'
 import {
   fetchTripSummary,
   fetchTripExpenses,
@@ -40,6 +43,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
   const [inviteRole, setInviteRole] = useState('editor')
   const [localName, setLocalName] = useState('')
   const [localParent, setLocalParent] = useState('')
+  const [view, setView] = useState('list') // 'list' or 'days'
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -84,6 +88,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
       return
     }
     setExpandedId(trip.id)
+    setView('list')
     loadDetail(trip)
   }
 
@@ -223,7 +228,9 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
         <p className="subtitle">No trips yet — add one above to start tagging expenses to it.</p>
       ) : (
         <div className="trip-list">
-          {trips.map((t) => (
+          {trips.map((t) => {
+            const tripDays = dayList(t.start_date, t.end_date)
+            return (
             <section key={t.id} className="panel trip-card">
               <div className="trip-card-header" onClick={() => toggleExpand(t)}>
                 <div>
@@ -291,6 +298,23 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                         </ul>
                       )}
                       {detail.expenses.length > 0 && (
+                        <div className="trip-view-toggle" role="group" aria-label="Show the trip as">
+                          <button type="button" className={`icon-btn${view === 'list' ? ' active' : ''}`} aria-pressed={view === 'list'} onClick={() => setView('list')}>
+                            List
+                          </button>
+                          <button type="button" className={`icon-btn${view === 'days' ? ' active' : ''}`} aria-pressed={view === 'days'} onClick={() => setView('days')}>
+                            By day
+                          </button>
+                        </div>
+                      )}
+                      {detail.expenses.length > 0 && view === 'days' && (
+                        tripDays.length > 0 ? (
+                          <TripDayPlan expenses={detail.expenses} days={tripDays} currency={detail.summary.currency} />
+                        ) : (
+                          <p className="subtitle">Give the trip a start and end date to see it day by day.</p>
+                        )
+                      )}
+                      {detail.expenses.length > 0 && view === 'list' && (
                         <table className="table">
                           <thead>
                             <tr>
@@ -298,6 +322,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                               <th>Category</th>
                               <th>Shop</th>
                               <th>Item name</th>
+                              <th>Days</th>
                               <th className="right">Amount</th>
                             </tr>
                           </thead>
@@ -308,6 +333,15 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                                 <td>{e.category}</td>
                                 <td>{e.shop}</td>
                                 <td>{e.description}</td>
+                                <td>
+                                  <DaysCell
+                                    expense={e}
+                                    days={tripDays}
+                                    canEdit={t.role !== 'viewer'}
+                                    onSaved={() => loadDetail(t)}
+                                    onError={onError}
+                                  />
+                                </td>
                                 <td className="right">{money(e.amount, e.currency)}</td>
                               </tr>
                             ))}
@@ -469,7 +503,8 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                 </div>
               )}
             </section>
-          ))}
+            )
+          })}
         </div>
       )}
     </>

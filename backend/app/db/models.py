@@ -47,6 +47,10 @@ class Expense(Base):
     # Deliberately not a foreign key: deleting or cancelling a template must not turn the
     # payments it already made back into everyday spending.
     recurring_template_id = Column(Integer, nullable=True, index=True)
+    # Trip expenses only: the stretch of the trip this expense covers (a 3-night stay is paid on
+    # one day but spans three). Both set or both null; null means "the day it was paid".
+    covers_from = Column(Date, nullable=True)
+    covers_to = Column(Date, nullable=True)
 
 
 class UserOptions(Base):

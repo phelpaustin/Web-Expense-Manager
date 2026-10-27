@@ -245,7 +245,7 @@ def trip_expenses(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    _trip_or_404(db, trip_id)
+    trip = _trip_or_404(db, trip_id)
     _member_or_403(db, trip_id, user.id)
     rows = (
         db.query(models.Expense)
@@ -253,6 +253,16 @@ def trip_expenses(
         .order_by(models.Expense.date.desc())
         .all()
     )
+    # Each amount also in the trip's currency, so the day-by-day view can add them up. An expense
+    # with no exchange rate gets null instead of failing the list.
+    trip_currency = trip.currency or "SEK"
+    try:
+        converted, _bad = _convert_trip_expenses(
+            [{"id": r.id, "date": r.date, "amount": r.amount, "currency": r.currency} for r in rows], trip_currency
+        )
+        in_trip_currency = {c["id"]: c["amount"] for c in converted}
+    except HTTPException:
+        in_trip_currency = {}
     return [
         {
             "id": r.id,
@@ -262,6 +272,10 @@ def trip_expenses(
             "shop": r.shop,
             "amount": r.amount,
             "currency": r.currency,
+            "amount_in_trip_currency": in_trip_currency.get(r.id),
+            "trip_currency": trip_currency,
+            "covers_from": r.covers_from.isoformat() if r.covers_from else None,
+            "covers_to": r.covers_to.isoformat() if r.covers_to else None,
         }
         for r in rows
     ]

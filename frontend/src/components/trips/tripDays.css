@@ -1,0 +1,44 @@
+/* Day-by-day view of a trip. Own file so it never collides with index.css. */
+.trip-view-toggle {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.trip-view-toggle .active {
+  background: var(--primary, #6366f1);
+  color: #fff;
+}
+
+.trip-day {
+  border-top: 1px solid var(--border);
+  padding: 0.6rem 0;
+}
+
+.trip-day-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.trip-day ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.trip-day .muted,
+.trip-days-cell .muted {
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.trip-days-cell {
+  white-space: nowrap;
+}
+
+.trip-days-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}

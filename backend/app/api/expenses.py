@@ -51,6 +51,9 @@ _IMPORT_COLUMNS = {
 }
 
 
+MAX_COVER_DAYS = 366
+
+
 class ExpenseOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -72,6 +75,9 @@ class ExpenseOut(BaseModel):
     bill_total_only: bool = False
     # Set when a recurring template posted it (a committed payment, not an everyday purchase).
     recurring_template_id: int | None = None
+    # Trip expenses: the first and last trip day this expense covers (null = the day it was paid).
+    covers_from: datetime.date | None = None
+    covers_to: datetime.date | None = None
 
 
 class ExpenseCreate(BaseModel):
@@ -110,11 +116,30 @@ class ExpenseUpdate(PartialUpdate):
     brand: OptionalName | None = None
     currency: str | None = None
     group_id: int | None = None
+    # Both together: the stretch of the trip this expense covers, or both null to clear it.
+    covers_from: datetime.date | None = None
+    covers_to: datetime.date | None = None
 
     @field_validator("currency")
     @classmethod
     def _valid_currency(cls, value: str | None) -> str | None:
         return normalize_convertible_currency(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def _covers_together(self):
+        given = {"covers_from", "covers_to"} & self.model_fields_set
+        if not given:
+            return self
+        if given != {"covers_from", "covers_to"}:
+            raise ValueError("send covers_from and covers_to together")
+        if (self.covers_from is None) != (self.covers_to is None):
+            raise ValueError("covers_from and covers_to must both be dates, or both null")
+        if self.covers_from is not None:
+            if self.covers_to < self.covers_from:
+                raise ValueError("covers_to cannot be before covers_from")
+            if (self.covers_to - self.covers_from).days >= MAX_COVER_DAYS:
+                raise ValueError(f"an expense can cover at most {MAX_COVER_DAYS} days")
+        return self
 
 
 class ExpenseBulkChanges(PartialUpdate):
@@ -577,6 +602,8 @@ def update_expenses_bulk(
     for expense in expenses:
         if expense.source_bill_id is not None and expense.user_id is not None:
             bills_by_owner.setdefault(expense.user_id, set()).add(expense.source_bill_id)
+        if "group_id" in data and data["group_id"] != expense.group_id:
+            expense.covers_from = expense.covers_to = None  # the days belonged to the old trip
         for field, value in data.items():
             setattr(expense, field, value)
     db.commit()
@@ -655,6 +682,13 @@ def update_expense(
     data = payload.model_dump(exclude_unset=True)
     if "group_id" in data:
         _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
+        if data["group_id"] != expense.group_id and "covers_from" not in data:
+            data["covers_from"] = data["covers_to"] = None  # the days belonged to the old trip
+    if data.get("covers_from") is not None:
+        target = data["group_id"] if "group_id" in data else expense.group_id
+        space = db.get(models.Group, target) if target is not None else None
+        if space is None or space.space_type != "trip":
+            raise HTTPException(status_code=422, detail="Days can only be set on an expense that is in a trip")
     for field, value in data.items():
         setattr(expense, field, value)
     expense.price_per_unit = _price_per_unit(expense.amount, expense.quantity)
