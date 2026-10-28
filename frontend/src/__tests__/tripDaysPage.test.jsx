@@ -142,6 +142,15 @@ describe('trip days on the Trips page', () => {
     expect(within(outside).getByText(/AIRBNB Stay/)).toBeTruthy()
   })
 
+  it('keeps the explanation in an info tip instead of showing it all the time', async () => {
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'By day' }))
+    const outside = screen.getByLabelText('Outside the trip dates')
+    expect(within(outside).queryByText(/These fall outside the trip’s dates/)).toBeNull()
+    fireEvent.click(within(outside).getByRole('button', { name: 'Why are these not on a trip day?' }))
+    expect(within(outside).getByRole('tooltip').textContent).toMatch(/Days column of the list/)
+  })
+
   it('asks for trip dates when the trip has none', async () => {
     await open({ ...TRIP, start_date: null, end_date: null })
     expect(within(rowOf('Dinner')).queryByLabelText('Set days for Dinner')).toBeNull() // nothing to choose from

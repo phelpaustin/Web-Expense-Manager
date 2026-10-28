@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { money } from '../../format.js'
+import InfoTip from '../InfoTip.jsx'
 import { dayLabel, planByDay, shortDate } from '../../tripDays.js'
 import './tripDays.css'
 
@@ -58,13 +59,15 @@ export default function TripDayPlan({ expenses, days, currency }) {
       {plan.outside.items.length > 0 && (
         <section className="trip-day" aria-label="Outside the trip dates">
           <div className="trip-day-head">
-            <span>Not on a trip day</span>
+            <span>
+              Not on a trip day
+              <InfoTip label="Why are these not on a trip day?">
+                These fall outside the trip’s dates (a stay paid before you left, say). Use ✎ in the Days column of the list
+                to put them on the day or days they cover.
+              </InfoTip>
+            </span>
             <span>{money(plan.outside.cents / 100, currency)}</span>
           </div>
-          <p className="subtitle">
-            These fall outside the trip’s dates (a stay paid before you left, say). Use ✎ in the Days column of the list to
-            put them on the day or days they cover.
-          </p>
           <ul>
             {plan.outside.items.map((item) => (
               <li key={`${item.expense.id}-${item.date}`}>
