@@ -19,6 +19,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx'))
 const SpendingPage = lazy(() => import('./pages/SpendingPage.jsx'))
 const IncomePage = lazy(() => import('./pages/IncomePage.jsx'))
 const RecurringPage = lazy(() => import('./pages/RecurringPage.jsx'))
+const SavingsPage = lazy(() => import('./pages/SavingsPage.jsx'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage.jsx'))
 const TripsPage = lazy(() => import('./pages/TripsPage.jsx'))
 const InsightsPage = lazy(() => import('./pages/InsightsPage.jsx'))
@@ -210,6 +211,10 @@ export default function App() {
               baseCurrency={data.options.base_currency}
             />
           }
+        />
+        <Route
+          path="savings"
+          element={<SavingsPage currencies={data.options.currencies} baseCurrency={data.options.base_currency} />}
         />
         <Route
           path="settings"

@@ -3207,3 +3207,126 @@ label.link-btn input[type='file'] {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+/* Savings goals */
+.savings-goal h2 {
+  margin: 0;
+}
+
+.savings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.savings-note {
+  margin-top: 0;
+}
+
+.savings-status {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.savings-status.savings-good {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
+.savings-status.savings-bad {
+  background: rgba(249, 115, 22, 0.15);
+  color: #c2410c;
+}
+
+.savings-track {
+  height: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+}
+
+.savings-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--grad);
+}
+
+.savings-fill.savings-fill-good {
+  background: var(--ok);
+}
+
+.savings-fill.savings-fill-bad {
+  background: var(--warning);
+}
+
+.savings-figures {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.savings-pace {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.savings-date {
+  margin: 0 0 0.75rem;
+}
+
+.savings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.savings-form {
+  margin-top: 0.9rem;
+}
+
+.savings-form input[aria-label='Goal name'] {
+  min-width: min(16rem, 100%);
+}
+
+.savings-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.savings-error {
+  color: var(--danger);
+  margin: 0.75rem 0 0;
+}
+
+.savings-history ul {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+}
+
+.savings-history li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.savings-delete:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.07);
+}

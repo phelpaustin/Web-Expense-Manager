@@ -13,6 +13,7 @@ const NAV = [
       { to: '/spending', label: 'Spending', icon: '🧾' },
       { to: '/income', label: 'Income', icon: '💵' },
       { to: '/recurring', label: 'Recurring', icon: '🔁' },
+      { to: '/savings', label: 'Savings', icon: '🎯' },
       { to: '/import', label: 'Import', icon: '📥' },
     ],
   },

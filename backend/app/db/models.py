@@ -270,6 +270,35 @@ class ImportProfile(Base):
     mapping = Column(JSON, nullable=False)
 
 
+class SavingsGoal(Base):
+    """Something the user is saving towards: a target amount, optionally by a date.
+
+    How much is saved is the sum of its contributions (deposits and withdrawals), all in the goal's
+    own currency, so a goal never needs an exchange rate.
+    """
+    __tablename__ = "savings_goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    target_amount = Column(Numeric(12, 2), nullable=False)
+    currency = Column(String, nullable=False)
+    target_date = Column(Date, nullable=True)
+    note = Column(String, nullable=False, default="")
+
+
+class SavingsContribution(Base):
+    """Money put towards a goal (positive) or taken back out of it (negative)."""
+    __tablename__ = "savings_contributions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    goal_id = Column(Integer, ForeignKey("savings_goals.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
+    note = Column(String, nullable=False, default="")
+
+
 class NameAlias(Base):
     """A user's own "treat these as the same" rule for item or shop names.
 

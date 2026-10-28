@@ -44,13 +44,14 @@ describe('sidebar', () => {
     const titles = [...nav.querySelectorAll('.nav-group-title')].map((n) => n.textContent)
     expect(titles).toEqual(['Money'])
     const labels = within(nav).getAllByRole('link').map((l) => l.textContent.replace(l.querySelector('.nav-icon').textContent, '').trim())
-    expect(labels).toEqual(['Dashboard', 'Spending', 'Income', 'Recurring', 'Import', 'Insights', 'Trips', 'Settings'])
+    expect(labels).toEqual(['Dashboard', 'Spending', 'Income', 'Recurring', 'Savings', 'Import', 'Insights', 'Trips', 'Settings'])
     expect(screen.queryByRole('link', { name: /Expense Spaces/ })).toBeNull()
     expect(screen.queryByRole('link', { name: /Prices/ })).toBeNull()
     expect(screen.queryByRole('link', { name: /Bills/ })).toBeNull()
     expect(screen.getByRole('link', { name: /Spending/ }).getAttribute('href')).toBe('/spending')
     expect(screen.queryByRole('link', { name: /Shops/ })).toBeNull()
     expect(screen.getByRole('link', { name: /Insights/ }).getAttribute('href')).toBe('/insights')
+    expect(screen.getByRole('link', { name: /Savings/ }).getAttribute('href')).toBe('/savings')
   })
 
   it('shows a badge on Settings with the number of invitations waiting', () => {

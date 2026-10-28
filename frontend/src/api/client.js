@@ -784,6 +784,40 @@ export function downloadReport({ format, year, month, scope, spaceIds }) {
   return downloadFile(`/api/reports/export${reportQuery({ year, month, scope, spaceIds, format })}`, name, 'Couldn’t create the report file')
 }
 
+// ── Savings goals ─────────────────────────────────────
+const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+// { goals, summary, limit }: each goal with its progress, unfinished ones first.
+export function fetchSavingsGoals() {
+  return request('/api/savings-goals')
+}
+
+// One goal with progress and its deposits/withdrawals (newest first).
+export function fetchSavingsGoal(id) {
+  return request(`/api/savings-goals/${id}`)
+}
+
+export function createSavingsGoal(goal) {
+  return request('/api/savings-goals', json('POST', goal))
+}
+
+export function updateSavingsGoal(id, changes) {
+  return request(`/api/savings-goals/${id}`, json('PUT', changes))
+}
+
+export function deleteSavingsGoal(id) {
+  return request(`/api/savings-goals/${id}`, { method: 'DELETE' })
+}
+
+// A negative amount takes money back out. Answers with the goal as fetchSavingsGoal does.
+export function addSavingsContribution(goalId, contribution) {
+  return request(`/api/savings-goals/${goalId}/contributions`, json('POST', contribution))
+}
+
+export function deleteSavingsContribution(goalId, contributionId) {
+  return request(`/api/savings-goals/${goalId}/contributions/${contributionId}`, { method: 'DELETE' })
+}
+
 // ── Categorizer ───────────────────────────────────────
 export function suggestCategory(description, shop) {
   const qs = new URLSearchParams({ description: description || '', shop: shop || '' })

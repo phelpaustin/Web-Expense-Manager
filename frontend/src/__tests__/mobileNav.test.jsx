@@ -190,7 +190,7 @@ describe('phone navigation', () => {
       openMore()
       const dialog = screen.getByRole('dialog', { name: 'More' })
       expect(within(dialog).getAllByRole('link').map((l) => l.textContent.replace(/[^A-Za-z]/g, ''))).toEqual([
-        'Income', 'Recurring', 'Import', 'Trips', 'Settings',
+        'Income', 'Recurring', 'Savings', 'Import', 'Trips', 'Settings',
       ])
       fireEvent.click(within(dialog).getByRole('link', { name: /Recurring/ }))
       expect(where.pathname).toBe('/recurring')

@@ -8,6 +8,7 @@ export const PHONE_QUERY = '(max-width: 760px)'
 const MORE_LINKS = [
   { to: '/income', label: 'Income', icon: '💵' },
   { to: '/recurring', label: 'Recurring', icon: '🔁' },
+  { to: '/savings', label: 'Savings', icon: '🎯' },
   { to: '/import', label: 'Import', icon: '📥' },
   { to: '/trips', label: 'Trips', icon: '🧳' },
   { to: '/settings', label: 'Settings', icon: '⚙️', badge: 'invitations' },

@@ -480,7 +480,10 @@ def delete_account(
         db.query(models.Receipt).filter(models.Receipt.user_id == user.id).delete(
             synchronize_session=False
         )
+        # Deposits point at their goals, so they go first.
+        db.query(models.SavingsContribution).filter(models.SavingsContribution.user_id == user.id).delete(synchronize_session=False)
         for model in (
+            models.SavingsGoal,
             models.Budget,
             models.Income,
             models.RecurringTemplate,
