@@ -17,3 +17,24 @@
 .month-detail-head button {
   white-space: nowrap;
 }
+
+/* A bill (several items from one receipt) as one line that opens to its items. */
+.month-detail .bill-header td {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.month-detail .bill-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.month-detail .bill-item td:nth-child(3) {
+  padding-left: 1.5rem;
+}

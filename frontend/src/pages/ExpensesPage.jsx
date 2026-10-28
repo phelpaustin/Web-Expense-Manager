@@ -8,6 +8,7 @@ import BulkEditPanel from '../components/expenses/BulkEditPanel.jsx'
 import ExpenseFilters from '../components/expenses/ExpenseFilters.jsx'
 import ExpensePager from '../components/expenses/ExpensePager.jsx'
 import ExpenseTable from '../components/expenses/ExpenseTable.jsx'
+import { groupIntoBills } from '../billGroups.js'
 import TripPickPanel from '../components/expenses/TripPickPanel.jsx'
 import OptionLists from '../components/expenses/OptionLists.jsx'
 import { EMPTY_BULK, KEEP } from '../components/expenses/shared.jsx'
@@ -144,27 +145,8 @@ export default function ExpensesPage({
     return result
   }
 
-  // Club same-day, same-shop rows into one "bill" group (mirrors how a single
-  // receipt is entered, whether one at a time or via bill mode). Rows without a
-  // shop aren't grouped — there's nothing tying them to the same receipt.
-  const billGroups = useMemo(() => {
-    const groups = []
-    const indexByKey = new Map()
-    for (const e of pageExpenses) {
-      const shop = (e.shop || '').trim()
-      const key = shop
-        ? `${e.date}::${shop}::${e.group_id ?? 'personal'}::${e.currency || 'SEK'}`
-        : `single-${e.id}`
-      let group = indexByKey.get(key)
-      if (!group) {
-        group = { key, date: e.date, shop, group_id: e.group_id, currency: e.currency || 'SEK', items: [] }
-        indexByKey.set(key, group)
-        groups.push(group)
-      }
-      group.items.push(e)
-    }
-    return groups
-  }, [pageExpenses])
+  // Same-day, same-shop rows are one "bill" group (see billGroups.js).
+  const billGroups = useMemo(() => groupIntoBills(pageExpenses), [pageExpenses])
 
   function resetToFirstPage(setter) {
     return (value) => {

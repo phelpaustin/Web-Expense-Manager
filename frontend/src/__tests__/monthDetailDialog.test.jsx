@@ -154,9 +154,9 @@ describe('MonthDetailDialog', () => {
   describe('moving expenses into a trip', () => {
     const TRIPS = [{ id: 7, name: 'Goa', role: 'owner' }, { id: 8, name: 'Oslo', role: 'viewer' }]
     const ROWS = [
-      { ...EXPENSE, id: 1, description: 'Hotel', category: 'Trip' },
-      { ...EXPENSE, id: 2, description: 'Taxi', category: 'Trip' },
-      { ...EXPENSE, id: 3, description: 'Milk', category: 'Food' },
+      { ...EXPENSE, id: 1, description: 'Hotel', category: 'Trip', shop: 'HOTEL' },
+      { ...EXPENSE, id: 2, description: 'Taxi', category: 'Trip', shop: 'TAXI' },
+      { ...EXPENSE, id: 3, description: 'Milk', category: 'Food', shop: 'ICA' },
     ]
     const open = (props = {}) =>
       render(
@@ -249,6 +249,132 @@ describe('MonthDetailDialog', () => {
       fireEvent.change(screen.getByLabelText('Trip'), { target: { value: '7' } })
       fireEvent.click(screen.getByText('Move 1'))
       expect((await screen.findByRole('alert')).textContent).toContain('Not allowed')
+    })
+  })
+
+  describe('bills with several items', () => {
+    const LIDL = (id, description, amount, category = 'Food') => ({
+      ...EXPENSE, id, description, amount, category, shop: 'Lidl', date: '2025-01-24',
+    })
+    const BILL = [LIDL(11, 'Ice cream', '49.90', 'Ice Cream'), LIDL(12, 'Chicken', '36.90', 'Meat'), LIDL(13, 'Grapes', '19.90', 'Fruits')]
+    const open = (items, props = {}) => {
+      fetchExpenses.mockResolvedValue({ items, total: items.length })
+      return render(
+        <MonthDetailDialog month="2025-01" scope="all" spaceIds={[]} trips={[{ id: 7, name: 'Goa', role: 'owner' }]} onClose={() => {}} onChangeMonth={() => {}} {...props} />,
+      )
+    }
+    const bill = async () => (await screen.findByText('▸ 3 items')).closest('tr')
+    const tbody = () => screen.getByTestId('month-expenses').querySelector('tbody')
+
+    it('shows the items of one receipt as a single line with a count, a total and a category summary', async () => {
+      open(BILL)
+      const line = await bill()
+      expect(within(line).getByText('Lidl')).toBeTruthy()
+      expect(within(line).getByText('3 categories')).toBeTruthy()
+      expect(within(line).getByText('SEK 106.70')).toBeTruthy() // 49.90 + 36.90 + 19.90, summed in cents
+      expect(tbody().querySelectorAll('tr')).toHaveLength(1)    // the items are folded away
+      expect(screen.queryByText('Chicken')).toBeNull()
+    })
+
+    it('opens and closes the bill', async () => {
+      open(BILL)
+      const line = await bill()
+      fireEvent.click(within(line).getByRole('button', { name: 'Show the 3 items of Lidl' }))
+      expect(screen.getByText('Chicken')).toBeTruthy()
+      expect(screen.getByText('Grapes')).toBeTruthy()
+      expect(tbody().querySelectorAll('tr')).toHaveLength(4)
+      const toggle = screen.getByRole('button', { name: 'Hide the 3 items of Lidl' })
+      expect(toggle.getAttribute('aria-expanded')).toBe('true')
+      fireEvent.click(toggle)
+      expect(screen.queryByText('Chicken')).toBeNull()
+    })
+
+    it('leaves single expenses and rows without a shop as plain lines', async () => {
+      open([LIDL(11, 'Milk', '10'), { ...EXPENSE, id: 20, description: 'Cash', shop: '' }, { ...EXPENSE, id: 21, description: 'Tip', shop: '' }])
+      await screen.findByText('Milk')
+      expect(screen.getByText('Cash')).toBeTruthy()
+      expect(screen.getByText('Tip')).toBeTruthy()
+      expect(screen.queryByText(/items$/)).toBeNull()
+      expect(screen.queryByText(/Expand all/)).toBeNull()
+    })
+
+    it('does not mix receipts: another shop, day, space or currency is its own line', async () => {
+      open([
+        ...BILL,
+        { ...LIDL(14, 'Other day', '5'), date: '2025-01-25' },
+        { ...LIDL(15, 'Other shop', '5'), shop: 'ICA' },
+        { ...LIDL(16, 'Other currency', '5'), currency: 'EUR' },
+        { ...LIDL(17, 'Other space', '5'), group_id: 7 },
+      ])
+      await bill()
+      expect(screen.getAllByText(/items$/)).toHaveLength(1)
+      for (const name of ['Other day', 'Other shop', 'Other currency', 'Other space']) expect(screen.getByText(name)).toBeTruthy()
+    })
+
+    it('expands and collapses every bill at once', async () => {
+      open([...BILL, ...BILL.map((e) => ({ ...e, id: e.id + 10, shop: 'ICA', description: `${e.description} 2` }))])
+      expect(await screen.findAllByText('▸ 3 items')).toHaveLength(2)
+      expect(screen.getByText('Collapse all').disabled).toBe(true)
+      fireEvent.click(screen.getByText('Expand all 2 bills'))
+      expect(screen.getByText('Chicken')).toBeTruthy()
+      expect(screen.getByText('Chicken 2')).toBeTruthy()
+      fireEvent.click(screen.getByText('Collapse all'))
+      expect(screen.queryByText('Chicken')).toBeNull()
+      expect(screen.queryByText('Chicken 2')).toBeNull()
+    })
+
+    it('the box on the bill picks all its items, even while it is folded, and the move uses them all', async () => {
+      open(BILL)
+      const line = await bill()
+      fireEvent.click(within(line).getByLabelText('Select all items of Lidl'))
+      expect(screen.getByText('3 selected')).toBeTruthy()
+      fireEvent.change(screen.getByLabelText('Trip'), { target: { value: '7' } })
+      fireEvent.click(screen.getByText('Move 3'))
+      await waitFor(() => expect(bulkUpdateExpenses).toHaveBeenCalledWith({ ids: [11, 12, 13], changes: { group_id: 7 } }))
+    })
+
+    it('shows a half-ticked bill as partly selected and a second click clears it', async () => {
+      open(BILL)
+      const line = await bill()
+      fireEvent.click(within(line).getByRole('button', { name: /Show the 3 items/ }))
+      fireEvent.click(screen.getByLabelText('Select Chicken'))
+      const box = within(line).getByLabelText('Select all items of Lidl')
+      expect(box.checked).toBe(false)
+      expect(box.indeterminate).toBe(true)
+      fireEvent.click(box) // some -> all
+      expect(screen.getByText('3 selected')).toBeTruthy()
+      fireEvent.click(box) // all -> none
+      expect(screen.queryByText(/selected$/)).toBeNull()
+    })
+
+    it('an item inside an open bill can still be edited and deleted', async () => {
+      open(BILL)
+      fireEvent.click(within(await bill()).getByRole('button', { name: /Show the 3 items/ }))
+      fireEvent.click(screen.getByLabelText('Edit Chicken'))
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '40' } })
+      fireEvent.click(screen.getByText('✓ Save'))
+      await waitFor(() => expect(updateExpense).toHaveBeenCalledWith(12, { amount: 40 }))
+      fireEvent.click(screen.getByLabelText('Delete Grapes'))
+      fireEvent.click(screen.getByText('Yes'))
+      await waitFor(() => expect(deleteExpense).toHaveBeenCalledWith(13))
+    })
+
+    it('keeps the bill open after a change reloads the month, but folds everything for another month', async () => {
+      const { rerender } = open(BILL)
+      fireEvent.click(within(await bill()).getByRole('button', { name: /Show the 3 items/ }))
+      fireEvent.click(screen.getByLabelText('Edit Chicken'))
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '40' } })
+      fireEvent.click(screen.getByText('✓ Save'))
+      await waitFor(() => expect(fetchExpenses).toHaveBeenCalledTimes(2))
+      expect(await screen.findByText('Grapes')).toBeTruthy() // still open after the reload
+      rerender(<MonthDetailDialog month="2025-02" scope="all" spaceIds={[]} onClose={() => {}} onChangeMonth={() => {}} />)
+      await waitFor(() => expect(screen.queryByText('Grapes')).toBeNull()) // a new month starts folded
+    })
+
+    it('"Select the N categorised Trip" still finds items hidden inside a folded bill', async () => {
+      open([LIDL(11, 'Taxi', '10', 'Trip'), LIDL(12, 'Hotel', '20', 'Trip'), LIDL(13, 'Milk', '5', 'Food')])
+      fireEvent.click(await screen.findByText('Select the 2 categorised Trip'))
+      expect(screen.getByText('2 selected')).toBeTruthy()
     })
   })
 })
