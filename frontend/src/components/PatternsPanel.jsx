@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { money } from '../format.js'
 import { fetchPatterns } from '../api/client.js'
 import { WINDOWS, describeRow, headline, notEnoughText, rowLabel, withBars } from '../patterns.js'
+import './patternsPanel.css'
 
 // "When you spend": the average per calendar day for each weekday and for each part of the month.
 // Averaged per day, not per expense, so a month with five Saturdays doesn't make Saturday look busier.
@@ -59,7 +60,7 @@ export default function PatternsPanel({ scope, spaceIds, refreshKey }) {
 
   const lead = headline(data)
   const table = (rows, label, noun) => (
-    <table className="table">
+    <table className="table pattern-table">
       <thead>
         <tr>
           <th>{label}</th>

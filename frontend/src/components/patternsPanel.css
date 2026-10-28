@@ -1,0 +1,29 @@
+/* "When you spend": the bar and its amount, and the two tables lined up with each other. */
+
+/* Same column widths in both tables, so the bars start at the same place. */
+.pattern-table {
+  table-layout: fixed;
+}
+
+.pattern-table th:first-child,
+.pattern-table td:first-child {
+  width: 30%;
+}
+
+.pattern-table th:last-child,
+.pattern-table td:last-child {
+  width: 14%;
+}
+
+.pattern-table .pattern-bar-cell {
+  width: auto;
+}
+
+.pattern-table .pattern-bar {
+  max-width: 100%;
+}
+
+/* .subtitle pulls up under a page title (negative top margin); here it would sit on top of the bar. */
+.pattern-table .pattern-bar-cell .subtitle {
+  margin: 0.3rem 0 0;
+}
