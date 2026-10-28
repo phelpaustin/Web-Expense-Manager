@@ -1279,6 +1279,14 @@ button {
   margin-top: 0.9rem;
 }
 
+/* A second line inside a table cell (a category under an expense name, "per kg" under a price):
+   .subtitle's negative top margin would pull it up onto the line above. */
+.table td .subtitle,
+.table th .subtitle {
+  margin-top: 0.15rem;
+  margin-bottom: 0;
+}
+
 .nowrap {
   white-space: nowrap;
 }
@@ -3019,7 +3027,8 @@ label.link-btn input[type='file'] {
    Month detail (click a month on a chart)
    ============================================================ */
 .chart-hint {
-  margin: 0.4rem 0 0;
+  /* The bottom margin keeps a following .subtitle (negative top margin) from pulling up onto the hint. */
+  margin: 0.4rem 0 1rem;
   font-size: 0.8rem;
   color: var(--faint);
 }
