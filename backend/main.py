@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import insecure_secret_reason, settings
 from app.core.rate_limit import limiter
-from app.api import bill_sync, expenses, analytics, budgets, auth, income, recurring, bills, options, metrics, alerts, trips, groups, aliases, dashboard, statement_import
+from app.api import bill_sync, expenses, analytics, budgets, auth, income, recurring, bills, options, metrics, alerts, trips, groups, aliases, dashboard, statement_import, reports
 from app.db.database import SessionLocal
 from app.db.migrate import run_migrations
 from app.db.seed import init_db
@@ -78,3 +78,4 @@ app.include_router(groups.router, prefix="/api")
 app.include_router(aliases.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(statement_import.router, prefix="/api")
+app.include_router(reports.router, prefix="/api")

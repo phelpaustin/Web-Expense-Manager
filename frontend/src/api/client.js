@@ -741,21 +741,47 @@ export function unsubscribeDigest(token) {
   })
 }
 
-export async function exportExpenses(format) {
+// Fetch a file with the login token and hand it to the browser as a download.
+async function downloadFile(path, filename, failure) {
   const token = getToken()
-  const res = await fetch(`${API_BASE}/api/expenses/export?format=${format}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
-  if (!res.ok) throw new Error('Export failed')
+  if (!res.ok) throw new Error(failure)
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = format === 'xlsx' ? 'expenses.xlsx' : 'expenses.csv'
+  a.download = filename
   document.body.appendChild(a)
   a.click()
   a.remove()
   URL.revokeObjectURL(url)
+}
+
+export async function exportExpenses(format) {
+  return downloadFile(`/api/expenses/export?format=${format}`, format === 'xlsx' ? 'expenses.xlsx' : 'expenses.csv', 'Export failed')
+}
+
+function reportQuery({ year, month, scope, spaceIds, format } = {}) {
+  const query = scopeQuery(scope, spaceIds).replace(/^\?/, '')
+  const parts = [query]
+  if (format) parts.push(`format=${encodeURIComponent(format)}`)
+  if (year != null) parts.push(`year=${encodeURIComponent(year)}`)
+  if (month != null) parts.push(`month=${encodeURIComponent(month)}`)
+  const joined = parts.filter(Boolean).join('&')
+  return joined ? `?${joined}` : ''
+}
+
+// The yearly report, or one month's when `month` (1-12) is given.
+export function fetchReport({ year, month, scope, spaceIds } = {}) {
+  return request(`/api/reports${reportQuery({ year, month, scope, spaceIds })}`)
+}
+
+// Download the same report as an Excel workbook ('xlsx') or a PDF ('pdf').
+export function downloadReport({ format, year, month, scope, spaceIds }) {
+  const name = `report-${year}${month != null ? `-${String(month).padStart(2, '0')}` : ''}.${format}`
+  return downloadFile(`/api/reports/export${reportQuery({ year, month, scope, spaceIds, format })}`, name, 'Couldn’t create the report file')
 }
 
 // ── Categorizer ───────────────────────────────────────

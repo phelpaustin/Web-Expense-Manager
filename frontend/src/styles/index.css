@@ -1569,7 +1569,14 @@ button {
   border-radius: 12px;
   padding: 0.3rem;
   width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   box-shadow: var(--shadow-sm);
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -3128,4 +3135,66 @@ label.link-btn input[type='file'] {
 
 .pattern-bar-peak {
   background: var(--warning);
+}
+
+.report-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.report-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.report-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+}
+
+.report-toggle button.active {
+  background: var(--grad);
+  color: #fff;
+}
+
+.report-toggle button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.report-downloads {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.report-controls select {
+  min-height: 2.25rem;
+}
+
+@media (max-width: 760px) {
+  .report-downloads {
+    margin-left: 0;
+    width: 100%;
+  }
+  .report-downloads .ghost-btn {
+    flex: 1;
+  }
+}
+
+/* A second line under a value in the report: .subtitle's negative top margin would pull it into the first. */
+.report-sub {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
 }

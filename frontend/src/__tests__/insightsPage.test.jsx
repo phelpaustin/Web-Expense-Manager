@@ -13,7 +13,7 @@ vi.mock('recharts', () => {
   const None = () => null
   return {
     BarChart: Pass, Bar: Pass, Cell: None, ErrorBar: None, CartesianGrid: None, XAxis: None, YAxis: None, Tooltip: None, ResponsiveContainer: Pass,
-    AreaChart: Pass, Area: None, LineChart: Pass, Line: None, PieChart: Pass, Pie: Pass, Legend: None,
+    AreaChart: Pass, Area: None, LineChart: Pass, Line: None, PieChart: Pass, Pie: Pass, Legend: None, LabelList: None,
   }
 })
 
@@ -57,10 +57,24 @@ function insights(props = {}) {
 }
 
 describe('Insights page', () => {
-  it('has the five tabs, opening on Overview unless told otherwise', () => {
+  it('has six tabs, opening on Overview unless told otherwise', () => {
     insights()
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Forecast', 'Categories', 'Shops', 'Prices'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Forecast', 'Categories', 'Report', 'Shops', 'Prices'])
     expect(screen.getByRole('tab', { name: 'Overview', selected: true })).toBeTruthy()
+  })
+
+  it('opens the Report tab, which follows the space picker like the other analysis tabs', async () => {
+    client.fetchReport.mockImplementation(async () => ({
+      kind: 'year', year: 2026, month: null, label: '2026', years: [2026], currency: 'SEK', unconverted_count: 0, peak: null,
+      totals: { spent: 0, count: 0, income: 0, net: 0, savings_rate_pct: null, avg_per_day: 0, avg_per_month: 0 },
+      previous: { label: '2025', spent: 0, count: 0, change: 0, change_pct: null },
+      categories: [], periods: [], top_shops: [], largest: [], category_matrix: null,
+    }))
+    insights({ initialTab: 'report' })
+    expect(screen.getByRole('tab', { name: 'Report', selected: true })).toBeTruthy()
+    await screen.findByText('No spending recorded in 2026.')
+    expect(client.fetchReport).toHaveBeenCalledWith(expect.objectContaining({ year: new Date().getFullYear(), scope: 'all' }))
+    expect(screen.getByRole('button', { name: 'Download Excel' })).toBeTruthy()
   })
 
   it('opens on the tab asked for, and falls back to Overview for an unknown name', () => {
