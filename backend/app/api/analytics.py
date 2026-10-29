@@ -1,9 +1,9 @@
 import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_user_group_ids
 from app.db.database import get_db
 from app.db import models
 from app.api.aliases import load_alias_maps
@@ -14,6 +14,7 @@ from app.logic import category_change as category_change_logic
 from app.logic import forecast as forecast_logic
 from app.logic import movers as movers_logic
 from app.logic import recurring_costs as recurring_costs_logic
+from app.logic import members as members_logic
 from app.logic import patterns as patterns_logic
 from app.logic import unusual as unusual_logic
 from app.logic import period_compare as period_compare_logic
@@ -261,6 +262,69 @@ def analytics_patterns(
     expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
     return {
         **patterns_logic.spending_patterns(expenses, months=months),
+        "currency": get_reporting_currency(db, user.id),
+        "unconverted_count": unconverted,
+    }
+
+
+def _selected_group_ids(db: Session, user_id: int, scope: str | None, space_ids: str | None) -> list[int]:
+    """The shared spaces a scope / space_ids selection covers (the same choice the expense queries
+    make), limited to spaces the user belongs to. Personal expenses are not in any space."""
+    mine = get_user_group_ids(db, user_id)
+    if space_ids:
+        wanted = []
+        for part in (p.strip() for p in space_ids.split(",")):
+            if part.isdigit() and int(part) in mine:
+                wanted.append(int(part))
+        return sorted(set(wanted))
+    if scope == "personal":
+        return []
+    if scope and scope != "all":
+        return [int(scope)] if scope.isdigit() and int(scope) in mine else []
+    return sorted(set(mine))
+
+
+@router.get("/analytics/members")
+def analytics_members(
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    scope: str | None = None,
+    space_ids: str | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Who paid for how much in the selected shared spaces, from `date_from` to `date_to` (both
+    inclusive, either may be left out): per member a total, share, count, average and top
+    categories; a member-by-category table; and spending per month by member. Every current member
+    is listed, spending nothing included. Amounts are in the reporting currency.
+
+    Only expenses filed in a shared space count. Anyone who can see a space can already see its
+    expenses, so this shows nothing that member could not already see.
+    """
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="date_from must not be after date_to")
+    group_ids = _selected_group_ids(db, user.id, scope, space_ids)
+    spaces = (
+        db.query(models.Group.id, models.Group.name, models.Group.space_type).filter(models.Group.id.in_(group_ids)).order_by(models.Group.name).all()
+        if group_ids else []
+    )
+    members: list[dict] = []
+    if group_ids:
+        rows = (
+            db.query(models.User.id, models.User.name, models.User.email)
+            .join(models.GroupMember, models.GroupMember.user_id == models.User.id)
+            .filter(models.GroupMember.group_id.in_(group_ids))
+            .distinct()
+            .all()
+        )
+        members = [{"user_id": r[0], "name": r[1], "email": r[2]} for r in rows]
+    expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids) if group_ids else ([], 0)
+    result = members_logic.spending_by_member(expenses, members, date_from, date_to)
+    for m in result["members"]:
+        m["is_me"] = m["user_id"] == user.id
+    return {
+        **result,
+        "spaces": [{"id": r[0], "name": r[1], "space_type": r[2]} for r in spaces],
         "currency": get_reporting_currency(db, user.id),
         "unconverted_count": unconverted,
     }

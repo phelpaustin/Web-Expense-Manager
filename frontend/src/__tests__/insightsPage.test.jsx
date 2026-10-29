@@ -53,13 +53,17 @@ beforeEach(() => {
 })
 
 function insights(props = {}) {
-  return render(<InsightsPage trends={null} metrics={METRICS} categories={[]} categoryMonths={[]} {...SHARED} {...props} />)
+  return render(
+    <MemoryRouter>
+      <InsightsPage trends={null} metrics={METRICS} categories={[]} categoryMonths={[]} {...SHARED} {...props} />
+    </MemoryRouter>,
+  )
 }
 
 describe('Insights page', () => {
-  it('has six tabs, opening on Overview unless told otherwise', () => {
+  it('has seven tabs, opening on Overview unless told otherwise', () => {
     insights()
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Forecast', 'Categories', 'Report', 'Shops', 'Prices'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Forecast', 'Categories', 'Report', 'Members', 'Shops', 'Prices'])
     expect(screen.getByRole('tab', { name: 'Overview', selected: true })).toBeTruthy()
   })
 
@@ -75,6 +79,17 @@ describe('Insights page', () => {
     await screen.findByText('No spending recorded in 2026.')
     expect(client.fetchReport).toHaveBeenCalledWith(expect.objectContaining({ year: new Date().getFullYear(), scope: 'all' }))
     expect(screen.getByRole('button', { name: 'Download Excel' })).toBeTruthy()
+  })
+
+  it('opens the Members tab, which follows the space picker', async () => {
+    client.fetchMembers.mockImplementation(async () => ({
+      date_from: null, date_to: null, member_count: 0, total: 0, count: 0, members: [], categories: [], months: [], months_total: 0,
+      spaces: [], currency: 'SEK', unconverted_count: 0,
+    }))
+    insights({ initialTab: 'members' })
+    expect(screen.getByRole('tab', { name: 'Members', selected: true })).toBeTruthy()
+    await screen.findByText('Spending by member needs a shared space with other people in it.')
+    expect(client.fetchMembers).toHaveBeenCalledWith(expect.objectContaining({ scope: 'all' }))
   })
 
   it('opens on the tab asked for, and falls back to Overview for an unknown name', () => {

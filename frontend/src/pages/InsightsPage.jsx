@@ -8,6 +8,7 @@ import RecurringCostsPanel from '../components/RecurringCostsPanel.jsx'
 import UnusualPanel from '../components/UnusualPanel.jsx'
 import PatternsPanel from '../components/PatternsPanel.jsx'
 import ReportPanel from '../components/ReportPanel.jsx'
+import MembersPanel from '../components/MembersPanel.jsx'
 import SpendingMixPanel from '../components/SpendingMixPanel.jsx'
 import ForecastPanel from '../components/ForecastPanel.jsx'
 import { SpendingTrendChart, CashFlowChart } from '../components/Charts.jsx'
@@ -22,12 +23,13 @@ export const INSIGHT_TABS = [
   { key: 'forecast', label: 'Forecast' },
   { key: 'categories', label: 'Categories' },
   { key: 'report', label: 'Report' },
+  { key: 'members', label: 'Members' },
   { key: 'shops', label: 'Shops' },
   { key: 'prices', label: 'Prices' },
 ]
 const TAB_KEYS = INSIGHT_TABS.map((t) => t.key)
 // Shops and Prices look at everything, so the space picker would do nothing there.
-const SCOPED = ['overview', 'forecast', 'categories', 'report']
+const SCOPED = ['overview', 'forecast', 'categories', 'report', 'members']
 
 // "Why, and what next?": the analysis that used to make the Dashboard one long page. The Dashboard keeps
 // "how am I doing right now".
@@ -189,6 +191,15 @@ export default function InsightsPage({
       {tab === 'report' && (
         <ReportPanel
           key={`report|${scopeKey}`}
+          scope={dashboardScope}
+          spaceIds={dashboardSpaceIds}
+          refreshKey={trends}
+        />
+      )}
+
+      {tab === 'members' && (
+        <MembersPanel
+          key={`members|${scopeKey}`}
           scope={dashboardScope}
           spaceIds={dashboardSpaceIds}
           refreshKey={trends}

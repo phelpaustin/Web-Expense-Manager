@@ -300,6 +300,16 @@ export function fetchPatterns({ months, scope, spaceIds } = {}) {
   return request(`/api/analytics/patterns${joined ? `?${joined}` : ''}`)
 }
 
+// Who paid for how much in the selected shared spaces. dateFrom / dateTo are YYYY-MM-DD, both optional.
+export function fetchMembers({ dateFrom, dateTo, scope, spaceIds } = {}) {
+  const query = scopeQuery(scope, spaceIds).replace(/^\?/, '')
+  const parts = [query]
+  if (dateFrom) parts.push(`date_from=${encodeURIComponent(dateFrom)}`)
+  if (dateTo) parts.push(`date_to=${encodeURIComponent(dateTo)}`)
+  const joined = parts.filter(Boolean).join('&')
+  return request(`/api/analytics/members${joined ? `?${joined}` : ''}`)
+}
+
 // Forecast of this month's baseline spending, with a range and a backtest.
 export function fetchForecast({ scope, spaceIds } = {}) {
   return request(`/api/analytics/forecast${scopeQuery(scope, spaceIds)}`)
