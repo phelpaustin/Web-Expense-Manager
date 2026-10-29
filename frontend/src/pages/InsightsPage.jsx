@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { INSIGHT_TABS, insightTabFrom } from '../insightTabs.js'
 import ScopePicker from '../components/ScopePicker.jsx'
 import CategoryBreakdown from '../components/CategoryBreakdown.jsx'
 import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
@@ -18,16 +19,7 @@ import MonthDetailDialog from '../components/MonthDetailDialog.jsx'
 const ShopsPage = lazy(() => import('./ShopsPage.jsx'))
 const PriceTrackerPage = lazy(() => import('./PriceTrackerPage.jsx'))
 
-export const INSIGHT_TABS = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'forecast', label: 'Forecast' },
-  { key: 'categories', label: 'Categories' },
-  { key: 'report', label: 'Report' },
-  { key: 'members', label: 'Members' },
-  { key: 'shops', label: 'Shops' },
-  { key: 'prices', label: 'Prices' },
-]
-const TAB_KEYS = INSIGHT_TABS.map((t) => t.key)
+export { INSIGHT_TABS }
 // Shops and Prices look at everything, so the space picker would do nothing there.
 const SCOPED = ['overview', 'forecast', 'categories', 'report', 'members']
 
@@ -48,11 +40,18 @@ export default function InsightsPage({
   onError,
   options,
   onExpensesChanged,
+  onTabChange,
 }) {
   // The month the Overview panels talk about; null lets the server pick the last finished month.
   const [month, setMonth] = useState(null)
   const [detailMonth, setDetailMonth] = useState(null)
-  const [tab, setTab] = useState(TAB_KEYS.includes(initialTab) ? initialTab : 'overview')
+  const [tab, setTab] = useState(insightTabFrom(initialTab))
+  // A sidebar link changes the address, which changes initialTab: follow it without remounting the page.
+  useEffect(() => { setTab(insightTabFrom(initialTab)) }, [initialTab])
+  const chooseTab = (key) => {
+    setTab(key)
+    if (onTabChange) onTabChange(key)
+  }
   const scopeKey = `${dashboardScope}|${(dashboardSpaceIds || []).join(',')}`
   const hasCashFlow = metrics && metrics.cash_flow && metrics.cash_flow.length > 0
 
@@ -80,7 +79,7 @@ export default function InsightsPage({
             role="tab"
             aria-selected={tab === t.key}
             className={tab === t.key ? 'tab active' : 'tab'}
-            onClick={() => setTab(t.key)}
+            onClick={() => chooseTab(t.key)}
           >
             {t.label}
           </button>

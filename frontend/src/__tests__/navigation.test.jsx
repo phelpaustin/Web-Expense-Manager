@@ -18,9 +18,9 @@ const OPTIONS = {
   base_currency: 'SEK', display_currency: 'SEK', display_currency_is_custom: false, count_bills_as_spending: true,
 }
 
-function renderLayout(props = {}) {
+function renderLayout(props = {}, entry = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[entry]}>
       <Layout
         user={{ name: 'A', email: 'a@b.com' }}
         onLogout={vi.fn()}
@@ -132,5 +132,39 @@ describe('Settings: spaces and export', () => {
   it('hides the spaces tab when no spaces are wired in', () => {
     renderSettings({ spaces: undefined })
     expect(screen.queryByRole('button', { name: /Spaces & sharing/ })).toBeNull()
+  })
+})
+
+describe('Insights sub-links', () => {
+  const group = () => screen.queryByRole('group', { name: 'Insights sections' })
+
+  it('are hidden away from Insights', () => {
+    renderLayout({}, '/spending')
+    expect(group()).toBeNull()
+  })
+
+  it('list every tab on Insights and mark the Overview by default', () => {
+    renderLayout({}, '/insights')
+    const links = within(group()).getAllByRole('link')
+    expect(links.map((l) => l.textContent)).toEqual(['Overview', 'Forecast', 'Categories', 'Report', 'Members', 'Shops', 'Prices'])
+    expect(links[3].getAttribute('href')).toBe('/insights?tab=report')
+    expect(links[0].getAttribute('aria-current')).toBe('page')
+    expect(links.filter((l) => l.getAttribute('aria-current') === 'page')).toHaveLength(1)
+  })
+
+  it('mark the tab named in the address, and fall back to Overview for an unknown one', () => {
+    const { unmount } = renderLayout({}, '/insights?tab=shops')
+    expect(within(group()).getByRole('link', { name: 'Shops' }).getAttribute('aria-current')).toBe('page')
+    expect(within(group()).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
+    unmount()
+    renderLayout({}, '/insights?tab=nonsense')
+    expect(within(group()).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page')
+  })
+
+  it('move the mark when one is clicked', () => {
+    renderLayout({}, '/insights')
+    fireEvent.click(within(group()).getByRole('link', { name: 'Members' }))
+    expect(within(group()).getByRole('link', { name: 'Members' }).getAttribute('aria-current')).toBe('page')
+    expect(within(group()).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
   })
 })

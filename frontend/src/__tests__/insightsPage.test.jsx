@@ -162,3 +162,19 @@ describe('Dashboard after the split', () => {
     expect(screen.getByRole('link', { name: 'More in Insights' }).getAttribute('href')).toBe('/insights')
   })
 })
+
+describe('Insights tabs and the address', () => {
+  it('tells the parent when a tab is chosen', () => {
+    const onTabChange = vi.fn()
+    insights({ onTabChange })
+    fireEvent.click(screen.getByRole('tab', { name: 'Shops' }))
+    expect(onTabChange).toHaveBeenCalledWith('shops')
+    expect(screen.getByRole('tab', { name: 'Shops' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('follows a new initialTab without being remounted', () => {
+    const { rerender } = insights({ initialTab: 'overview' })
+    rerender(<MemoryRouter><InsightsPage trends={null} metrics={METRICS} categories={[]} categoryMonths={[]} {...SHARED} initialTab="report" /></MemoryRouter>)
+    expect(screen.getByRole('tab', { name: 'Report' }).getAttribute('aria-selected')).toBe('true')
+  })
+})

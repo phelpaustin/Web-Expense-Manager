@@ -39,9 +39,10 @@ function SettingsRoute(props) {
 
 // Insights opens on the tab named in the address (?tab=shops); /prices and /shops redirect to their tabs.
 function InsightsRoute(props) {
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const tab = params.get('tab') || 'overview'
-  return <InsightsPage key={tab} {...props} initialTab={tab} />
+  // Choosing a tab puts it in the address, so the sidebar's sub-links show where you are and a reload stays put.
+  return <InsightsPage {...props} initialTab={tab} onTabChange={(key) => setParams({ tab: key }, { replace: true })} />
 }
 
 // This component only wires fetched data + handlers (from the hooks below)

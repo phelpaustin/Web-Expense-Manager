@@ -2,7 +2,8 @@ import CurrencySelect from './components/CurrencySelect.jsx'
 import MobileNav, { PHONE_QUERY } from './components/MobileNav.jsx'
 import { useMediaQuery } from './hooks/useMediaQuery.js'
 import { Fragment, Suspense, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom'
+import { INSIGHT_TABS, insightTabFrom } from './insightTabs.js'
 
 // Grouped so the sidebar reads as a few jobs, not a long list. A group without a title is a single link.
 const NAV = [
@@ -62,6 +63,28 @@ function NotificationBell({ alerts }) {
   )
 }
 
+// The Insights tabs as links under "Insights", shown while you are on that page.
+function InsightsSubLinks() {
+  const { pathname } = useLocation()
+  const [params] = useSearchParams()
+  if (!pathname.startsWith('/insights')) return null
+  const current = insightTabFrom(params.get('tab'))
+  return (
+    <div className="nav-sublinks" role="group" aria-label="Insights sections">
+      {INSIGHT_TABS.map((t) => (
+        <Link
+          key={t.key}
+          to={`/insights?tab=${t.key}`}
+          className={t.key === current ? 'nav-sublink active' : 'nav-sublink'}
+          aria-current={t.key === current ? 'page' : undefined}
+        >
+          {t.label}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
 export default function Layout({ user, onLogout, error, loading, alerts = [], options, onDisplayCurrencyChange, invitationCount = 0, onUploadReceipt }) {
   const phone = useMediaQuery(PHONE_QUERY)
   return (
@@ -90,6 +113,7 @@ export default function Layout({ user, onLogout, error, loading, alerts = [], op
                     )}
                   </NavLink>
                 ))}
+                {group.links.some((l) => l.to === '/insights') && <InsightsSubLinks />}
               </Fragment>
             ))}
           </nav>
