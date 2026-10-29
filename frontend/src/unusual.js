@@ -21,6 +21,15 @@ export function describeDuplicate(d) {
   return `${d.count} entries of ${entryName(d)} for ${money(d.amount)} on ${d.date}.`
 }
 
+// The dismissed groups, whatever an older response did or did not send.
+export function dismissedList(data) {
+  return Array.isArray(data.duplicates.dismissed) ? data.duplicates.dismissed : []
+}
+
+export function dismissedLabel(n) {
+  return n === 1 ? '1 marked as not a duplicate' : `${n} marked as not a duplicate`
+}
+
 // Said when there is nothing to list.
 export function allClearText(data) {
   const u = data.unusual

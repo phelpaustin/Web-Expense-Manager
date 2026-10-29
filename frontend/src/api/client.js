@@ -293,6 +293,19 @@ export function fetchUnusual({ scope, spaceIds } = {}) {
   return request(`/api/analytics/unusual${scopeQuery(scope, spaceIds)}`)
 }
 
+// "These entries are not a duplicate": hide that group from the duplicates list until another look-alike appears.
+export function dismissExpenseDuplicate({ key, day, count }) {
+  return request('/api/analytics/duplicates/dismiss', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, day, count }),
+  })
+}
+
+export function undoDismissExpenseDuplicate(key) {
+  return request(`/api/analytics/duplicates/dismiss/${encodeURIComponent(key)}`, { method: 'DELETE' })
+}
+
 // Average spending per calendar day for each weekday and each part of the month, over `months` months.
 export function fetchPatterns({ months, scope, spaceIds } = {}) {
   const query = scopeQuery(scope, spaceIds)

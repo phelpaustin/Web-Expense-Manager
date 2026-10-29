@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('../api/client.js', async (importOriginal) => {
@@ -11,17 +11,17 @@ vi.mock('../api/client.js', async (importOriginal) => {
 
 import * as client from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
-import { allClearText, describeDuplicate, describeUnusual, entryName, hasFindings, ratioText } from '../unusual.js'
+import { allClearText, describeDuplicate, describeUnusual, dismissedLabel, dismissedList, entryName, hasFindings, ratioText } from '../unusual.js'
 import UnusualPanel from '../components/UnusualPanel.jsx'
 
 beforeAll(() => setDisplayCurrency('USD'))
 beforeEach(() => vi.clearAllMocks())
 
 const big = (extra = {}) => ({ id: 1, date: '2026-10-10', category: 'Food', description: 'Dinner', shop: 'Bistro', amount: 450, usual: 100, ratio: 4.5, compared_with: 12, ...extra })
-const dup = (extra = {}) => ({ date: '2026-10-09', amount: 20, description: 'Milk', shop: 'ICA', category: 'Food', count: 2, ids: [3, 4], ...extra })
+const dup = (extra = {}) => ({ date: '2026-10-09', amount: 20, description: 'Milk', shop: 'ICA', category: 'Food', count: 2, ids: [3, 4], key: 'k'.repeat(64), was_dismissed: false, ...extra })
 const data = (unusualItems, dupItems, extra = {}) => ({
   unusual: { recent_days: 30, checked: 7, items: unusualItems, total_found: unusualItems.length },
-  duplicates: { recent_days: 60, items: dupItems, total_found: dupItems.length },
+  duplicates: { recent_days: 60, items: dupItems, total_found: dupItems.length, dismissed: [], dismissed_total: 0 },
   currency: 'USD', unconverted_count: 0, ...extra,
 })
 const show = () => render(<MemoryRouter><UnusualPanel scope="personal" refreshKey={0} /></MemoryRouter>)
@@ -102,5 +102,73 @@ describe('UnusualPanel', () => {
     show()
     await screen.findByText(/Nothing stands out/)
     expect(client.fetchUnusual).toHaveBeenCalledWith({ scope: 'personal', spaceIds: undefined })
+  })
+})
+
+describe('not a duplicate', () => {
+  const withDismissed = (items, dismissed) => {
+    const d = data([], items)
+    d.duplicates.dismissed = dismissed
+    d.duplicates.dismissed_total = dismissed.length
+    return d
+  }
+
+  it('words the dismissed count', () => {
+    expect(dismissedLabel(1)).toBe('1 marked as not a duplicate')
+    expect(dismissedLabel(3)).toBe('3 marked as not a duplicate')
+    expect(dismissedList({ duplicates: {} })).toEqual([])
+    expect(dismissedList(withDismissed([], [dup()]))).toHaveLength(1)
+  })
+
+  it('sends the group to the server and reloads the list', async () => {
+    client.fetchUnusual.mockResolvedValueOnce(data([], [dup()])).mockResolvedValueOnce(withDismissed([], [dup()]))
+    client.dismissExpenseDuplicate.mockResolvedValue({ dismissed: true })
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: /Not a duplicate: 2 entries of Milk/ }))
+    await screen.findByText('1 marked as not a duplicate')
+    expect(client.dismissExpenseDuplicate).toHaveBeenCalledWith({ key: 'k'.repeat(64), day: '2026-10-09', count: 2 })
+    expect(client.fetchUnusual).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('Entered twice?')).toBeNull()
+    expect(screen.getByText(/Nothing stands out/)).toBeTruthy()
+  })
+
+  it('brings a group back with Undo', async () => {
+    client.fetchUnusual.mockResolvedValueOnce(withDismissed([], [dup()])).mockResolvedValueOnce(data([], [dup()]))
+    client.undoDismissExpenseDuplicate.mockResolvedValue(null)
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: /Undo: 2 entries of Milk/ }))
+    await screen.findByText('Entered twice?')
+    expect(client.undoDismissExpenseDuplicate).toHaveBeenCalledWith('k'.repeat(64))
+    expect(screen.queryByText('1 marked as not a duplicate')).toBeNull()
+  })
+
+  it('keeps the list and says so when saving fails', async () => {
+    client.fetchUnusual.mockResolvedValue(data([], [dup()]))
+    client.dismissExpenseDuplicate.mockRejectedValue(new Error('offline'))
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: /Not a duplicate/ }))
+    await screen.findByText(/Couldn’t save that: offline/)
+    expect(screen.getByText('Entered twice?')).toBeTruthy()
+    expect(client.fetchUnusual).toHaveBeenCalledTimes(1)
+  })
+
+  it('says a group came back because of another entry', async () => {
+    client.fetchUnusual.mockResolvedValue(data([], [dup({ count: 3, was_dismissed: true })]))
+    show()
+    await screen.findByText('more since you dismissed it')
+  })
+
+  it('shows no dismissed section when there are none, and copes with an older response', async () => {
+    client.fetchUnusual.mockResolvedValue(data([], [dup()]))
+    const { unmount } = show()
+    await screen.findByText('Entered twice?')
+    expect(screen.queryByText(/marked as not a duplicate/)).toBeNull()
+    unmount()
+    const old = data([], [dup({ key: undefined })])
+    delete old.duplicates.dismissed
+    client.fetchUnusual.mockResolvedValue(old)
+    show()
+    await screen.findByText('Entered twice?')
+    expect(screen.queryByRole('button', { name: /Not a duplicate/ })).toBeNull()
   })
 })

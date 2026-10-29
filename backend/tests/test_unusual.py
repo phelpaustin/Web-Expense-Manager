@@ -162,3 +162,73 @@ def test_the_bill_lookup_is_only_made_for_lookalikes():
     dup([e("2026-10-10", 20, description="A", shop="x", source_bill_id=1), e("2026-10-10", 21, description="B", shop="x", source_bill_id=2)],
         receipt_bills=lambda ids: calls.append(ids) or set())
     assert calls == []
+
+
+# ── "not a duplicate" ──
+
+def two_lunches(day="2026-10-10", amount=60, **extra):
+    return [e(day, amount, description="Lunch", shop="Max", **extra), e(day, amount, description="Lunch", shop="Max", **extra)]
+
+
+def test_each_group_has_a_stable_key():
+    [a] = dup(two_lunches())["items"]
+    assert len(a["key"]) == 64 and set(a["key"]) <= set("0123456789abcdef")
+    assert dup(two_lunches())["items"][0]["key"] == a["key"]                                 # same entries, same key
+    assert dup(two_lunches(amount=61))["items"][0]["key"] != a["key"]
+    assert dup(two_lunches(day="2026-10-11"))["items"][0]["key"] != a["key"]
+    assert dup([e("2026-10-10", 60, description="Lunch", shop="Max "), e("2026-10-10", 60, description="LUNCH", shop="max")])["items"][0]["key"] == a["key"]
+    assert un.duplicate_key(dt.date(2026, 10, 10), D("60"), "lunch", "max", "food") == a["key"]
+
+
+def test_a_group_nobody_dismissed_is_not_marked():
+    r = dup(two_lunches())
+    assert r["items"][0]["was_dismissed"] is False and r["dismissed"] == [] and r["dismissed_total"] == 0
+
+
+def test_a_dismissed_group_leaves_the_list_and_is_reported_separately():
+    key = dup(two_lunches())["items"][0]["key"]
+    r = dup(two_lunches(), dismissed={key: 2})
+    assert r["items"] == [] and r["total_found"] == 0
+    assert [d["key"] for d in r["dismissed"]] == [key] and r["dismissed_total"] == 1 and r["dismissed"][0]["count"] == 2
+
+
+def test_one_more_lookalike_brings_a_dismissed_group_back():
+    key = dup(two_lunches())["items"][0]["key"]
+    r = dup(two_lunches() + [e("2026-10-10", 60, description="Lunch", shop="Max")], dismissed={key: 2})
+    [item] = r["items"]
+    assert item["count"] == 3 and item["was_dismissed"] is True and r["dismissed"] == []
+    assert dup(two_lunches() + [e("2026-10-10", 60, description="Lunch", shop="Max")], dismissed={key: 3})["items"] == []
+
+
+def test_a_dismissal_with_a_bigger_count_still_hides_a_group_that_shrank():
+    key = dup(two_lunches())["items"][0]["key"]
+    assert dup(two_lunches(), dismissed={key: 5})["items"] == []
+
+
+def test_a_dismissal_only_covers_its_own_group():
+    other = dup(two_lunches(amount=75))["items"][0]["key"]
+    r = dup(two_lunches() + two_lunches(amount=75, day="2026-10-12"), dismissed={other: 2})
+    assert len(r["items"]) == 2                                          # a different day makes a different group
+    assert dup(two_lunches() + two_lunches(amount=75), dismissed={other: 2})["items"][0]["amount"] == D("60.00")
+
+
+def test_dismissals_that_match_nothing_are_ignored():
+    r = dup(two_lunches(), dismissed={"0" * 64: 2, "f" * 64: 9})
+    assert len(r["items"]) == 1 and r["dismissed"] == []
+
+
+def test_both_lists_are_cut_to_top():
+    rows, keys = [], {}
+    for d in range(1, 6):
+        rows += two_lunches(day=f"2026-10-0{d}")
+        keys[dup(two_lunches(day=f"2026-10-0{d}"))["items"][0]["key"]] = 2
+    shown = [k for i, k in enumerate(keys) if i < 3]
+    r = dup(rows, top=2, dismissed={k: 2 for k in shown})
+    assert len(r["items"]) == 2 and r["total_found"] == 2 and len(r["dismissed"]) == 2 and r["dismissed_total"] == 3
+
+
+def test_an_old_dismissal_does_not_hide_a_group_outside_the_window_either_way():
+    old = two_lunches(day="2026-06-01")
+    assert dup(old)["items"] == []                                       # outside the 60 days anyway
+    key = un.duplicate_key(dt.date(2026, 6, 1), D("60"), "lunch", "max", "food")
+    assert dup(old, dismissed={key: 2})["dismissed"] == []

@@ -1,6 +1,7 @@
 import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_user_group_ids
@@ -240,9 +241,12 @@ def analytics_unusual(
             found.update(r[0] for r in rows)
         return found
 
+    dismissed = {k: c for k, c in db.query(models.DismissedDuplicate.key, models.DismissedDuplicate.count).filter(models.DismissedDuplicate.user_id == user.id)}
     return {
         "unusual": unusual_logic.unusual_expenses(expenses, recent_days=recent_days, top=top),
-        "duplicates": unusual_logic.possible_duplicates(expenses, recent_days=duplicate_days, top=top, receipt_bills=receipt_bills),
+        "duplicates": unusual_logic.possible_duplicates(
+            expenses, recent_days=duplicate_days, top=top, receipt_bills=receipt_bills, dismissed=dismissed
+        ),
         "currency": get_reporting_currency(db, user.id),
         "unconverted_count": unconverted,
     }
@@ -328,6 +332,52 @@ def analytics_members(
         "currency": get_reporting_currency(db, user.id),
         "unconverted_count": unconverted,
     }
+
+
+MAX_DISMISSED = 1000
+# The longest window the duplicates list can look back over, plus some slack: a dismissal for a group
+# older than that can never be shown again, so it is dropped.
+DISMISSAL_KEEP_DAYS = 400
+
+
+class DismissDuplicate(BaseModel):
+    key: str = Field(pattern=r"^[0-9a-f]{64}$")      # the group's `key` from /analytics/unusual
+    day: datetime.date                                # the group's date
+    count: int = Field(ge=2, le=1000)                 # how many entries it has now
+
+
+@router.post("/analytics/duplicates/dismiss")
+def dismiss_duplicates(
+    payload: DismissDuplicate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Say a group of lookalike entries is not a duplicate. It stays out of the list until one more
+    lookalike entry is added. Personal to the user: another member of a space decides for themselves."""
+    mine = db.query(models.DismissedDuplicate).filter(models.DismissedDuplicate.user_id == user.id)
+    mine.filter(models.DismissedDuplicate.day < datetime.date.today() - datetime.timedelta(days=DISMISSAL_KEEP_DAYS)).delete(synchronize_session=False)
+    row = mine.filter(models.DismissedDuplicate.key == payload.key).first()
+    if row is None:
+        if mine.count() >= MAX_DISMISSED:
+            raise HTTPException(status_code=400, detail=f"You can keep up to {MAX_DISMISSED} dismissed duplicates; bring some back first")
+        db.add(models.DismissedDuplicate(user_id=user.id, key=payload.key, day=payload.day, count=payload.count))
+    else:
+        row.day, row.count = payload.day, payload.count
+    db.commit()
+    return {"dismissed": True, "key": payload.key, "count": payload.count}
+
+
+@router.delete("/analytics/duplicates/dismiss/{key}", status_code=204)
+def undo_dismiss_duplicates(
+    key: str = Path(pattern=r"^[0-9a-f]{64}$"),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Bring a dismissed group back into the list. Quietly does nothing if it was not dismissed."""
+    db.query(models.DismissedDuplicate).filter(
+        models.DismissedDuplicate.user_id == user.id, models.DismissedDuplicate.key == key
+    ).delete(synchronize_session=False)
+    db.commit()
 
 
 @router.get("/analytics/shops")

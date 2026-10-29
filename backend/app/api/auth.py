@@ -484,6 +484,7 @@ def delete_account(
         db.query(models.SavingsContribution).filter(models.SavingsContribution.user_id == user.id).delete(synchronize_session=False)
         for model in (
             models.SavingsGoal,
+            models.DismissedDuplicate,
             models.Budget,
             models.Income,
             models.RecurringTemplate,

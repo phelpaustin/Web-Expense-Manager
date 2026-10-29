@@ -270,6 +270,23 @@ class ImportProfile(Base):
     mapping = Column(JSON, nullable=False)
 
 
+class DismissedDuplicate(Base):
+    """A group of lookalike entries the user has said is not a duplicate (see logic/unusual.py).
+
+    `key` names the group, `count` is how many entries it had, so one more lookalike entry makes it
+    show again. `day` is the group's date: rows older than the longest duplicate window are pruned.
+    """
+    __tablename__ = "dismissed_duplicates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    key = Column(String(64), nullable=False)
+    day = Column(Date, nullable=False)
+    count = Column(Integer, nullable=False)
+
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_dismissed_duplicate_user_key"),)
+
+
 class SavingsGoal(Base):
     """Something the user is saving towards: a target amount, optionally by a date.
 

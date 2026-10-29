@@ -12,10 +12,16 @@ that belong to one receipt are one entry (the same item twice on one receipt is 
 a real receipt counts: expenses typed in by hand are filed under derived bills too, but those group
 unrelated entries, so the caller says which bills are receipts (`receipt_bills`).
 
+A user can say a group of lookalike entries is not a duplicate. That is remembered under the group's
+`duplicate_key` (a hash of its day, amount, description, shop and category) together with how many
+entries it had. The group stays out of the list while it still has no more entries than that; one
+more lookalike entry brings it back (marked `was_dismissed`), because that one is new.
+
 Pure functions on plain dicts.
 """
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import date, timedelta
@@ -96,15 +102,26 @@ def unusual_expenses(
     return {"recent_days": recent_days, "checked": checked, "items": found[:top], "total_found": len(found)}
 
 
+def duplicate_key(day: date, amount: Decimal, description_key: str, shop_key: str, category_key: str) -> str:
+    """A fixed-length name for a group of lookalike entries; the same entries always give the same key."""
+    text = "|".join([day.isoformat(), str(quantize_money(amount)), description_key, shop_key, category_key])
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def possible_duplicates(
     expenses: list[dict],
     today: date | None = None,
     recent_days: int = DEFAULT_DUPLICATE_DAYS,
     top: int = 10,
     receipt_bills: Callable[[set], set] | None = None,
+    dismissed: dict[str, int] | None = None,
 ) -> dict:
     """`receipt_bills` takes the bill ids found on lookalike entries and returns those that are real
-    receipts. Without it every bill counts as a receipt."""
+    receipts. Without it every bill counts as a receipt.
+
+    `dismissed` maps a `duplicate_key` to the number of entries the group had when the user said it
+    is not a duplicate. Such groups come back under `dismissed` instead of `items`."""
+    dismissed = dismissed or {}
     today = today or date.today()
     window_start = today - timedelta(days=recent_days)
 
@@ -122,14 +139,17 @@ def possible_duplicates(
     bill_ids = {r["source_bill_id"] for rows in lookalikes.values() for r in rows if r.get("source_bill_id") is not None}
     receipts = (receipt_bills(bill_ids) if receipt_bills is not None else bill_ids) if bill_ids else set()
 
-    found = []
-    for (day, amount, _d, _s, _c), rows in lookalikes.items():
+    found, hidden = [], []
+    for (day, amount, description, shop, category), rows in lookalikes.items():
         # Lines of one receipt are one entry; every other entry stands alone.
         entries = {("bill", r["source_bill_id"]) if r.get("source_bill_id") in receipts else ("row", r.get("id")) for r in rows}
         if len(entries) < 2:
             continue
         first = rows[0]
-        found.append({
+        key = duplicate_key(day, amount, description, shop, category)
+        said = dismissed.get(key)
+        item = {
+            "key": key,
             "date": day.isoformat(),
             "amount": amount,
             "description": clean_name(first.get("description")),
@@ -137,10 +157,22 @@ def possible_duplicates(
             "category": _category(first),
             "count": len(entries),
             "ids": sorted(r["id"] for r in rows if r.get("id") is not None),
-        })
+        }
+        if said is not None and said >= len(entries):
+            hidden.append(item)
+        else:
+            found.append({**item, "was_dismissed": said is not None})
 
-    found.sort(key=lambda i: (i["date"], i["amount"]), reverse=True)
-    return {"recent_days": recent_days, "items": found[:top], "total_found": len(found)}
+    newest_first = lambda i: (i["date"], i["amount"])  # noqa: E731
+    found.sort(key=newest_first, reverse=True)
+    hidden.sort(key=newest_first, reverse=True)
+    return {
+        "recent_days": recent_days,
+        "items": found[:top],
+        "total_found": len(found),
+        "dismissed": hidden[:top],
+        "dismissed_total": len(hidden),
+    }
 
 
-__all__ = ["unusual_expenses", "possible_duplicates"]
+__all__ = ["unusual_expenses", "possible_duplicates", "duplicate_key"]
