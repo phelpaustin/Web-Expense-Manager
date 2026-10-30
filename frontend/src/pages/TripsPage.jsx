@@ -385,6 +385,11 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                                   {e.date} · {e.description || 'Expense'} · {e.amount} {e.currency}
                                 </li>
                               ))}
+                              {(detail.settlement.unassigned_expenses || []).map((e) => (
+                                <li key={`unassigned-${e.id}`}>
+                                  {e.date} · {e.description || 'Expense'} · {e.amount} {e.currency} · payer unavailable
+                                </li>
+                              ))}
                             </ul>
                           </div>
                         </>

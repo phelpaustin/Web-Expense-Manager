@@ -9,7 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_user_group_ids, is_group_member, require_role_at_least
+from app.api.deps import (
+    get_current_user,
+    get_user_group_ids,
+    is_group_member,
+    lock_imports_for_user,
+    require_role_at_least,
+)
 from app.api.options import (
     convert_rows,
     default_currency_for,
@@ -339,14 +345,36 @@ def _get_visible_or_404(db: Session, expense_id: int, user_id: int) -> models.Ex
     return expense
 
 
+def _require_bill_item_currency(db: Session, expense: models.Expense, currency: str) -> None:
+    """Keep manually managed and explicit bills in one currency.
+
+    Implicit bills made from ordinary expenses are regrouped by bill_sync when an
+    item's currency changes, so only those may move to a different currency.
+    """
+    if expense.source_bill_id is None:
+        return
+    bill = db.get(models.PendingBill, expense.source_bill_id)
+    if bill is None:
+        return
+    if bill.origin == bill_sync.ORIGIN_EXPENSES and not bill_sync.is_explicit(bill.origin_key):
+        return
+    if currency != bill.currency:
+        raise HTTPException(status_code=422, detail=f"Items on this bill must use {bill.currency}")
+
+
 def _require_group_write_access(
-    db: Session, group_id: int | None, user_id: int, expense_owner_id: int | None = None
+    db: Session,
+    group_id: int | None,
+    user_id: int,
+    expense_owner_id: int | None = None,
+    *,
+    existing_expense: bool = False,
 ) -> None:
     """Owners/admins may write any expense in the space; editors only their own; viewers none."""
     if group_id is None:
         return
     member = require_role_at_least(db, group_id, user_id, "editor", "Viewers can't add or edit expenses in this space")
-    if member.role == "editor" and expense_owner_id is not None and expense_owner_id != user_id:
+    if member.role == "editor" and existing_expense and expense_owner_id != user_id:
         raise HTTPException(status_code=403, detail="Editors can only edit or delete their own expenses in this space")
 
 
@@ -417,6 +445,12 @@ def list_expenses(
     if creator_ids:
         for u in db.query(models.User).filter(models.User.id.in_(creator_ids)).all():
             creators[u.id] = u.name or u.email
+    group_roles = {
+        group_id: role
+        for group_id, role in db.query(models.GroupMember.group_id, models.GroupMember.role)
+        .filter(models.GroupMember.user_id == user.id)
+        .all()
+    }
 
     items = [
         {
@@ -439,6 +473,12 @@ def list_expenses(
             "created_by": (
                 (creators.get(r.user_id) or "Deleted user") if r.user_id is not None else "Deleted user"
             ) if r.group_id is not None else None,
+            "can_edit": (
+                r.user_id == user.id
+                if r.group_id is None
+                else group_roles.get(r.group_id) in ("owner", "admin")
+                or (group_roles.get(r.group_id) == "editor" and r.user_id == user.id)
+            ),
         }
         for r in rows
     ]
@@ -493,6 +533,17 @@ def create_expenses_bulk(
         )
         if bill is None:
             raise HTTPException(status_code=404, detail="Bill not found")
+        item_currencies = {item.currency or bill.currency for item in payload.items}
+        can_set_bill_currency = (
+            (bill.origin == bill_sync.ORIGIN_EXPENSES and payload.replace)
+            or bill.amount is None
+            or bill.amount <= 0
+        )
+        if can_set_bill_currency:
+            if len(item_currencies) != 1:
+                raise HTTPException(status_code=422, detail="All items on this bill must use the same currency")
+        elif item_currencies != {bill.currency}:
+            raise HTTPException(status_code=422, detail=f"Items on this bill must use {bill.currency}")
         allowed = ("pending", "total_only", "itemised") if payload.replace else ("pending", "total_only")
         claimed = (
             db.query(models.PendingBill)
@@ -514,7 +565,9 @@ def create_expenses_bulk(
     created: list[models.Expense] = []
     for item in payload.items:
         data = item.model_dump()
-        data["currency"] = data["currency"] or default_currency_for(db, user.id, item.group_id)
+        data["currency"] = data["currency"] or (
+            bill.currency if bill is not None else default_currency_for(db, user.id, item.group_id)
+        )
         if bill is not None:
             data["source_bill_id"] = bill.id
         expense = models.Expense(user_id=user.id, **data)
@@ -525,6 +578,7 @@ def create_expenses_bulk(
         # The user has taken over this bill's items: keep them together as one bill whatever their
         # shop/date, and let its amount follow the new items.
         bill.origin_key = bill_sync.new_explicit_key()
+        bill.currency = created[0].currency
         bill.amount = sum((e.amount for e in created), Decimal("0"))
     elif bill is not None and (bill.amount is None or bill.amount <= 0) and created:
         # A receipt uploaded with nothing filled in (amount 0, named after its file, dated the
@@ -594,9 +648,9 @@ def update_expenses_bulk(
 
     # Check every permission before changing anything.
     for expense in expenses:
-        _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
+        _require_group_write_access(db, expense.group_id, user.id, expense.user_id, existing_expense=True)
         if "group_id" in data:
-            _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
+            _require_group_write_access(db, data["group_id"], user.id, expense.user_id, existing_expense=True)
 
     bills_by_owner: dict[int, set[int]] = {}
     for expense in expenses:
@@ -677,11 +731,13 @@ def update_expense(
     user: models.User = Depends(get_current_user),
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
-    _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
+    _require_group_write_access(db, expense.group_id, user.id, expense.user_id, existing_expense=True)
     linked_bill_id, owner_id = expense.source_bill_id, expense.user_id
     data = payload.model_dump(exclude_unset=True)
+    if "currency" in data:
+        _require_bill_item_currency(db, expense, data["currency"])
     if "group_id" in data:
-        _require_group_write_access(db, data["group_id"], user.id, expense.user_id)
+        _require_group_write_access(db, data["group_id"], user.id, expense.user_id, existing_expense=True)
         if data["group_id"] != expense.group_id and "covers_from" not in data:
             data["covers_from"] = data["covers_to"] = None  # the days belonged to the old trip
     if data.get("covers_from") is not None:
@@ -708,7 +764,7 @@ def delete_expense(
     user: models.User = Depends(get_current_user),
 ):
     expense = _get_visible_or_404(db, expense_id, user.id)
-    _require_group_write_access(db, expense.group_id, user.id, expense.user_id)
+    _require_group_write_access(db, expense.group_id, user.id, expense.user_id, existing_expense=True)
     reopen_bill_id = expense.source_bill_id if expense.bill_total_only else None
     linked_bill_id = expense.source_bill_id
     owner_id = expense.user_id
@@ -772,15 +828,26 @@ def auto_categorize(
     """Fill in category (+ subcategory) for expenses currently missing one."""
     expenses = fetch_expenses(db, user.id)
     suggestions = categorizer.auto_categorize_missing(expenses)
+    editable_group_ids = {
+        group_id
+        for group_id, role in db.query(models.GroupMember.group_id, models.GroupMember.role)
+        .filter(models.GroupMember.user_id == user.id)
+        .all()
+        if role in ("owner", "admin", "editor")
+    }
+    updated = 0
     for expense_id, category, subcategory in suggestions:
         expense = db.get(models.Expense, expense_id)
-        if expense and expense.user_id == user.id:
+        if expense and expense.user_id == user.id and (
+            expense.group_id is None or expense.group_id in editable_group_ids
+        ):
             expense.category = category
             if subcategory and not expense.subcategory:
                 expense.subcategory = subcategory
             ensure_options(db, user.id, expense.category, expense.subcategory, expense.unit, expense.shop)
+            updated += 1
     db.commit()
-    return {"updated": len(suggestions)}
+    return {"updated": updated}
 
 
 
@@ -848,6 +915,10 @@ def import_expenses(
     shop_c = col_for("shop")
     brand_c = col_for("brand")
     cur_c = col_for("currency")
+
+    # Serialize against statement imports and other expense-file imports before
+    # reading history for duplicate detection. The lock is held through commit.
+    lock_imports_for_user(db, user.id)
 
     # Currency is part of expense identity: equal numeric amounts in distinct
     # currencies are not duplicates.

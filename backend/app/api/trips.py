@@ -336,18 +336,39 @@ def trip_settlement(
         ],
         currency,
     )
+    member_ids = {m["user_id"] for m in members}
+    unassigned = [
+        {
+            "id": e.id,
+            "date": e.date,
+            "description": e.description,
+            "amount": e.amount,
+            "currency": e.currency,
+        }
+        for e in expenses
+        if e.user_id not in member_ids
+    ]
 
-    if unconverted:
-        # Settlement must be exact, so don't guess: leaving these out would give a
-        # wrong "who owes whom". Say which expenses need fixing instead of erroring.
+    if unconverted or unassigned:
+        # Settlement must be exact. A missing rate or a payer who is no longer a
+        # trip member would leave an amount uncredited, so show what needs fixing.
+        reasons = []
+        if unconverted:
+            reasons.append(
+                f"{len(unconverted)} expense(s) in a currency without an exchange rate can't be included. "
+                "Change their currency to settle up."
+            )
+        if unassigned:
+            reasons.append(
+                f"{len(unassigned)} expense(s) were paid by a deleted or non-member account and can't be credited. "
+                "Ask a trip owner or admin to remove them, then recreate them with an active member recorded as payer."
+            )
         return {
             "complete": False,
             "currency": currency,
-            "message": (
-                f"{len(unconverted)} expense(s) in a currency without an exchange rate can't be included. "
-                "Change their currency to settle up."
-            ),
+            "message": " ".join(reasons),
             "unconverted_expenses": _describe_unconverted(unconverted),
+            "unassigned_expenses": _describe_unconverted(unassigned),
             "total_spent": 0,
             "share_per_person": 0,
             "per_member": [],

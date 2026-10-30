@@ -28,6 +28,17 @@ def get_current_user(
     return user
 
 
+def lock_imports_for_user(db: Session, user_id: int) -> None:
+    """Serialize imports for one user until the current transaction commits.
+
+    Import duplicate detection is based on existing rows, so acquire this lock
+    before reading that history. Both import endpoints use the same user row.
+    """
+    row = db.query(models.User.id).filter(models.User.id == user_id).with_for_update().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+
 def get_user_group_ids(db: Session, user_id: int) -> list[int]:
     """IDs of every group (household/business/...) this user belongs to."""
     rows = db.query(models.GroupMember.group_id).filter(models.GroupMember.user_id == user_id).all()

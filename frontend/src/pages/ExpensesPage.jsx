@@ -88,7 +88,12 @@ export default function ExpensesPage({
   const groupName = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.name
   const groupSpaceType = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.space_type || 'trip'
   const allSpaces = (groups || []).concat(trips || [])
-  const canEditExpense = (e) => !e.group_id || allSpaces.find((g) => g.id === e.group_id)?.role !== 'viewer'
+  const canEditExpense = (e) => {
+    if (typeof e.can_edit === 'boolean') return e.can_edit
+    if (!e.group_id) return true
+    const role = allSpaces.find((g) => g.id === e.group_id)?.role
+    return role === 'owner' || role === 'admin'
+  }
 
   // Debounce free-text search so it doesn't fire a request per keystroke.
   useEffect(() => {

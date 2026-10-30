@@ -558,6 +558,20 @@ def revert_to_total(
         raise HTTPException(status_code=409, detail="Only an itemised bill can be turned back into a total")
     if bill.amount is None or bill.amount <= 0:
         raise HTTPException(status_code=400, detail="This bill has no amount to record as a total")
+    mismatched_item = (
+        db.query(models.Expense.id)
+        .filter(
+            models.Expense.source_bill_id == bill.id,
+            models.Expense.user_id == user.id,
+            models.Expense.currency != bill.currency,
+        )
+        .first()
+    )
+    if mismatched_item is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Correct this bill's item currencies to {bill.currency} before turning it back into a total",
+        )
     claimed = (
         db.query(models.PendingBill)
         .filter(models.PendingBill.id == bill.id, models.PendingBill.status == STATUS_ITEMISED)

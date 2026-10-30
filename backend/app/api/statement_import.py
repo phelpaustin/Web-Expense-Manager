@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from app.api import bill_sync, bills as bills_api
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, lock_imports_for_user
 from app.api.expenses import _price_per_unit, fetch_expenses
 from app.api.income import fetch_income
 from app.api.options import ensure_options, get_or_create_options
@@ -127,7 +127,7 @@ def _mark_bills_already_waiting(db: Session, user: models.User, rows: list) -> N
 
 def _table_and_rows(
     db: Session, user: models.User, file: UploadFile, mapping_json: str, overrides_json: str, categories_json: str,
-    save_as: str = "expenses",
+    save_as: str = "expenses", *, lock_imports: bool = False,
 ):
     mapping = _parse_mapping(mapping_json)
     grid = _load_grid(file)
@@ -140,6 +140,10 @@ def _table_and_rows(
     overrides = _line_map(overrides_json, "overrides", {"expense", "income", "skip"})
     category_overrides = _line_map(categories_json, "categories")
     options = get_or_create_options(db, user.id)
+    if lock_imports:
+        # Acquire after parsing and ensuring options exist (which can commit on a new account),
+        # but before loading duplicate history. The lock remains held through the commit below.
+        lock_imports_for_user(db, user.id)
     # Only the person's own records: group expenses are other people's to keep.
     existing = fetch_expenses(db, user.id, scope="personal")
     rows = si.classify(
@@ -350,7 +354,9 @@ def commit(
     the person's setting says so, otherwise waiting on the Bills page). Income is saved as income either way.
     """
     save_as = _check_save_as(save_as)
-    m, table, problems, rows = _table_and_rows(db, user, file, mapping, overrides, categories, save_as)
+    m, table, problems, rows = _table_and_rows(
+        db, user, file, mapping, overrides, categories, save_as, lock_imports=True
+    )
     if problems:
         raise HTTPException(status_code=400, detail=" ".join(problems))
 

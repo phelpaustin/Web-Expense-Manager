@@ -133,7 +133,7 @@ export default function AddExpensePanel({
           onChange={(c) => setForm({ ...form, currency: c })}
           currencies={options.currencies}
           defaultCurrency={defaultCurrency}
-          disabled={billMode && billItems.length > 0}
+          disabled={billMode && (Boolean(itemisingBill) || billItems.length > 0)}
         />
         <input
           type="number"

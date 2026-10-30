@@ -120,13 +120,18 @@ def _claim(
     """Move a template's schedule forward, but only if nobody else already has.
 
     This is a compare-and-swap on ``last_applied``: the UPDATE matches only while the
-    row still holds the value this request read. Of several requests that read the
-    same state (two tabs, a retried request) exactly one gets True and may post the
-    expenses; the others get False and must post nothing. Without it each of them
-    would insert its own copy of the same expenses. The claim and the expense inserts
-    commit together, so a failure after the claim leaves no half-applied schedule.
+    row still holds the value this request read, and a claim must move that value
+    forward. Of several requests that read the same state (two tabs, a retried
+    request) exactly one gets True and may post the expenses; the others get False
+    and must post nothing. Refusing a no-op claim also makes a later retry fail when
+    ``last_applied`` already equals the requested date. The claim and the expense
+    inserts commit together, so a failure after the claim leaves no half-applied
+    schedule.
     """
     seen = template.last_applied
+    if seen == last_applied:
+        return False
+
     unchanged = (
         models.RecurringTemplate.last_applied.is_(None)
         if seen is None
@@ -257,6 +262,7 @@ def backfill_recurring(
                 amount=amount,
                 currency=t.currency,
                 price_per_unit=amount,
+                recurring_template_id=t.id,
             )
         )
     if t.last_applied is None or dates[-1] > t.last_applied:
