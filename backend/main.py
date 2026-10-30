@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -26,6 +27,14 @@ def _backfill_bills() -> None:
         logging.getLogger(__name__).warning("Bill backfill failed", exc_info=True)
 
 
+def start_backfill() -> threading.Thread:
+    """Run the catch-up in the background. It reads every user's expenses, so on a big database it
+    could hold up the first request (and a host's health check) if startup waited for it."""
+    thread = threading.Thread(target=_backfill_bills, name="bill-backfill", daemon=True)
+    thread.start()
+    return thread
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Never run in production with a weak, default or placeholder secret.
@@ -38,7 +47,7 @@ async def lifespan(app: FastAPI):
     # Apply schema migrations, then seed sample data on an empty DB.
     run_migrations()
     init_db()
-    _backfill_bills()
+    start_backfill()
     yield
 
 

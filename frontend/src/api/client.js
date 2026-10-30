@@ -588,14 +588,26 @@ export function uploadReceipt(billId, file) {
   return request(`/api/pending-bills/${billId}/receipt`, { method: 'POST', body })
 }
 
+// Opens the attached receipt in a new tab. The tab is opened first, while the click is still being
+// handled: browsers (Safari and phones above all) block a window opened after waiting for the download.
 export async function viewReceipt(billId) {
-  const token = getToken()
-  const res = await fetch(`${API_BASE}/api/pending-bills/${billId}/receipt`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) throw new Error('Could not load receipt')
-  const blob = await res.blob()
-  window.open(URL.createObjectURL(blob), '_blank')
+  const tab = window.open('', '_blank')
+  if (tab) tab.opener = null
+  try {
+    const token = getToken()
+    const res = await fetch(`${API_BASE}/api/pending-bills/${billId}/receipt`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new Error('Could not load receipt')
+    const url = URL.createObjectURL(await res.blob())
+    if (tab) tab.location.href = url
+    else window.open(url, '_blank')
+    // The tab has the file by then; keeping the blob around until the page closes would waste memory.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (err) {
+    if (tab) tab.close()
+    throw err
+  }
 }
 
 export function deleteReceipt(billId) {

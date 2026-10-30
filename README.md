@@ -158,7 +158,7 @@ Optional settings:
 - `DEMO_PASSWORD` creates a production demo account; leave it unset for normal deployments.
 - `CRON_SECRET` enables the protected `POST /api/alerts/send-digest` endpoint.
 
-To schedule the alert digest using the included GitHub Actions workflow, add repository secrets `ALERT_DIGEST_URL` (the full endpoint URL) and `CRON_SECRET` (matching the Render environment value). The workflow runs daily at 07:00 UTC and can also be started manually.
+To schedule the alert digest using the included GitHub Actions workflow, add repository secrets `ALERT_DIGEST_URL` (the full endpoint URL) and `CRON_SECRET` (matching the Render environment value). The workflow runs daily at 07:00 UTC and can also be started manually. The workflow waits for the sleeping free Render service and retries for a few minutes. GitHub stops scheduled workflows after 60 days with no commits to the repository; if digests stop, re-enable it under the Actions tab.
 
 ## API overview
 

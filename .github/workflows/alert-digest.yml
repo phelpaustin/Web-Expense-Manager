@@ -3,6 +3,11 @@ name: Send budget alert digest
 # Free alternative to a paid Render cron job: GitHub Actions calls the
 # backend's protected digest endpoint on a schedule (daily at 07:00 UTC).
 #
+# The free Render service sleeps when idle and takes up to a minute to wake, so the call waits
+# and retries (also on a 502/503 from the waking service) instead of failing the first time.
+# GitHub switches scheduled workflows off after 60 days without any commit to the repository;
+# if digests stop arriving, open the Actions tab and re-enable this workflow.
+#
 # Repo secrets required:
 #   ALERT_DIGEST_URL  e.g. https://expense-backend.onrender.com/api/alerts/send-digest
 #   CRON_SECRET       must match the backend's CRON_SECRET env var
@@ -15,6 +20,7 @@ on:
 jobs:
   send-digest:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Call send-digest endpoint
         env:
@@ -24,4 +30,6 @@ jobs:
           : "${ALERT_DIGEST_URL:?Missing GitHub Actions secret ALERT_DIGEST_URL}"
           : "${CRON_SECRET:?Missing GitHub Actions secret CRON_SECRET}"
           curl --fail-with-body --silent --show-error --request POST "$ALERT_DIGEST_URL" \
-            --header "X-Cron-Secret: $CRON_SECRET"
+            --header "X-Cron-Secret: $CRON_SECRET" \
+            --connect-timeout 30 --max-time 180 \
+            --retry 5 --retry-delay 30 --retry-all-errors

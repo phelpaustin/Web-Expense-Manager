@@ -1,18 +1,19 @@
-fastapi
-uvicorn[standard]
-pydantic>=2.0
-pydantic[email]
-pydantic-settings
-python-dotenv
+# Every direct dependency is pinned to the version the tests run against, so a deploy on Render
+# cannot pick up a new release by surprise. Update them together and run the test suite.
+fastapi==0.143.3
+uvicorn[standard]==0.54.0
+pydantic[email]==2.14.1
+pydantic-settings==2.16.0
+python-dotenv==1.2.4
 pandas==2.3.3
-openpyxl
+openpyxl==3.1.5
 sqlalchemy==2.0.52
 psycopg2-binary==2.9.12
-alembic
-bcrypt
-PyJWT
-python-multipart
-slowapi
-google-auth
-requests
+alembic==1.20.0
+bcrypt==5.0.0
+PyJWT==2.15.1
+python-multipart==0.0.32
+slowapi==0.1.10
+google-auth==2.62.0
+requests==2.34.2
 reportlab==4.5.1
