@@ -3049,6 +3049,11 @@ label.link-btn input[type='file'] {
 }
 
 /* ── Recurring costs (Insights, Overview) ─────────────────────────── */
+.recurring-cost-line {
+  font-weight: 600;
+  margin: 0.8rem 0;
+}
+
 .recurring-rises {
   margin: 0 0 0.75rem;
   padding: 0.6rem 0.8rem;

@@ -1,7 +1,9 @@
 import CurrencySelect from '../components/CurrencySelect.jsx'
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { FREQUENCIES } from '../constants.js'
 import { money } from '../format.js'
+import { fetchRecurringCosts } from '../api/client.js'
+import { headline, monthlyEquivalent } from '../recurringCosts.js'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -23,6 +25,21 @@ export default function RecurringPage({
   const [editForm, setEditForm] = useState(null)
   const [backfillForm, setBackfillForm] = useState(null)
   const [busy, setBusy] = useState(false)
+  // What the templates cost per month, from the same figures as Insights. It is an extra: if it cannot be
+  // loaded the page simply shows no cost line. Reloaded whenever the list of templates changes.
+  const [costs, setCosts] = useState(null)
+  const latestCosts = useRef(0)
+  useEffect(() => {
+    const request = ++latestCosts.current
+    fetchRecurringCosts()
+      .then((result) => {
+        if (request === latestCosts.current && result && Array.isArray(result.items)) setCosts(result)
+      })
+      .catch(() => {
+        if (request === latestCosts.current) setCosts(null)
+      })
+  }, [recurring])
+  const costById = new Map((costs ? costs.items : []).map((i) => [i.id, i]))
 
   function toggleExpand(t) {
     if (expandedId === t.id) {
@@ -127,6 +144,10 @@ export default function RecurringPage({
           return to their original day after shorter months.
         </p>
 
+        {costs && costs.count > 0 && recurring.length > 0 && (
+          <p className="recurring-cost-line" data-testid="recurring-cost-line">{headline(costs)}</p>
+        )}
+
         {recurring.some((t) => t.due) && (
           <button className="apply-due-btn" onClick={onApplyDue}>
             ⏰ Apply all due ({recurring.filter((t) => t.due).length})
@@ -155,7 +176,12 @@ export default function RecurringPage({
                     <td>{t.category}</td>
                     <td>{t.frequency}</td>
                     <td>{t.last_applied || 'Never'}</td>
-                    <td className="right">{money(t.amount, t.currency)}</td>
+                    <td className="right">
+                      {money(t.amount, t.currency)}
+                      {monthlyEquivalent(t, costById.get(t.id)) && (
+                        <div className="subtitle">{monthlyEquivalent(t, costById.get(t.id))}</div>
+                      )}
+                    </td>
                     <td className="right nowrap">
                       <button className="icon-btn" onClick={() => onApply(t.id)} title="Apply now">
                         ➕

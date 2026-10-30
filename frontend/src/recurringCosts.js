@@ -32,3 +32,10 @@ export function headline(data) {
 export function perText(frequency) {
   return { Daily: 'a day', Weekly: 'a week', 'Bi-weekly': 'every 2 weeks', Monthly: 'a month', Quarterly: 'a quarter', Yearly: 'a year' }[frequency] || frequency
 }
+
+// Under a payment that is not monthly: what it comes to a month, e.g. "about $10.00 a month".
+// Nothing for a monthly payment (the amount already says it) or one the costs do not list.
+export function monthlyEquivalent(item, cost) {
+  if (!item || !cost || item.frequency === 'Monthly') return ''
+  return `about ${money(cost.monthly)} a month`
+}
