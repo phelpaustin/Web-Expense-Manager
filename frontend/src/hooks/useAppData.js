@@ -135,6 +135,7 @@ export function useAppData() {
     setSummary(null)
     setTrends(null)
     setCategories([])
+    setCategoryMonths([])
     setBudgets([])
     setIncome([])
     setIncomeSummary(null)

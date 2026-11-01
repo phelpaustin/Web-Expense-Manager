@@ -39,7 +39,7 @@ export default function ExpenseTable({
           <th>Subcat</th>
           <th>Shop</th>
           <th>Item name</th>
-          <th>Group</th>
+          <th>Space</th>
           <th className="right">Qty</th>
           <th>Unit</th>
           <th className="right">Amount</th>

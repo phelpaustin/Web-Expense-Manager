@@ -13,6 +13,12 @@ export default function AuthScreen({ onAuthed, sessionNotice = null }) {
   const [resendBusy, setResendBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const googleBtnRef = useRef(null)
+  // The Google button's callback must always call the latest onAuthed, but changing onAuthed (a new
+  // function on every parent render) must not re-initialise the button, so it is kept in a ref.
+  const onAuthedRef = useRef(onAuthed)
+  useEffect(() => {
+    onAuthedRef.current = onAuthed
+  })
 
   // Render the Google Sign-In button (only if a client ID is configured).
   useEffect(() => {
@@ -25,7 +31,7 @@ export default function AuthScreen({ onAuthed, sessionNotice = null }) {
         callback: async (resp) => {
           try {
             await googleLogin(resp.credential)
-            onAuthed()
+            onAuthedRef.current()
           } catch (err) {
             setError(err.message)
           }
@@ -53,7 +59,7 @@ export default function AuthScreen({ onAuthed, sessionNotice = null }) {
     } else {
       document.getElementById(id).addEventListener('load', init)
     }
-  }, [mode, onAuthed])
+  }, [mode])
 
   async function handleSubmit(e) {
     e.preventDefault()

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { STATUS_COLORS } from '../constants.js'
 import { money } from '../format.js'
-import TrendMeta from '../components/TrendMeta.jsx'
+import TrendMeta, { describeChange } from '../components/TrendMeta.jsx'
 import ScopePicker from '../components/ScopePicker.jsx'
 import BudgetRiskPanel from '../components/BudgetRiskPanel.jsx'
 import { SpendingTrendChart } from '../components/Charts.jsx'
@@ -308,8 +308,8 @@ export default function DashboardPage({
             {trends.change && (
               <span>
                 vs previous month:{' '}
-                <strong className={trends.change.direction === 'up' ? 'up' : 'down'}>
-                  {trends.change.direction === 'up' ? '▲' : '▼'} {Math.abs(trends.change.pct_change)}%
+                <strong className={describeChange(trends.change).className}>
+                  {describeChange(trends.change).arrow} {describeChange(trends.change).text}
                 </strong>
               </span>
             )}

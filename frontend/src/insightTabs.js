@@ -9,7 +9,7 @@ export const INSIGHT_TABS = [
   { key: 'prices', label: 'Prices' },
 ]
 
-export const INSIGHT_TAB_KEYS = INSIGHT_TABS.map((t) => t.key)
+const INSIGHT_TAB_KEYS = INSIGHT_TABS.map((t) => t.key)
 
 // The tab an address names (?tab=shops); anything unknown opens the Overview.
 export function insightTabFrom(value) {

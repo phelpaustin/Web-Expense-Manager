@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import UnitSelect from '../UnitSelect.jsx'
 import CurrencySelect from '../CurrencySelect.jsx'
 import { TotalOnlyBadge } from '../BillStatus.jsx'
@@ -27,6 +28,7 @@ export function ExpenseRow({
   afterDelete,
   onPickTrip,
 }) {
+  const [confirming, setConfirming] = useState(false)
   if (editingId === e.id) {
     return (
       <tr key={e.id} className="editing">
@@ -199,9 +201,21 @@ export function ExpenseRow({
             <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
               ✎
             </button>
-            <button className="delete-btn" onClick={() => afterDelete(onDelete(e.id))} title="Delete">
-              ✕
-            </button>
+            {confirming ? (
+              <>
+                <span className="month-detail-confirm">Delete?</span>
+                <button className="delete-btn" onClick={() => afterDelete(onDelete(e.id))}>
+                  Yes
+                </button>
+                <button className="icon-btn" onClick={() => setConfirming(false)}>
+                  No
+                </button>
+              </>
+            ) : (
+              <button className="delete-btn" onClick={() => setConfirming(true)} title="Delete">
+                ✕
+              </button>
+            )}
           </>
         )}
       </td>

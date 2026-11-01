@@ -202,6 +202,18 @@ describe('Add by bill (a new bill, not itemising an existing one)', () => {
     expect(options).toEqual({ asBill: true })
   })
 
+  it('shows the error and keeps the items when the bill cannot be saved', async () => {
+    client.createExpensesBulk.mockRejectedValueOnce(new Error('Amount is too large'))
+    renderAt(undefined)
+    await header('Milk')
+    fireEvent.click(screen.getByRole('button', { name: /Add by bill/ }))
+    fireEvent.change(document.querySelector('#add-expense-panel input[type=date]'), { target: { value: '2026-07-21' } })
+    await addItem(12)
+    fireEvent.click(await screen.findByRole('button', { name: /Submit bill/ }))
+    await waitFor(() => expect(setError).toHaveBeenCalledWith('Amount is too large'))
+    expect((await screen.findByRole('button', { name: /Submit bill/ })).disabled).toBe(false) // items are still there to retry
+  })
+
   it('itemising an existing bill links to it instead (no second bill is made)', async () => {
     renderAt({ itemiseBill: { ...BILL, status: 'pending' } })
     await screen.findByRole('status')
@@ -803,5 +815,27 @@ describe('ExpensesPage inside Spending (embedded)', () => {
     )
     await waitFor(() => expect(client.fetchExpenses).toHaveBeenCalled())
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+  })
+})
+
+describe('deleting an expense row', () => {
+  it('needs a second click, and No leaves the expense alone', async () => {
+    renderAt(undefined)
+    await flatView()
+    const row = rowOf('Milk')
+    fireEvent.click(within(row).getByTitle('Delete'))
+    expect(client.deleteExpense).not.toHaveBeenCalled()
+    fireEvent.click(within(row).getByRole('button', { name: 'No' }))
+    expect(client.deleteExpense).not.toHaveBeenCalled()
+    expect(within(row).getByTitle('Delete')).toBeTruthy()
+  })
+
+  it('deletes after Yes', async () => {
+    renderAt(undefined)
+    await flatView()
+    const row = rowOf('Milk')
+    fireEvent.click(within(row).getByTitle('Delete'))
+    fireEvent.click(within(row).getByRole('button', { name: 'Yes' }))
+    await waitFor(() => expect(client.deleteExpense).toHaveBeenCalledWith(1))
   })
 })

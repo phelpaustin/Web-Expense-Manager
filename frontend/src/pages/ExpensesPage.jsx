@@ -548,6 +548,9 @@ export default function ExpensesPage({
         unit: 'Count',
         shop: '',
       }))
+    } catch (err) {
+      // Keep the items on screen so nothing has to be typed again, and say what went wrong.
+      onError?.(err.message)
     } finally {
       setSubmittingBill(false)
     }

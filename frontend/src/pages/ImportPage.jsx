@@ -6,6 +6,8 @@ import {
   analyzeStatement,
   assistStatement,
   commitStatement,
+  deleteImportProfile,
+  fetchImportProfiles,
   previewStatement,
   saveImportProfile,
 } from '../api/client.js'
@@ -54,6 +56,61 @@ function ColumnSelect({ label, columns, value, onChange, required }) {
         ))}
       </select>
     </label>
+  )
+}
+
+const MAX_PROFILES = 20 // the server keeps at most this many
+
+// The mappings saved under "Remember this for next time", so one that is wrong or no longer needed
+// can be removed. `refreshKey` changes when a new one is saved.
+function SavedMappings({ refreshKey, onError }) {
+  const [profiles, setProfiles] = useState(null)
+  const latest = useRef(0)
+
+  function load() {
+    const request = ++latest.current
+    return fetchImportProfiles()
+      .then((list) => {
+        if (request === latest.current) setProfiles(Array.isArray(list) ? list : [])
+      })
+      .catch((err) => {
+        if (request === latest.current) onError?.(err.message)
+      })
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
+
+  async function remove(profile) {
+    if (!window.confirm(`Forget the saved mapping "${profile.name}"?`)) return
+    try {
+      await deleteImportProfile(profile.id)
+      await load()
+    } catch (err) {
+      onError?.(err.message)
+    }
+  }
+
+  if (!profiles || profiles.length === 0) return null
+  return (
+    <section className="panel" aria-label="Saved mappings">
+      <h3>Saved mappings</h3>
+      <p className="subtitle">
+        {profiles.length} of {MAX_PROFILES} saved. A file with the same columns as one of these is set up for you.
+      </p>
+      <ul className="import-profiles">
+        {profiles.map((p) => (
+          <li key={p.id}>
+            {p.name}{' '}
+            <button type="button" className="delete-btn" aria-label={`Delete saved mapping ${p.name}`} title="Delete" onClick={() => remove(p)}>
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -209,6 +266,8 @@ function StatementImport({ onImported, onError, countBillsAsSpending = true }) {
         Open a CSV or Excel statement. The app guesses the columns, you can correct them or just tell the assistant what
         to do, and you see every row before anything is saved. Re-importing the same file adds nothing twice.
       </p>
+
+      <SavedMappings refreshKey={profileNote} onError={onError} />
 
       {result && (
         <p className="import-result" role="status">

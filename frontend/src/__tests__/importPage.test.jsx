@@ -8,6 +8,8 @@ vi.mock('../api/client.js', () => ({
   commitStatement: vi.fn(),
   assistStatement: vi.fn(),
   saveImportProfile: vi.fn(),
+  fetchImportProfiles: vi.fn(),
+  deleteImportProfile: vi.fn(),
 }))
 
 import * as api from '../api/client.js'
@@ -42,6 +44,7 @@ const PREVIEW = {
 }
 
 function setup(props = {}) {
+  if (!api.fetchImportProfiles.getMockImplementation()) api.fetchImportProfiles.mockResolvedValue([])
   const onError = vi.fn()
   const onImported = vi.fn(async () => {})
   render(
@@ -244,5 +247,31 @@ describe('statement import page', () => {
     await open({ ...ANALYSIS, profile: { id: 5, name: 'My bank' }, notes: ['Used your saved mapping “My bank”.'] })
     expect(screen.getByText('Using your saved mapping “My bank”.')).toBeTruthy()
     expect(screen.getByLabelText('Name for this mapping').value).toBe('My bank')
+  })
+})
+
+describe('saved mappings list', () => {
+  const PROFILES = [{ id: 5, name: 'My bank', signature: 'abc12345' }, { id: 6, name: 'Card', signature: 'def67890' }]
+
+  it('shows nothing when no mapping is saved', async () => {
+    api.fetchImportProfiles.mockResolvedValue([])
+    setup()
+    await waitFor(() => expect(api.fetchImportProfiles).toHaveBeenCalled())
+    expect(screen.queryByText('Saved mappings')).toBeNull()
+  })
+
+  it('lists the saved mappings and forgets one only after a confirmation', async () => {
+    api.fetchImportProfiles.mockResolvedValueOnce(PROFILES).mockResolvedValue([PROFILES[1]])
+    api.deleteImportProfile.mockResolvedValue(null)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    setup()
+    expect(await screen.findByText('2 of 20 saved.', { exact: false })).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Delete saved mapping My bank'))
+    expect(api.deleteImportProfile).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByLabelText('Delete saved mapping My bank'))
+    await waitFor(() => expect(api.deleteImportProfile).toHaveBeenCalledWith(5))
+    await waitFor(() => expect(screen.queryByLabelText('Delete saved mapping My bank')).toBeNull())
+    expect(screen.getByLabelText('Delete saved mapping Card')).toBeTruthy()
+    confirm.mockRestore()
   })
 })

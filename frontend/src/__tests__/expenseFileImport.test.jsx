@@ -10,6 +10,8 @@ vi.mock('../api/client.js', () => ({
   commitStatement: vi.fn(),
   assistStatement: vi.fn(),
   saveImportProfile: vi.fn(),
+  fetchImportProfiles: vi.fn(async () => []),
+  deleteImportProfile: vi.fn(),
 }))
 
 import * as api from '../api/client.js'

@@ -129,6 +129,7 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
   }
 
   async function handleRemoveMember(tripId, userId) {
+    if (!window.confirm('Remove this person from the trip? Their expenses on it go back to their personal list.')) return
     try {
       await removeGroupMember(tripId, userId)
       setMembers(await fetchGroupMembers(tripId))
@@ -278,7 +279,9 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                     </button>
                   )}
                   {t.role === 'owner' && (
-                    <button className="delete-btn" onClick={() => onDeleteTrip(t.id)} title="Delete trip">
+                    <button className="delete-btn" onClick={() => {
+                      if (window.confirm(`Delete the trip "${t.name}"? Everyone keeps their own expenses as personal ones.`)) onDeleteTrip(t.id)
+                    }} title="Delete trip">
                       ✕
                     </button>
                   )}

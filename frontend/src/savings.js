@@ -16,7 +16,7 @@ export function todayLocal(now = new Date()) {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-export const STATUS = {
+const STATUS = {
   reached: { label: 'Reached', tone: 'good' },
   on_track: { label: 'On track', tone: 'good' },
   behind: { label: 'Behind', tone: 'bad' },

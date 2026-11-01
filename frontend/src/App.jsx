@@ -285,6 +285,8 @@ export default function App() {
         />
         {/* Expense Spaces moved into Settings; old links and bookmarks still land there. */}
         <Route path="groups" element={<Navigate to="/settings?tab=spaces" replace />} />
+        {/* A mistyped or old address lands on the dashboard instead of an empty page. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
     </Suspense>

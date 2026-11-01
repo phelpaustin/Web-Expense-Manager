@@ -2,7 +2,7 @@
 // or a custom range. It turns the choice into the date_from / date_to the list endpoint takes.
 import { periodRange, PICK_MONTH, PICK_YEAR, monthKey } from './categoryPeriod.js'
 
-export const ANY_DATE = ''
+const ANY_DATE = ''
 export const CUSTOM_RANGE = 'custom'
 export { PICK_MONTH, PICK_YEAR }
 

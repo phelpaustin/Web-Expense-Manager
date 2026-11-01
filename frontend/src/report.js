@@ -2,7 +2,7 @@
 import { money } from './format.js'
 
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-export const CHART_CATEGORIES = 12
+const CHART_CATEGORIES = 12
 
 // The years to offer: the ones with data plus the selected one, newest first.
 export function yearChoices(years, selected) {

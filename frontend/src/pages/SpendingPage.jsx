@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 const ExpensesPage = lazy(() => import('./ExpensesPage.jsx'))
 const BillsPage = lazy(() => import('./BillsPage.jsx'))
 
-export const VIEWS = [
+const VIEWS = [
   { key: 'receipts', label: 'By receipt' },
   { key: 'items', label: 'All items' },
 ]

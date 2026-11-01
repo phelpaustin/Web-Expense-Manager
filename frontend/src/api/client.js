@@ -243,10 +243,6 @@ export function fetchSummary(scope, spaceIds) {
   return request(`/api/expenses/summary${scopeQuery(scope, spaceIds)}`)
 }
 
-export function fetchTrends(scope, spaceIds) {
-  return request(`/api/analytics/trends${scopeQuery(scope, spaceIds)}`)
-}
-
 // What explains the change in spending versus the month before. `month` is 'YYYY-MM'; leave it
 // out for the last finished month.
 export function fetchCategoryChange({ month, scope, spaceIds } = {}) {
@@ -335,28 +331,8 @@ export function fetchSpendingMix({ months = 12, scope, spaceIds } = {}) {
   return request(`/api/analytics/spending-mix?${joined}`)
 }
 
-export function fetchCategories(scope, spaceIds) {
-  return request(`/api/analytics/categories${scopeQuery(scope, spaceIds)}`)
-}
-
-export function fetchBudgetStatus(scope, spaceIds) {
-  return request(`/api/budgets/status${scopeQuery(scope, spaceIds)}`)
-}
-
-export function fetchMetrics(scope, spaceIds) {
-  return request(`/api/metrics${scopeQuery(scope, spaceIds)}`)
-}
-
 export function fetchBudgetConfig() {
   return request('/api/budgets/config')
-}
-
-export function fetchPeriodStatus(scope, spaceIds) {
-  return request(`/api/budgets/period-status${scopeQuery(scope, spaceIds)}`)
-}
-
-export function fetchAlerts() {
-  return request('/api/alerts')
 }
 
 export function setBudgetConfig(period, rollover) {
@@ -618,12 +594,15 @@ export function fetchOptions() {
   return request('/api/options')
 }
 
-export function changePassword(current_password, new_password) {
-  return request('/api/auth/change-password', {
+// Changing the password signs out every other device; the server hands back a token for this one.
+export async function changePassword(current_password, new_password) {
+  const result = await request('/api/auth/change-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ current_password, new_password }),
   })
+  if (result?.access_token) setToken(result.access_token)
+  return result
 }
 
 export function addCategory(name) {
@@ -866,18 +845,6 @@ export function autoCategorize() {
 // ── Price tracker ─────────────────────────────────────
 export function fetchPriceTrends() {
   return request('/api/analytics/price-trends')
-}
-
-export function fetchPriceShopComparison(item, unit, category) {
-  return request(
-    `/api/analytics/price-trends/shops?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}&category=${encodeURIComponent(category)}`,
-  )
-}
-
-export function fetchPriceHistory(item, unit, category) {
-  return request(
-    `/api/analytics/price-trends/history?item=${encodeURIComponent(item)}&unit=${encodeURIComponent(unit)}&category=${encodeURIComponent(category)}`,
-  )
 }
 
 // Spend, visits and relative price level per shop. `months` 0 means all time.

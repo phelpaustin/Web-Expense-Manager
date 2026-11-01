@@ -92,6 +92,7 @@ export default function GroupsPage({ groups, currencies = [], baseCurrency, onCr
   }
 
   async function handleRemove(groupId, userId) {
+    if (!window.confirm('Remove this member? Their expenses in the space go back to their personal list.')) return
     try {
       await removeGroupMember(groupId, userId)
       await loadMembers(groupId)
@@ -197,12 +198,16 @@ export default function GroupsPage({ groups, currencies = [], baseCurrency, onCr
                       <button className="ghost-btn" onClick={() => handleRename(g)}>
                         Rename
                       </button>
-                      <button className="delete-btn" onClick={() => onDeleteGroup(g.id)} title="Delete space">
+                      <button className="delete-btn" onClick={() => {
+                          if (window.confirm(`Delete the space "${g.name}"? Everyone loses access. Each person keeps their own expenses as personal ones.`)) onDeleteGroup(g.id)
+                        }} title="Delete space">
                         ✕
                       </button>
                     </>
                   ) : (
-                    <button className="ghost-btn" onClick={() => onLeaveGroup(g.id)}>
+                    <button className="ghost-btn" onClick={() => {
+                      if (window.confirm(`Leave "${g.name}"? Your expenses in it go back to your personal list.`)) onLeaveGroup(g.id)
+                    }}>
                       Leave
                     </button>
                   )}

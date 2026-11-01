@@ -44,6 +44,11 @@ function renderAt(path) {
 }
 
 describe('routes after the restructure', () => {
+  it('sends an unknown address to the dashboard instead of an empty page', async () => {
+    renderAt('/no-such-page')
+    expect(await screen.findByRole('heading', { level: 1, name: /Dashboard/ }, SLOW)).toBeTruthy()
+  })
+
   it('sends the old /groups address to the Spaces tab in Settings', async () => {
     renderAt('/groups')
     expect(await screen.findByRole('heading', { name: /New Expense Space/ }, SLOW)).toBeTruthy()

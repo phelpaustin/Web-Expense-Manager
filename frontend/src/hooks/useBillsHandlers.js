@@ -22,7 +22,7 @@ import { EXPENSE_PARTS } from './useAppData.js'
 
 const EMPTY_BILL = { date: '', shop: '', amount: '', note: '', currency: '' }
 export const DEFAULT_QUERY = { status: 'pending', q: '', date_from: '', date_to: '', sort: 'date_desc', page: 1, page_size: 25 }
-export const EMPTY_BILLS = { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } }
+const EMPTY_BILLS = { items: [], total: 0, page: 1, page_size: 25, counts: { pending: 0, total_only: 0, itemised: 0, all: 0 } }
 
 // What the Spending page's "All items" view needs to start itemising a bill.
 export function billForItemising(bill) {

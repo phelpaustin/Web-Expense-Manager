@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { INSIGHT_TABS, insightTabFrom } from '../insightTabs.js'
 import ScopePicker from '../components/ScopePicker.jsx'
+import { describeChange } from '../components/TrendMeta.jsx'
 import CategoryBreakdown from '../components/CategoryBreakdown.jsx'
 import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
 import PeriodComparePanel from '../components/PeriodComparePanel.jsx'
@@ -19,7 +20,6 @@ import MonthDetailDialog from '../components/MonthDetailDialog.jsx'
 const ShopsPage = lazy(() => import('./ShopsPage.jsx'))
 const PriceTrackerPage = lazy(() => import('./PriceTrackerPage.jsx'))
 
-export { INSIGHT_TABS }
 // Shops and Prices look at everything, so the space picker would do nothing there.
 const SCOPED = ['overview', 'forecast', 'categories', 'report', 'members']
 
@@ -128,8 +128,8 @@ export default function InsightsPage({
                 {trends.change && (
                   <span>
                     vs previous month:{' '}
-                    <strong className={trends.change.direction === 'up' ? 'up' : 'down'}>
-                      {trends.change.direction === 'up' ? '▲' : '▼'} {Math.abs(trends.change.pct_change)}%
+                    <strong className={describeChange(trends.change).className}>
+                      {describeChange(trends.change).arrow} {describeChange(trends.change).text}
                     </strong>
                   </span>
                 )}

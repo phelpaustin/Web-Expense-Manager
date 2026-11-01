@@ -1,6 +1,6 @@
 // The three states a bill moves through, plus the marker shown on the Expenses page
 // for an expense that is only a bill's total (not yet broken into items).
-export const BILL_STATUS = {
+const BILL_STATUS = {
   pending: { label: 'To itemise', hint: 'Not counted as spending yet. Record its total or itemise it.' },
   total_only: { label: 'Total only', hint: 'Counted as one expense for the whole amount. You can itemise it any time.' },
   itemised: { label: 'Itemised', hint: 'Broken down into its line items.' },
