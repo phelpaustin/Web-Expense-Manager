@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_token
@@ -33,7 +34,25 @@ def lock_imports_for_user(db: Session, user_id: int) -> None:
 
     Import duplicate detection is based on existing rows, so acquire this lock
     before reading that history. Both import endpoints use the same user row.
+
+    SQLite ignores ``SELECT FOR UPDATE``. Its imports instead start with a no-op
+    UPDATE, which takes SQLite's database-wide write reservation before the
+    duplicate-history read. Roll back first to discard the read-only snapshot
+    opened by authentication/options queries; callers must use this before
+    making any uncommitted changes.
     """
+    if db.get_bind().dialect.name == "sqlite":
+        db.rollback()
+        result = db.execute(
+            update(models.User)
+            .where(models.User.id == user_id)
+            .values(session_version=models.User.session_version)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            raise HTTPException(status_code=404, detail="User not found")
+        return
+
     row = db.query(models.User.id).filter(models.User.id == user_id).with_for_update().first()
     if row is None:
         raise HTTPException(status_code=404, detail="User not found")
