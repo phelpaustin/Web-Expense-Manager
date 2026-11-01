@@ -71,7 +71,7 @@ New password-based accounts must verify their email address before signing in. T
 
 Passwords must be at least 12 characters and fit bcrypt's 72-byte limit. Existing accounts remain verified through the email-verification migration. Google sign-in can be enabled by setting the same OAuth client ID in backend `GOOGLE_CLIENT_ID` and frontend `VITE_GOOGLE_CLIENT_ID`.
 
-Password reset links expire after 30 minutes. Access tokens expire after seven days; logging out, changing the password, or resetting it revokes existing sessions.
+Password reset links expire after 30 minutes. Access tokens expire after seven days and must carry an expiry. Logging out, changing the password, or resetting it revokes existing sessions on every device; changing the password hands the device that did it a fresh token, so it stays signed in. A failed sign-in for an unknown email takes as long as one for a wrong password, so timing does not reveal which addresses have accounts.
 
 For local email delivery, configure either Resend or SMTP in `backend/.env`:
 
@@ -203,7 +203,7 @@ Emails are case-insensitive: they are trimmed and lowercased on sign-up, sign-in
 ## Leaving or removing a member, deleting a space
 
 - When someone leaves a space or trip (or is removed), their own expenses in it go back to personal, so they stay editable and a trip settlement no longer counts payments from a person who is gone. Other members' expenses are untouched, and the leaver's mappings into that space are cleared.
-- Deleting a space keeps every member's expenses (made personal) and un-nests child spaces/trips.
+- Deleting a space keeps every member's expenses (made personal) and un-nests child spaces/trips. Expenses inside it whose owner's account was already deleted belong to nobody and are removed with the space. The app asks for confirmation before deleting or leaving a space or trip and before removing a member.
 - Migration `0020_rescue_orphaned_expenses` fixes expenses already stranded this way.
 
 ## Budget alert emails: unsubscribe
@@ -221,7 +221,7 @@ Emails are case-insensitive: they are trimmed and lowercased on sign-up, sign-in
 3. **Rules and the assistant.** A rule says "when the description or shop contains X: leave it out / treat as expense / treat as income / file under category Y" (the first matching rule wins, and *leave out* beats the others). With an Anthropic key set, you can instead type what you want ("skip transfers to my savings account", "Swish from Anna is income") and the assistant fills in the columns and rules for you to check. It only ever proposes a mapping; the preview shows exactly what it does.
 4. **Preview and import.** Every row is listed with what it will become and why. Change a row's type or category, or leave it out. Rows already in your records are recognised, so importing the same statement twice adds nothing (two identical purchases within one statement are both kept). Rows are categorised from what you called the same shop or description before, then from keyword rules.
 
-**Remember this for next time** saves the columns and rules under a name; a later file with the same column headings is then set up automatically. Up to 20 are kept per account.
+**Remember this for next time** saves the columns and rules under a name; a later file with the same column headings is then set up automatically. Up to 20 are kept per account; the **Saved mappings** list at the top of the Bank statement tab shows them and lets you delete one. Amounts are compared at two decimals, so a statement amount like 12.346 matches the 12.35 saved earlier.
 
 What the AI sees: only the column headings, about ten sample rows (cells cut to 60 characters) and your instruction. The rest of the file is read on the server and never sent. Text inside the statement cannot give the model instructions: it is passed as data, the model can only answer with a mapping, and the mapping is validated (columns must exist, rules are plain text matches). Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) on the backend to enable it; without a key the assistant box is hidden. Assistant calls are limited to 30 per hour per visitor (`RATE_LIMIT_IMPORT_AI`).
 
@@ -256,3 +256,21 @@ python -m app.scripts.migrate_receipts --sweep --delete   # remove the orphans
 ```
 
 It lists the whole bucket and compares it with the keys the `receipts` table points at. Objects younger than an hour (`--grace-minutes`) or with no usable timestamp are never touched, so an upload in progress is safe. It refuses to delete if the database references no receipts at all while the bucket has files, which usually means `DATABASE_URL` is pointing at the wrong database (`--force` overrides). It also reports receipts whose file is missing from the bucket, without changing anything. Run it without `--delete` first and read the list.
+
+## Known limitations and notes
+
+Found in a full code review and deliberately left as they are, so nobody has to rediscover them:
+
+- **Dates and time zones.** "Today", month boundaries and recurring due dates use the server's local date. Run the backend in the time zone you want months to follow (UTC on most hosts).
+- **Rate limiting is in-process.** Limits are kept in memory per worker, so they reset on restart and are not shared between workers. Behind a proxy set `TRUSTED_PROXY_COUNT` so the real client address is used.
+- **The budget digest endpoint loops over all users** in one request; fine for a small deployment, but move it to a queue before it grows.
+- **Exchange rates.** `core/fx.py` makes blocking `requests` calls and falls back to the latest stored rate when the provider is down.
+- **Option lists** (categories, units, shops) are compared exactly for shops but case-insensitively for categories, and are not capped; deleting an option whose name contains `/` relies on the client encoding it.
+- **Units.** `oz` means weight and `st` means count (pieces).
+- **Uncategorised spending** is stored and shown everywhere as `Uncategorized`.
+- **Budgets** keep the currency they were last saved in; editing one inline re-saves it in the reporting currency.
+- **Trip settlement** refuses to guess: if any expense has no payer (the payer's account was deleted) or no exchange rate it says so instead of returning a partial split.
+- **Known duplication** (harmless, left to avoid churn): the Google sign-in loader, the member add/remove handlers on the Spaces and Trips pages, and the two pagers.
+- **Accessibility.** Some add forms (Income, Recurring, Spending) rely on placeholders rather than labels; inputs there should get `aria-label`s over time.
+- **Endpoints without a screen.** `/api/analytics/trends`, `/analytics/categories`, `/budgets/status`, `/metrics`, `/budgets/period-status`, `/alerts`, `/budgets/risk` and the older `/analytics/price-trends/shops` and `/history` are covered by tests but not called by the frontend (the dashboard response carries the same data). The unused client functions were removed.
+

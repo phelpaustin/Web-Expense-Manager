@@ -3,6 +3,7 @@
 Loaded when working under `backend/`. Commands and cross-cutting rules are in the root `CLAUDE.md`.
 
 ## Map
+- Conventions: the stored/displayed category for "none" is `taxonomy.UNCATEGORIZED` (one spelling); tokens must carry `exp`; `change-password` returns a fresh `access_token`.
 - `backend/main.py` – app setup, CORS, router registration; runs Alembic migrations + seed on startup, then starts the bill catch-up (`bill_sync.backfill_all`) in a background thread so startup never waits for it. `requirements*.txt` pin every direct dependency; bump them together.
 - `backend/app/api/` – one router per area (auth, expenses, bills, groups, trips, budgets, income, recurring, options, alerts, aliases, analytics, metrics). Thin: validation, permissions, DB access.
 - `backend/app/api/dashboard.py` – ONE endpoint that returns everything the dashboard shows (summary, trends, categories, budgets, metrics, period status, alerts), loading and converting expenses once. Reuse its helpers (`summary_payload`, `trends_payload`) instead of adding another endpoint that re-scans all expenses.
