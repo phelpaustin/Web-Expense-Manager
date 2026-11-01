@@ -13,7 +13,7 @@ from decimal import Decimal
 import pandas as pd
 
 from app.logic.frame import frame
-from app.core.money import as_decimal, quantize_money
+from app.core.money import quantize_money
 
 # Sentinel key for the overall monthly budget inside the budgets dict.
 TOTAL_BUDGET_KEY = "__total_monthly__"

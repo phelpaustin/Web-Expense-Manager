@@ -31,17 +31,17 @@ from statistics import median
 from app.core.money import as_decimal, quantize_money
 from app.logic.names import clean_name, name_key
 from app.logic.price_tracker import _as_day, _months_ago_start
+from app.logic.taxonomy import UNCATEGORIZED
 
 DEFAULT_RECENT_DAYS = 30
 DEFAULT_DUPLICATE_DAYS = 60
 DEFAULT_FACTOR = 3.0
 DEFAULT_MIN_HISTORY = 8
 DEFAULT_HISTORY_MONTHS = 12
-UNCATEGORISED = "Uncategorised"
 
 
 def _category(e: dict) -> str:
-    return clean_name(e.get("category")) or UNCATEGORISED
+    return clean_name(e.get("category")) or UNCATEGORIZED
 
 
 def _quartiles(values: list[Decimal]) -> tuple[Decimal, Decimal]:

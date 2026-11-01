@@ -80,7 +80,6 @@ def remainders(days: dict[date, Decimal], align: str, today: date, drop_partial_
         current = period_of(today)
         step = lambda p: p + timedelta(days=7)
     else:
-        cut = today.day
         position = lambda d: d.day - 1
         period_of = lambda d: d.replace(day=1)
         current = period_of(today)

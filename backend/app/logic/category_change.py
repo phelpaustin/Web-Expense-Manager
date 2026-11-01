@@ -19,8 +19,8 @@ import pandas as pd
 
 from app.core.money import as_decimal, quantize_money
 from app.logic.analytics import complete_months, current_month_key
+from app.logic.taxonomy import UNCATEGORIZED
 
-UNCATEGORISED = "Uncategorised"
 DEFAULT_TOP = 8
 ZERO = quantize_money(0)
 
@@ -78,7 +78,7 @@ def _totals_by_category(expenses: list[dict], month: str, through_day: int | Non
             continue
         if through_day is not None and d.day > through_day:
             continue
-        category = str(e.get("category") or "").strip() or UNCATEGORISED
+        category = str(e.get("category") or "").strip() or UNCATEGORIZED
         sums[category] = sums.get(category, Decimal(0)) + as_decimal(e.get("amount"))
     return {c: quantize_money(v) for c, v in sums.items()}
 

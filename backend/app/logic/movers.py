@@ -18,8 +18,8 @@ from decimal import Decimal
 
 from app.core.money import as_decimal, quantize_money
 from app.logic.analytics import current_month_key
+from app.logic.taxonomy import UNCATEGORIZED
 from app.logic.category_change import (
-    UNCATEGORISED,
     _as_date,
     _month_key,
     _pct,
@@ -34,7 +34,7 @@ ZERO = quantize_money(0)
 
 
 def _category(e: dict) -> str:
-    return str(e.get("category") or "").strip() or UNCATEGORISED
+    return str(e.get("category") or "").strip() or UNCATEGORIZED
 
 
 def _shop(e: dict) -> str:

@@ -23,7 +23,6 @@ from app.api.options import (
     get_or_create_options,
     get_reporting_currency,
 )
-from app.core import fx
 from app.core.currency import normalize_currency
 from app.core.fx import normalize_convertible_currency
 from app.core.file_upload import ensure_xlsx_within_limits, read_upload_limited_sync
@@ -37,7 +36,6 @@ from app.db import models
 from app.logic import categorizer
 from app.logic.search import LIKE_ESCAPE, like_pattern
 from app.logic.taxonomy import CategoryResolver
-from app.logic import currency as currency_logic
 
 router = APIRouter()
 

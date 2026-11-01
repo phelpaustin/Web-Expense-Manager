@@ -145,4 +145,4 @@ def test_rows_with_a_bad_date_are_ignored_and_dates_may_be_text():
 
 def test_an_uncategorised_expense_has_a_category_of_its_own():
     r = run([e(1, "2026-10-01", 10, ""), e(1, "2026-10-02", 5, None)])
-    assert [(c["category"], c["total"]) for c in r["categories"]] == [("Uncategorised", D("15.00"))]
+    assert [(c["category"], c["total"]) for c in r["categories"]] == [("Uncategorized", D("15.00"))]

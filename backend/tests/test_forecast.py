@@ -434,7 +434,7 @@ def test_a_category_with_no_recent_spending_is_left_out():
 def test_blank_categories_are_grouped_as_uncategorised():
     r = run(monthly([200] * 5, start="2026-05", category=""))
 
-    assert [c["category"] for c in r["categories"]] == ["Uncategorised"]
+    assert [c["category"] for c in r["categories"]] == ["Uncategorized"]
 
 
 def test_the_result_is_explained_for_the_ui():

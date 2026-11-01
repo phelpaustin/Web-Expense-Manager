@@ -22,10 +22,10 @@ from decimal import Decimal
 from app.core.money import as_decimal, quantize_money
 from app.logic.names import clean_name, name_key
 from app.logic.price_tracker import _as_day
+from app.logic.taxonomy import UNCATEGORIZED
 
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 SHORT_MONTHS = [m[:3] for m in MONTH_NAMES]
-UNCATEGORISED = "Uncategorised"
 TOP_SHOPS = 10
 TOP_EXPENSES = 10
 
@@ -115,10 +115,10 @@ def build_report(
     else:
         elapsed_days, elapsed_months = (today - start).days + 1, (1 if month else today.month)
 
-    category_names = _display_names([e.get("category") or UNCATEGORISED for _, e, _ in rows])
+    category_names = _display_names([e.get("category") or UNCATEGORIZED for _, e, _ in rows])
     by_category: dict[str, list] = defaultdict(lambda: [Decimal(0), 0])
     for _, e, amount in rows:
-        key = name_key(e.get("category") or UNCATEGORISED)
+        key = name_key(e.get("category") or UNCATEGORIZED)
         by_category[key][0] += amount
         by_category[key][1] += 1
     categories = sorted(
@@ -146,7 +146,7 @@ def build_report(
         period_totals[i] += amount
         period_counts[i] += 1
         if not month:
-            matrix[name_key(e.get("category") or UNCATEGORISED)][day.month - 1] += amount
+            matrix[name_key(e.get("category") or UNCATEGORIZED)][day.month - 1] += amount
     periods = [
         {"key": keys[i], "label": labels[i], "total": quantize_money(period_totals[i]), "count": period_counts[i]}
         for i in range(len(keys))
@@ -184,7 +184,7 @@ def build_report(
     largest = [
         {
             "date": day.isoformat(),
-            "category": clean_name(e.get("category")) or UNCATEGORISED,
+            "category": clean_name(e.get("category")) or UNCATEGORIZED,
             "description": clean_name(e.get("description")),
             "shop": clean_name(e.get("shop")),
             "amount": quantize_money(amount),

@@ -25,6 +25,11 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode()
 
 
+# A real bcrypt hash of a throwaway string. Verifying against it when an email is unknown makes
+# a failed login cost the same as a wrong password, so response time doesn't reveal which emails exist.
+DUMMY_HASH = bcrypt.hashpw(b"not-a-real-password", bcrypt.gensalt()).decode()
+
+
 def verify_password(password: str, hashed: str) -> bool:
     try:
         validate_bcrypt_password(password)
@@ -42,7 +47,7 @@ def create_access_token(subject: str, session_version: int) -> str:
 def decode_token(token: str) -> tuple[str, int] | None:
     """Return the token's subject and session version if valid."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM], options={"require": ["exp"]})
     except jwt.PyJWTError:
         return None
     subject = payload.get("sub")
@@ -70,7 +75,7 @@ def create_reset_token(subject: str, password_reset_version: int) -> str:
 def decode_reset_token(token: str) -> tuple[str, int] | None:
     """Return the subject and reset version for a valid reset token, else None."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM], options={"require": ["exp"]})
     except jwt.PyJWTError:
         return None
     if payload.get("purpose") != "reset":
@@ -96,7 +101,7 @@ def create_email_verification_token(subject: str, verification_version: int) -> 
 def decode_email_verification_token(token: str) -> tuple[str, int] | None:
     """Return the subject and verification version for a valid token, else None."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM], options={"require": ["exp"]})
     except jwt.PyJWTError:
         return None
     if payload.get("purpose") != "verify_email":
@@ -119,7 +124,7 @@ def create_unsubscribe_token(subject: str) -> str:
 def decode_unsubscribe_token(token: str) -> str | None:
     """Return the user id (as a string) for a valid unsubscribe token, else None."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM], options={"require": ["exp"]})
     except jwt.PyJWTError:
         return None
     subject = payload.get("sub")

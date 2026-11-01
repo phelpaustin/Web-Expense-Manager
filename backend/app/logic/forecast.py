@@ -25,7 +25,8 @@ from datetime import date
 from decimal import Decimal
 
 from app.core.money import as_decimal, quantize_money
-from app.logic.category_change import UNCATEGORISED, _as_date
+from app.logic.category_change import _as_date
+from app.logic.taxonomy import UNCATEGORIZED
 from app.logic.spending_mix import find_one_offs, shift_month
 
 LEVEL = 80  # the range should contain the outcome about 80% of the time
@@ -228,7 +229,7 @@ def forecast(expenses: list[dict], today: date | None = None, top: int = DEFAULT
     if first_month > last_done:
         return {**base, "reason": "not_enough_history", "months_available": 0}
 
-    keys, n = [], 0
+    keys = []
     cursor = first_month
     while cursor <= last_done:
         keys.append(cursor.strftime("%Y-%m"))
@@ -256,7 +257,7 @@ def forecast(expenses: list[dict], today: date | None = None, top: int = DEFAULT
             one_off[m] += amount
         else:
             baseline[m] += amount
-            by_category[str(e.get("category") or "").strip() or UNCATEGORISED][m] += amount
+            by_category[str(e.get("category") or "").strip() or UNCATEGORIZED][m] += amount
 
     result = {**base, "months_available": n, "skipped_first_month": skipped_first}
     series = [float(v) for v in baseline]

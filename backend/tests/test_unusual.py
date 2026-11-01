@@ -86,7 +86,7 @@ def test_the_biggest_ratio_comes_first_and_only_the_top_are_returned():
 def test_an_uncategorised_expense_is_judged_with_the_other_uncategorised_ones():
     rows = [e(f"2026-0{1 + i % 8}-1{i % 9}", 100, category="") for i in range(10)] + [e("2026-10-10", 500, category=None)]
     [i] = run(rows)["items"]
-    assert i["category"] == "Uncategorised"
+    assert i["category"] == "Uncategorized"
 
 
 # --- possible duplicates -----------------------------------------------------------------------

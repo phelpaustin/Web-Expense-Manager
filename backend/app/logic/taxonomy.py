@@ -9,6 +9,9 @@ from __future__ import annotations
 import re
 from collections import Counter
 
+# The category an expense falls into when none is set. Stored and shown with this one spelling.
+UNCATEGORIZED = "Uncategorized"
+
 _SPACES = re.compile(r"\s+")
 
 

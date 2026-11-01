@@ -151,7 +151,7 @@ def test_blank_categories_are_grouped_as_uncategorised_and_dates_may_be_text():
 
     r = cc.category_change(rows, "2026-09", today=TODAY)
 
-    assert [(c["category"], c["before"], c["now"]) for c in r["categories"]] == [("Uncategorised", D("10.00"), D("25.56"))]
+    assert [(c["category"], c["before"], c["now"]) for c in r["categories"]] == [("Uncategorized", D("10.00"), D("25.56"))]
 
 
 def test_rounding_never_breaks_the_arithmetic():

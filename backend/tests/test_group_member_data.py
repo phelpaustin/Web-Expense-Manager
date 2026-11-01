@@ -142,3 +142,22 @@ def test_migration_0020_rescues_orphaned_expenses():
         rows = [tuple(r) for r in c.execute(sa.text("SELECT id, group_id FROM expenses ORDER BY id"))]
         assert rows == [(1, 1), (2, None), (3, None), (4, 1)]
 
+
+
+def test_deleting_a_space_also_removes_expenses_that_belong_to_nobody(client, make_user):
+    gid, (oid, oh), (mid, mh) = _group_with_member(client, make_user)
+    kept = _expense(client, oh, group_id=gid)
+    orphan = _expense(client, mh, group_id=gid)
+    db = SessionLocal()
+    try:  # what deleting the member's account leaves behind inside the space
+        db.get(models.Expense, orphan).user_id = None
+        db.commit()
+    finally:
+        db.close()
+    assert client.delete(f"/api/groups/{gid}", headers=oh).status_code == 204
+    db = SessionLocal()
+    try:
+        assert db.get(models.Expense, orphan) is None  # not left behind as a ghost row nobody can reach
+        assert db.get(models.Expense, kept).group_id is None  # real owners keep theirs
+    finally:
+        db.close()

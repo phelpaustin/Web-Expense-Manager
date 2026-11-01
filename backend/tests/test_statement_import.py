@@ -197,6 +197,13 @@ def test_duplicates_are_counted_so_identical_purchases_in_one_file_both_import()
     assert [r.status for r in rows] == ["duplicate", "duplicate"]
 
 
+def test_a_three_decimal_amount_matches_the_two_decimal_row_already_saved():
+    text = "Date,Description,Amount\n2026-09-01,Coffee,-4.506\n"
+    existing = [{"date": "2026-09-01", "description": "coffee", "amount": Decimal("4.51"), "currency": "SEK"}]
+    _, rows = _run(text, existing_expenses=existing)
+    assert rows[0].status == "duplicate"
+
+
 def test_income_duplicates_use_source_and_currency():
     text = "Date,Description,Amount\n2026-09-01,Salary,100.00\n2026-09-01,Salary,-1.00\n"
     existing = [{"date": "2026-09-01", "source": "Salary", "amount": Decimal("100.00"), "currency": "SEK"}]

@@ -12,7 +12,7 @@ from datetime import date
 import pandas as pd
 
 from app.logic.frame import frame
-from app.core.money import as_decimal, quantize_money
+from app.core.money import quantize_money
 
 def _to_frame(expenses: list[dict]) -> pd.DataFrame:
     if not expenses:

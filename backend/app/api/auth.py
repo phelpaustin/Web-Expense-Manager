@@ -15,6 +15,7 @@ from app.core.email import send_email
 from app.core.emails import NormalizedEmail, normalize_email, user_by_email
 from app.core.rate_limit import google_limit, limiter, login_limit, register_limit, sensitive_limit
 from app.core.security import (
+    DUMMY_HASH,
     create_access_token,
     create_email_verification_token,
     create_reset_token,
@@ -183,7 +184,10 @@ def register(request: Request, payload: RegisterIn, background: BackgroundTasks,
 @limiter.limit(login_limit)
 def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = user_by_email(db, form.username)
-    if not user or not verify_password(form.password, user.hashed_password):
+    if not user:
+        verify_password(form.password, DUMMY_HASH)
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    if not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.email_verified:
         raise HTTPException(status_code=403, detail="Please verify your email before signing in")
@@ -276,7 +280,8 @@ def change_password(
     user.hashed_password = hash_password(payload.new_password)
     user.session_version += 1
     db.commit()
-    return {"changed": True}
+    # The new session_version signs out every other device; hand this one a token that still works.
+    return {"changed": True, "access_token": create_access_token(str(user.id), user.session_version)}
 
 
 @router.post("/auth/forgot-password")
@@ -286,7 +291,7 @@ def forgot_password(request: Request, payload: ForgotPasswordIn, background: Bac
     user = user_by_email(db, payload.email)
     if user:
         token = create_reset_token(str(user.id), user.password_reset_version)
-        link = f"{settings.frontend_url}/reset-password?token={token}"
+        link = f"{settings.frontend_url.rstrip('/')}/reset-password?token={token}"
         background.add_task(
             send_email,
             user.email,

@@ -25,14 +25,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.money import quantize_money
 from app.core.parsing import decode_text, parse_amount
 from app.logic.categorizer import categorize_by_rules
+from app.logic.taxonomy import UNCATEGORIZED
 
 MAX_GRID_ROWS = 10_000
 MAX_COLUMNS = 60
 MAX_CELL_CHARS = 1_000
 HEADER_SCAN_ROWS = 30
-UNCATEGORIZED = "Uncategorized"
 
 Sign = Literal["negative_is_expense", "positive_is_expense"]
 DateOrder = Literal["auto", "dayfirst", "monthfirst", "ymd"]
@@ -73,10 +74,6 @@ def grid_from_dataframe(df) -> list[list[str]]:
     for record in df.itertuples(index=False, name=None):
         rows.append([_clean_cell(c) for c in record[:MAX_COLUMNS]])
     return rows
-
-
-def _width(grid: list[list[str]]) -> int:
-    return max((len(r) for r in grid), default=0)
 
 
 # ── Dates ─────────────────────────────────────────────────────────────────
@@ -373,7 +370,6 @@ def _share(cells: list[str], test) -> float:
 
 def guess_mapping(table: Table) -> tuple[Mapping, list[str]]:
     notes: list[str] = []
-    roles: dict[str, str] = {}
     by_role: dict[str, list[int]] = defaultdict(list)
     for i, label in enumerate(table.labels):
         role = _header_role(label)
@@ -463,7 +459,6 @@ def guess_mapping(table: Table) -> tuple[Mapping, list[str]]:
         sign=sign, debit=label(debit_i), credit=label(credit_i), direction=label(dir_i), category=label(cat_i),
         shop=label(shop_i), currency_column=label(cur_i), date_order=order,
     )
-    del roles
     return mapping, notes
 
 
@@ -663,10 +658,10 @@ def classify(
 
     have_expense: Counter = Counter()
     for e in existing_expenses or []:
-        have_expense[(str(e["date"]), str(e.get("description") or "").strip().lower(), Decimal(str(e["amount"])), e.get("currency") or "")] += 1
+        have_expense[(str(e["date"]), str(e.get("description") or "").strip().lower(), quantize_money(e["amount"]), e.get("currency") or "")] += 1
     have_income: Counter = Counter()
     for r in existing_income or []:
-        have_income[(str(r["date"]), str(r.get("source") or "").strip().lower(), Decimal(str(r["amount"])), r.get("currency") or "")] += 1
+        have_income[(str(r["date"]), str(r.get("source") or "").strip().lower(), quantize_money(r["amount"]), r.get("currency") or "")] += 1
     seen: Counter = Counter()
 
     order = mapping.date_order
@@ -744,7 +739,8 @@ def classify(
                 row.category = provided
             else:
                 row.category, row.subcategory, _how = suggest_category(history, row.description, row.shop)
-        key = (str(when), row.description.strip().lower(), row.amount, row.currency)
+        # Saved amounts have two decimals, so compare at two decimals or a 12.345 row never matches its saved 12.35.
+        key = (str(when), row.description.strip().lower(), quantize_money(row.amount), row.currency)
         pool = have_expense if row.kind == "expense" else have_income
         seen[(row.kind, key)] += 1
         if seen[(row.kind, key)] <= pool[key]:

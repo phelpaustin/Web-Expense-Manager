@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -287,7 +287,13 @@ def detach_member(db: Session, group_id: int, user_id: int) -> int:
 
 def cascade_delete_group(db: Session, group: models.Group) -> None:
     """Detach the group's expenses (kept, just un-tagged), un-nest any child trips/spaces,
-    clear any member's local mapping pointing at it, and remove its members/invites/self."""
+    clear any member's local mapping pointing at it, and remove its members/invites/self.
+
+    Expenses whose owner's account was deleted (user_id NULL) are removed instead: once un-tagged
+    they would belong to nobody and could never be seen or deleted again."""
+    db.query(models.Expense).filter(
+        models.Expense.group_id == group.id, models.Expense.user_id.is_(None)
+    ).delete(synchronize_session=False)
     db.query(models.Expense).filter(models.Expense.group_id == group.id).update({"group_id": None})
     db.query(models.Group).filter(models.Group.parent_group_id == group.id).update({"parent_group_id": None})
     db.query(models.GroupMember).filter(models.GroupMember.local_parent_group_id == group.id).update(

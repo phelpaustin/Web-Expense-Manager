@@ -21,7 +21,8 @@ from decimal import Decimal
 from app.core.money import as_decimal, quantize_money
 from app.logic.names import clean_name, name_key
 from app.logic.price_tracker import _as_day
-from app.logic.report import UNCATEGORISED, _display_names
+from app.logic.report import _display_names
+from app.logic.taxonomy import UNCATEGORIZED
 
 TOP_CATEGORIES = 6          # in the member-by-category table; the rest are "Other"
 MEMBER_TOP_CATEGORIES = 3   # listed under each member
@@ -65,7 +66,7 @@ def spending_by_member(
     extra = sorted({e.get("user_id") for _, e, _ in rows if e.get("user_id") is not None and e.get("user_id") not in known})
     owners = list(known) + extra + ([None] if any(e.get("user_id") is None for _, e, _ in rows) else [])
 
-    category_names = _display_names([e.get("category") or UNCATEGORISED for _, e, _ in rows])
+    category_names = _display_names([e.get("category") or UNCATEGORIZED for _, e, _ in rows])
     per_owner_total: dict = defaultdict(lambda: Decimal(0))
     per_owner_count: dict = defaultdict(int)
     per_owner_cat: dict = defaultdict(lambda: defaultdict(lambda: Decimal(0)))
@@ -73,7 +74,7 @@ def spending_by_member(
     month_owner: dict = defaultdict(lambda: defaultdict(lambda: Decimal(0)))
     for day, e, amount in rows:
         owner = e.get("user_id")
-        key = name_key(e.get("category") or UNCATEGORISED)
+        key = name_key(e.get("category") or UNCATEGORIZED)
         per_owner_total[owner] += amount
         per_owner_count[owner] += 1
         per_owner_cat[owner][key] += amount

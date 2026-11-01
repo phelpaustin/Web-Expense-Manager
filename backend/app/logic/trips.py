@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from app.core.money import quantize_money
+from app.logic.taxonomy import UNCATEGORIZED
 
 
 def trip_summary(trip: dict, expenses: list[dict]) -> dict:
     total_spent = quantize_money(sum((quantize_money(e.get("amount")) for e in expenses), quantize_money(0)))
     by_category: dict[str, object] = defaultdict(lambda: quantize_money(0))
     for e in expenses:
-        by_category[e.get("category") or "Uncategorized"] += quantize_money(e.get("amount"))
+        by_category[e.get("category") or UNCATEGORIZED] += quantize_money(e.get("amount"))
 
     budget = trip.get("budget")
     remaining = (budget - total_spent) if budget else None

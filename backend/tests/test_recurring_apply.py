@@ -162,3 +162,15 @@ def test_claim_works_for_a_never_applied_template(client, make_user):
         db.commit()
     finally:
         db.close()
+
+
+def test_running_the_same_backfill_twice_posts_each_date_once(client, make_user):
+    _, h = make_user()
+    t = client.post("/api/recurring", json={"item": "Rent", "amount": "900", "frequency": "Monthly"}, headers=h).json()
+    body = {"start_date": (TODAY() - datetime.timedelta(days=100)).isoformat(), "end_date": (TODAY() - datetime.timedelta(days=1)).isoformat()}
+    first = client.post(f"/api/recurring/{t['id']}/backfill", json=body, headers=h).json()
+    assert first["applied"] >= 3
+    again = client.post(f"/api/recurring/{t['id']}/backfill", json=body, headers=h).json()
+    assert again["applied"] == 0
+    items = client.get("/api/expenses?search=Rent", headers=h).json()["items"]
+    assert len(items) == first["applied"]

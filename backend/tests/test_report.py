@@ -58,7 +58,7 @@ def test_categories_that_differ_only_in_case_or_spacing_are_one():
 
 def test_an_expense_with_no_category_is_uncategorised():
     r = year([e("2026-02-01", 10, ""), e("2026-02-02", 5, None)])
-    assert [(c["category"], c["total"]) for c in r["categories"]] == [("Uncategorised", D("15.00"))]
+    assert [(c["category"], c["total"]) for c in r["categories"]] == [("Uncategorized", D("15.00"))]
 
 
 def test_a_year_is_split_into_12_months_and_names_its_peak():

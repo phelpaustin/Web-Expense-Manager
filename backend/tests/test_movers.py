@@ -73,7 +73,7 @@ def test_a_gap_month_in_the_history_still_has_something_to_compare_with():
 
 def test_uncategorised_gets_a_name():
     r = mv.movers([e("2026-08-01", 10, "Food"), e("2026-09-01", 50, "")], "2026-09", today=TODAY)
-    assert names(r["categories"]["new"]) == ["Uncategorised"]
+    assert names(r["categories"]["new"]) == ["Uncategorized"]
 
 
 def test_the_month_in_progress_is_compared_like_for_like():

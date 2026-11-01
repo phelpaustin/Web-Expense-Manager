@@ -247,6 +247,14 @@ def backfill_recurring(
     if payload.start_date > end:
         raise HTTPException(status_code=400, detail="start_date must not be after end_date")
     dates = rec.backfill_dates(payload.start_date, end, t.frequency)
+    # A date this template already posted is skipped, so running the same backfill twice adds nothing.
+    posted = {
+        d
+        for (d,) in db.query(models.Expense.date).filter(
+            models.Expense.recurring_template_id == t.id, models.Expense.user_id == user.id
+        )
+    }
+    dates = [d for d in dates if d not in posted]
     if not dates:
         return {"applied": 0, "item": t.item}
     if t.schedule_anchor is None:

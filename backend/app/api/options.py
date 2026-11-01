@@ -26,7 +26,7 @@ DEFAULT_CATEGORIES = [
     "Dine-Out", "Fruits", "Furnishing & Decor", "Gardening", "Groceries",
     "Household", "Ice Cream", "Juices", "Kitchen Accessories", "Masala", "Meat",
     "Oil", "Personal Care and Hygiene", "Photos", "Picnic Things", "Salads",
-    "Seafood", "Snacks", "Spices", "Spreads", "Stationary", "Toiletries", "Vegetable",
+    "Seafood", "Snacks", "Spices", "Spreads", "Stationery", "Toiletries", "Vegetable",
 ]
 
 DEFAULT_SUBCATEGORIES = {
