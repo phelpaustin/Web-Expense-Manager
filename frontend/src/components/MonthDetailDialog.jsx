@@ -12,12 +12,14 @@ import {
 const PAGE_SIZE = 200
 const MAX_PAGES = 10
 
-async function loadMonthExpenses(month, scope, spaceIds) {
-  const { from, to } = monthRange(month)
+async function loadMonthExpenses(range, scope, spaceIds, category) {
+  const { from, to } = range
   const items = []
   let total = 0
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const res = await fetchExpenses({ ...scopeFilters(scope, spaceIds), date_from: from, date_to: to, page, page_size: PAGE_SIZE })
+    const res = await fetchExpenses({
+      ...scopeFilters(scope, spaceIds), ...(category ? { category } : {}), date_from: from, date_to: to, page, page_size: PAGE_SIZE,
+    })
     items.push(...res.items)
     total = res.total
     if (res.items.length === 0 || items.length >= total) break
@@ -42,10 +44,13 @@ function Totals({ rows }) {
 
 // Every expense and every income entry of one month, opened by clicking that month on a chart.
 // Expenses can be edited or deleted here; onChanged lets the page refresh the charts behind it.
+//
+// With `category` it instead lists one category's expenses over `period` ({ from, to, title }, a
+// whole year or month of the report): no income and no month arrows, the same editing.
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
 
 export default function MonthDetailDialog({
-  month, scope, spaceIds, onClose, onChangeMonth, options, groups, trips, onChanged,
+  month, scope, spaceIds, onClose, onChangeMonth, options, groups, trips, onChanged, category = null, period = null,
 }) {
   const [state, setState] = useState({ loading: true, loaded: false, error: null, expenses: [], expenseTotal: 0, income: [] })
   const [editing, setEditing] = useState(null) // { id, form }
@@ -62,7 +67,11 @@ export default function MonthDetailDialog({
   const panelRef = useRef(null)
   const editingRef = useRef(null)
   const viewKey = useRef('')
-  const showIncome = includesIncome(scope, spaceIds)
+  const byCategory = Boolean(category)
+  const showIncome = !byCategory && includesIncome(scope, spaceIds)
+  const range = byCategory ? period : monthRange(month)
+  const heading = byCategory ? `${category} · ${period.title}` : monthTitle(month)
+  const emptyWhat = byCategory ? 'in this period' : 'this month'
   const idsKey = (spaceIds || []).join(',')
   const spaces = (groups || []).concat(trips || [])
   const opts = { categories: [], shops: [], currencies: [], ...(options || {}) }
@@ -71,7 +80,7 @@ export default function MonthDetailDialog({
   useEffect(() => {
     const request = ++latest.current
     // A new month or scope starts from a blank view; a reload after an edit keeps the rows on screen.
-    const key = `${month}|${scope}|${idsKey}|${showIncome}`
+    const key = `${month}|${category || ''}|${range.from}|${range.to}|${scope}|${idsKey}|${showIncome}`
     const fresh = key !== viewKey.current
     viewKey.current = key
     if (fresh) {
@@ -84,20 +93,20 @@ export default function MonthDetailDialog({
     }
     setState((s) => ({ ...s, loading: true, loaded: fresh ? false : s.loaded, error: null }))
     Promise.all([
-      loadMonthExpenses(month, scope, spaceIds),
+      loadMonthExpenses(range, scope, spaceIds, category),
       showIncome ? fetchIncome() : Promise.resolve([]),
     ])
       .then(([exp, inc]) => {
         if (request !== latest.current) return
         setState({
-          loading: false, loaded: true, error: null, expenses: exp.items, expenseTotal: exp.total, income: incomeInMonth(inc, month),
+          loading: false, loaded: true, error: null, expenses: exp.items, expenseTotal: exp.total, income: byCategory ? [] : incomeInMonth(inc, month),
         })
       })
       .catch((err) => {
-        if (request === latest.current) setState((s) => ({ ...s, loading: false, error: err.message || 'Could not load this month.' }))
+        if (request === latest.current) setState((s) => ({ ...s, loading: false, error: err.message || `Could not load ${emptyWhat === 'this month' ? 'this month' : 'these expenses'}.` }))
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, scope, idsKey, showIncome, reloadKey])
+  }, [month, category, range.from, range.to, scope, idsKey, showIncome, reloadKey])
 
   useEffect(() => {
     const previous = document.activeElement
@@ -335,7 +344,7 @@ export default function MonthDetailDialog({
                       )
 
   const setField = (field) => (value) => setEditing((cur) => ({ ...cur, form: { ...cur.form, [field]: value } }))
-  const canGoNext = shiftMonth(month, 1) <= currentMonthKey()
+  const canGoNext = !byCategory && shiftMonth(month, 1) <= currentMonthKey()
 
   return (
     <div className="month-detail-backdrop" onClick={onClose}>
@@ -344,18 +353,18 @@ export default function MonthDetailDialog({
         className="month-detail"
         role="dialog"
         aria-modal="true"
-        aria-label={`Expenses and income for ${monthTitle(month)}`}
+        aria-label={byCategory ? `${category} expenses for ${period.title}` : `Expenses and income for ${monthTitle(month)}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="month-detail-head">
-          <button type="button" aria-label="Previous month" onClick={() => onChangeMonth(shiftMonth(month, -1))}>‹</button>
-          <h2>{monthTitle(month)}</h2>
-          <button type="button" aria-label="Next month" disabled={!canGoNext} onClick={() => onChangeMonth(shiftMonth(month, 1))}>›</button>
+          {!byCategory && <button type="button" aria-label="Previous month" onClick={() => onChangeMonth(shiftMonth(month, -1))}>‹</button>}
+          <h2>{heading}</h2>
+          {!byCategory && <button type="button" aria-label="Next month" disabled={!canGoNext} onClick={() => onChangeMonth(shiftMonth(month, 1))}>›</button>}
           <button type="button" ref={closeRef} className="month-detail-close" aria-label="Close" onClick={onClose}>✕</button>
         </div>
 
         {loading && !loaded && <p className="subtitle">Loading…</p>}
-        {error && <p className="subtitle" role="alert">Couldn’t load this month: {error}</p>}
+        {error && <p className="subtitle" role="alert">Couldn’t load {emptyWhat === 'this month' ? 'this month' : 'these expenses'}: {error}</p>}
         {actionError && <p className="subtitle month-detail-error" role="alert">{actionError}</p>}
 
         {loaded && !error && (
@@ -413,7 +422,7 @@ export default function MonthDetailDialog({
               </div>
             )}
             {expenses.length === 0 ? (
-              <p className="subtitle">No expenses this month.</p>
+              <p className="subtitle">No expenses {emptyWhat}.</p>
             ) : (
               <div className="month-detail-scroll">
                 <table className="table" data-testid="month-expenses">
@@ -486,7 +495,7 @@ export default function MonthDetailDialog({
               <p className="subtitle">Showing the latest {expenses.length} of {expenseTotal} expenses. Use Spending to see them all.</p>
             )}
 
-            {showIncome ? (
+            {byCategory ? null : showIncome ? (
               <>
                 <h3>
                   Income ({income.length}) <Totals rows={income} />

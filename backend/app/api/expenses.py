@@ -35,7 +35,7 @@ from app.db.database import get_db
 from app.db import models
 from app.logic import categorizer
 from app.logic.search import LIKE_ESCAPE, like_pattern
-from app.logic.taxonomy import CategoryResolver
+from app.logic.taxonomy import UNCATEGORIZED, CategoryResolver
 
 router = APIRouter()
 
@@ -395,7 +395,18 @@ def _apply_list_filters(q, search, category, shop, date_from, date_to, total_onl
     """The Expenses page's search & filter, shared by the list and by "edit everything that matches"."""
     # Case does not matter: "milk" finds what was entered as "Milk" or "MILK".
     if category and category.strip():
-        q = q.filter(func.lower(models.Expense.category) == category.strip().lower())
+        wanted = category.strip().lower()
+        if wanted == UNCATEGORIZED.lower():
+            # Reports file expenses with no category under "Uncategorized", so this finds them too.
+            q = q.filter(
+                or_(
+                    func.lower(models.Expense.category) == wanted,
+                    models.Expense.category.is_(None),
+                    func.trim(models.Expense.category) == "",
+                )
+            )
+        else:
+            q = q.filter(func.lower(models.Expense.category) == wanted)
     if shop and shop.strip():
         q = q.filter(func.lower(models.Expense.shop) == shop.strip().lower())
     if date_from:

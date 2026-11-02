@@ -251,3 +251,68 @@ describe('ReportPanel', () => {
     expect(screen.getByTestId('report-title').textContent).toBe('March 2026')
   })
 })
+
+describe('opening the expenses behind a category', () => {
+  const RENT = {
+    id: 5, date: '2026-02-11', category: 'Rent', subcategory: '', description: 'Flat', shop: 'Landlord', brand: '', quantity: 1, unit: 'Count',
+    amount: 600, currency: 'USD', group_id: null, source_bill_id: null, user_id: 1, created_by: null,
+  }
+  beforeEach(() => {
+    client.fetchReport.mockResolvedValue(REPORT())
+    client.fetchExpenses.mockResolvedValue({ items: [RENT], total: 1 })
+    client.fetchIncome.mockResolvedValue([])
+    client.updateExpense.mockResolvedValue({})
+  })
+
+  it('lists that category’s expenses for the whole year, without income or month arrows', async () => {
+    show()
+    await screen.findByTestId('report-category-chart')
+    fireEvent.click(within(screen.getAllByRole('table')[0]).getByRole('button', { name: 'Rent' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe('Rent expenses for 2026')
+    expect(await within(dialog).findByText('Flat')).toBeTruthy()
+    expect(client.fetchExpenses).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'Rent', date_from: '2026-01-01', date_to: '2026-12-31' }),
+    )
+    expect(client.fetchIncome).not.toHaveBeenCalled()
+    expect(within(dialog).queryByLabelText('Previous month')).toBeNull()
+    expect(within(dialog).queryByTestId('month-income')).toBeNull()
+    expect(within(dialog).queryByText(/Income/)).toBeNull()
+  })
+
+  it('covers just that month when the report is for a month', async () => {
+    client.fetchReport.mockResolvedValue(REPORT({ kind: 'month', month: 2, label: 'February 2026', start: '2026-02-01', end: '2026-02-28' }))
+    show()
+    fireEvent.click(await screen.findByRole('button', { name: 'Month' }))
+    await screen.findByTestId('report-category-chart')
+    fireEvent.click(within(screen.getAllByRole('table')[0]).getByRole('button', { name: 'Rent' }))
+    await screen.findByRole('dialog')
+    await waitFor(() => expect(client.fetchExpenses).toHaveBeenCalled())
+    const last = client.fetchExpenses.mock.calls.at(-1)[0]
+    expect(last.category).toBe('Rent')
+    expect(last.date_from).toMatch(/^\d{4}-\d{2}-01$/)
+  })
+
+  it('lets an expense be edited there and refreshes the report behind it', async () => {
+    const onChanged = vi.fn(async () => {})
+    show({ onChanged })
+    await screen.findByTestId('report-category-chart')
+    fireEvent.click(within(screen.getAllByRole('table')[0]).getByRole('button', { name: 'Rent' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(await within(dialog).findByTitle('Edit'))
+    const amount = within(dialog).getByDisplayValue('600')
+    fireEvent.change(amount, { target: { value: '650' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save/ }))
+    await waitFor(() => expect(client.updateExpense).toHaveBeenCalledWith(5, expect.objectContaining({ amount: 650 })))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+  })
+
+  it('closes with the close button', async () => {
+    show()
+    await screen.findByTestId('report-category-chart')
+    fireEvent.click(within(screen.getAllByRole('table')[0]).getByRole('button', { name: 'Rent' }))
+    await screen.findByRole('dialog')
+    fireEvent.click(screen.getByLabelText('Close'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})

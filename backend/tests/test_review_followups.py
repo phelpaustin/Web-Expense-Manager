@@ -72,3 +72,22 @@ def test_shop_list_ignores_case_when_adding(client, make_user):
     client.post("/api/options/shop", json={"name": "ICA Maxi"}, headers=h)
     shops = client.post("/api/options/shop", json={"name": "ica maxi"}, headers=h).json()["shops"]
     assert sum(1 for s in shops if s.lower() == "ica maxi") == 1
+
+
+def test_filtering_by_uncategorized_also_finds_expenses_with_no_category(client, make_user):
+    from app.db import models
+    from app.db.database import SessionLocal
+
+    uid, h = make_user()
+    named = client.post("/api/expenses", json={"date": "2026-03-01", "category": "Uncategorized", "amount": 5}, headers=h).json()["id"]
+    blank = client.post("/api/expenses", json={"date": "2026-03-02", "category": "Food", "amount": 6}, headers=h).json()["id"]
+    client.post("/api/expenses", json={"date": "2026-03-03", "category": "Food", "amount": 7}, headers=h)
+    db = SessionLocal()
+    try:
+        db.get(models.Expense, blank).category = ""
+        db.commit()
+    finally:
+        db.close()
+    ids = {e["id"] for e in client.get("/api/expenses?category=Uncategorized", headers=h).json()["items"]}
+    assert ids == {named, blank}
+    assert len(client.get("/api/expenses?category=Food", headers=h).json()["items"]) == 1

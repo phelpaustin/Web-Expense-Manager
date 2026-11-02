@@ -4,6 +4,8 @@ import { money } from '../format.js'
 import { downloadReport, fetchReport } from '../api/client.js'
 import { useMediaQuery } from '../hooks/useMediaQuery.js'
 import { PHONE_QUERY } from './MobileNav.jsx'
+import MonthDetailDialog from './MonthDetailDialog.jsx'
+import { monthRange } from '../monthDetail.js'
 import {
   MONTH_NAMES, categoryChartHeight, changeDirection, changeText, chartCategories, describeCategoryChart, describePeriodChart,
   periodChartRows, summaryText, tickLabel, yearChoices,
@@ -28,7 +30,7 @@ function AmountTip({ active, payload }) {
 
 // A report for a whole year or one month: totals, spending by category (chart and table), spending over
 // the period, top shops and the largest expenses, with the same report as an Excel or PDF download.
-export default function ReportPanel({ scope, spaceIds, refreshKey }) {
+export default function ReportPanel({ scope, spaceIds, refreshKey, options, groups, trips, onChanged }) {
   const phone = useMediaQuery(PHONE_QUERY)
   const now = new Date()
   const [kind, setKind] = useState('year')
@@ -38,6 +40,7 @@ export default function ReportPanel({ scope, spaceIds, refreshKey }) {
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(null)
   const [downloadError, setDownloadError] = useState(null)
+  const [drill, setDrill] = useState(null) // { category, period } while a category's expenses are open
   const latest = useRef(0)
   const idsKey = (spaceIds || []).join(',')
   const monthArg = kind === 'month' ? month : undefined
@@ -56,6 +59,14 @@ export default function ReportPanel({ scope, spaceIds, refreshKey }) {
     // spaceIds is a fresh array each render; idsKey stands for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, monthArg, scope, idsKey, refreshKey])
+
+  // The expenses behind a category of the report: the same period the report covers.
+  function openCategory(category) {
+    if (!category) return
+    const { from, to } =
+      kind === 'month' ? monthRange(`${year}-${String(month).padStart(2, '0')}`) : { from: `${year}-01-01`, to: `${year}-12-31` }
+    setDrill({ category, period: { from, to, title: data?.label || (kind === 'month' ? `${year}-${month}` : String(year)) } })
+  }
 
   function download(format) {
     setBusy(format)
@@ -159,7 +170,17 @@ export default function ReportPanel({ scope, spaceIds, refreshKey }) {
           <h2>🍰 Spending by category</h2>
           <div data-testid="report-category-chart" role="img" aria-label={describeCategoryChart(rows)}>
             <ResponsiveContainer width="100%" height={categoryChartHeight(rows)}>
-              <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 90, left: 0, bottom: 4 }}>
+              <BarChart
+                data={rows}
+                layout="vertical"
+                margin={{ top: 4, right: 90, left: 0, bottom: 4 }}
+                style={{ cursor: 'pointer' }}
+                onClick={(state) => {
+                  // Recharts 3 reports the clicked position as an index, not the row.
+                  const row = rows[Number(state?.activeTooltipIndex)]
+                  if (row && !row.other) openCategory(row.name)
+                }}
+              >
                 <XAxis type="number" hide />
                 <YAxis type="category" dataKey="name" width={110} tickLine={false} {...axis} />
                 <Tooltip content={<AmountTip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
@@ -172,6 +193,7 @@ export default function ReportPanel({ scope, spaceIds, refreshKey }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <p className="chart-hint">Click a category to see its expenses and edit them.</p>
           <table className="table">
             <thead>
               <tr>
@@ -184,7 +206,11 @@ export default function ReportPanel({ scope, spaceIds, refreshKey }) {
             <tbody>
               {data.categories.map((c) => (
                 <tr key={c.category}>
-                  <td>{c.category}</td>
+                  <td>
+                    <button type="button" className="link-btn" onClick={() => openCategory(c.category)} title="Show these expenses">
+                      {c.category}
+                    </button>
+                  </td>
                   <td className="right">{money(c.total)}</td>
                   <td className="right">{c.share_pct}%</td>
                   <td className="right">{c.count}</td>
@@ -275,6 +301,19 @@ export default function ReportPanel({ scope, spaceIds, refreshKey }) {
         </section>
       )}
       {error && <p className="subtitle">Couldn’t refresh: {error}</p>}
+      {drill && (
+        <MonthDetailDialog
+          category={drill.category}
+          period={drill.period}
+          scope={scope}
+          spaceIds={spaceIds}
+          onClose={() => setDrill(null)}
+          options={options}
+          groups={groups}
+          trips={trips}
+          onChanged={onChanged}
+        />
+      )}
     </>
   )
 }

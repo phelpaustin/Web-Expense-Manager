@@ -193,6 +193,10 @@ export default function InsightsPage({
           scope={dashboardScope}
           spaceIds={dashboardSpaceIds}
           refreshKey={trends}
+          options={options}
+          groups={groups}
+          trips={trips}
+          onChanged={onExpensesChanged}
         />
       )}
 
