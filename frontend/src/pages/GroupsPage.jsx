@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import Invitations from '../components/Invitations.jsx'
 import {
@@ -38,29 +38,34 @@ export default function GroupsPage({ groups, currencies = [], baseCurrency, onCr
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('editor')
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const latestMembers = useRef(0) // only the newest members request may update the list
 
   async function handleCreate(e) {
     e.preventDefault()
     if (!name.trim()) return
-    await onCreateGroup(name.trim(), spaceType, currency)
+    if ((await onCreateGroup(name.trim(), spaceType, currency)) === false) return
     setName('')
     setSpaceType('custom')
     setCurrency('')
   }
 
   async function loadMembers(groupId) {
+    const request = ++latestMembers.current
     setLoadingMembers(true)
     try {
-      setMembers(await fetchGroupMembers(groupId))
+      const list = await fetchGroupMembers(groupId)
+      if (request === latestMembers.current) setMembers(list)
     } catch (err) {
-      onError(err.message)
+      if (request === latestMembers.current) onError(err.message)
     } finally {
-      setLoadingMembers(false)
+      if (request === latestMembers.current) setLoadingMembers(false)
     }
   }
 
   function toggleExpand(group) {
     if (expandedId === group.id) {
+      latestMembers.current += 1
+      setLoadingMembers(false)
       setExpandedId(null)
       setMembers([])
       return

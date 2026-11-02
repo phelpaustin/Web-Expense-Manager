@@ -8,6 +8,7 @@ export default function ExpensePager({ setPage, pageSize, setPageSize, total, to
       </span>
       <div className="pagination-controls">
         <select
+          aria-label="Items per page"
           value={pageSize}
           onChange={(e) => {
             setPageSize(Number(e.target.value))

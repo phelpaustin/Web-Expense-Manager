@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('../api/client.js', () => ({
   fetchTripSummary: vi.fn(async () => ({ unconverted_count: 0, total_spent: 0, currency: 'SEK', budget: null, remaining: null, expense_count: 0, by_category: {} })),
@@ -45,5 +45,29 @@ describe('deleting a trip', () => {
     show()
     fireEvent.click(screen.getByTitle('Delete trip'))
     expect(onDeleteTrip).toHaveBeenCalledWith(7)
+  })
+})
+
+describe('creating a trip', () => {
+  const fill = () => {
+    fireEvent.change(screen.getByPlaceholderText('Trip name'), { target: { value: 'Lisbon' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add trip|Create|Save/i }))
+  }
+
+  it('defaults the currency to the base currency and sends none, so the server picks it', async () => {
+    const onAddTrip = vi.fn(async () => true)
+    render(<TripsPage trips={[]} groups={[]} currencies={['EUR', 'SEK']} baseCurrency="EUR" onAddTrip={onAddTrip} onUpdateTrip={vi.fn()} onDeleteTrip={vi.fn()} onRefresh={vi.fn()} onError={vi.fn()} />)
+    expect(screen.getByTitle('Currency of this trip').textContent).toContain('Default (EUR)')
+    fill()
+    await waitFor(() => expect(onAddTrip).toHaveBeenCalled())
+    expect(onAddTrip.mock.calls[0][0].currency).toBeUndefined()
+  })
+
+  it('keeps what was typed when the trip could not be created', async () => {
+    const onAddTrip = vi.fn(async () => false)
+    render(<TripsPage trips={[]} groups={[]} onAddTrip={onAddTrip} onUpdateTrip={vi.fn()} onDeleteTrip={vi.fn()} onRefresh={vi.fn()} onError={vi.fn()} />)
+    fill()
+    await waitFor(() => expect(onAddTrip).toHaveBeenCalled())
+    expect(screen.getByPlaceholderText('Trip name').value).toBe('Lisbon')
   })
 })

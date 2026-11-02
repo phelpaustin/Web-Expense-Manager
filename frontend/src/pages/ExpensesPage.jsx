@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { money } from '../format.js'
 import { EMPTY_DATE_FILTER, datesFor } from '../datePeriod.js'
@@ -101,7 +101,11 @@ export default function ExpensesPage({
     return () => clearTimeout(handle)
   }, [search])
 
+  // Only the newest request may update the table, so a slow earlier answer (an old filter or page)
+  // can't overwrite a newer one.
+  const latestFetch = useRef(0)
   const refetch = useCallback(() => {
+    const request = ++latestFetch.current
     setLoadingExpenses(true)
     return fetchExpenses({
       scope: filterGroup,
@@ -115,11 +119,16 @@ export default function ExpensesPage({
       page_size: pageSize,
     })
       .then((res) => {
+        if (request !== latestFetch.current) return
         setPageExpenses(res.items)
         setTotal(res.total)
       })
-      .catch((err) => onError?.(err.message))
-      .finally(() => setLoadingExpenses(false))
+      .catch((err) => {
+        if (request === latestFetch.current) onError?.(err.message)
+      })
+      .finally(() => {
+        if (request === latestFetch.current) setLoadingExpenses(false)
+      })
   }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, filterTotalOnly, page, pageSize, onError])
 
   // Fetch the current page whenever filters/pagination change (and once on mount).

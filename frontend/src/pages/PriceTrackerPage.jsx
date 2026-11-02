@@ -49,7 +49,7 @@ export default function PriceTrackerPage({ onError, embedded = false }) {
       {!embedded && <h1 className="page-title">📈 Price tracker</h1>}
       <p className="subtitle">
         See how prices for items you've bought more than once have changed over time, and compare shops. Amounts are
-        converted to your base currency. Prices are compared across purchases of the same item and category, in units
+        converted to your display currency. Prices are compared across purchases of the same item and category, in units
         of the same kind: kg and g are converted to a price per kg, litres and ml to a price per litre. A toothpaste
         bought as "1 Count" is still tracked separately from one logged in "kg" or "litre", since those are unrelated
         numbers. Names that differ only by case or spacing count as the same item; different names ("Milk" and "Arla

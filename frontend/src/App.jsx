@@ -248,6 +248,8 @@ export default function App() {
             <TripsPage
               trips={data.trips}
               groups={data.groups}
+              currencies={data.options.currencies}
+              baseCurrency={data.options.base_currency}
               onAddTrip={tripHandlers.handleAddTrip}
               onUpdateTrip={tripHandlers.handleUpdateTrip}
               onDeleteTrip={tripHandlers.handleDeleteTrip}

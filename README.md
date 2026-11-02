@@ -271,6 +271,6 @@ Found in a full code review and deliberately left as they are, so nobody has to 
 - **Budgets** keep the currency they were last saved in; editing one inline re-saves it in the reporting currency.
 - **Trip settlement** refuses to guess: if any expense has no payer (the payer's account was deleted) or no exchange rate it says so instead of returning a partial split.
 - **Known duplication** (harmless, left to avoid churn): the Google sign-in loader, the member add/remove handlers on the Spaces and Trips pages, and the two pagers.
-- **Accessibility.** Some add forms (Income, Recurring, Spending) rely on placeholders rather than labels; inputs there should get `aria-label`s over time.
+- **Accessibility.** The Income form and the Spending filters have `aria-label`s; the Recurring and Bills add forms still rely on placeholders and should get them too.
 - **Endpoints without a screen.** `/api/analytics/trends`, `/analytics/categories`, `/budgets/status`, `/metrics`, `/budgets/period-status`, `/alerts`, `/budgets/risk` and the older `/analytics/price-trends/shops` and `/history` are covered by tests but not called by the frontend (the dashboard response carries the same data). The unused client functions were removed.
 

@@ -131,7 +131,7 @@ export default function CategoryChangePanel({ scope, spaceIds, refreshKey }) {
                   </td>
                   <td className="right">{money(r.before)}</td>
                   <td className="right">{money(r.now)}</td>
-                  <td className={`right ${Number(r.change) > 0 ? 'up' : 'down'}`}>
+                  <td className={`right ${Number(r.change) > 0 ? 'up' : Number(r.change) < 0 ? 'down' : ''}`}>
                     {signedMoney(r.change)}
                     {r.pct_change != null && ` (${r.pct_change > 0 ? '+' : ''}${r.pct_change}%)`}
                   </td>

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import CurrencySelect from '../components/CurrencySelect.jsx'
 import { money } from '../format.js'
 import { dayList } from '../tripDays.js'
 import DaysCell from '../components/trips/DaysCell.jsx'
@@ -30,12 +31,12 @@ const EMPTY_TRIP = {
   start_date: '',
   end_date: '',
   budget: '',
-  currency: 'SEK',
+  currency: '', // empty = the server picks the space's or the user's base currency
   status: 'Planned',
   parent_group_id: '',
 }
 
-export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDeleteTrip, onRefresh, onError }) {
+export default function TripsPage({ trips, groups, currencies = [], baseCurrency, onAddTrip, onUpdateTrip, onDeleteTrip, onRefresh, onError }) {
   const [form, setForm] = useState(EMPTY_TRIP)
   const [expandedId, setExpandedId] = useState(null)
   const [detail, setDetail] = useState(null)
@@ -47,23 +48,25 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
   const [localParent, setLocalParent] = useState('')
   const [view, setView] = useState('list') // 'list' or 'days'
   const [editingTripId, setEditingTripId] = useState(null)
+  const latestDetail = useRef(0) // only the newest detail request may update the open card
 
   async function handleSubmit(e) {
     e.preventDefault()
-    await onAddTrip({
+    const created = await onAddTrip({
       name: form.name,
       destination: form.destination,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
       budget: form.budget ? parseFloat(form.budget) : null,
-      currency: form.currency || 'SEK',
+      currency: form.currency || undefined,
       status: form.status,
       parent_group_id: form.parent_group_id ? parseInt(form.parent_group_id, 10) : null,
     })
-    setForm(EMPTY_TRIP)
+    if (created !== false) setForm(EMPTY_TRIP)
   }
 
   async function loadDetail(trip) {
+    const request = ++latestDetail.current
     setLoadingDetail(true)
     try {
       const [summary, expenses, mem, settlement] = await Promise.all([
@@ -72,19 +75,22 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
         fetchGroupMembers(trip.id),
         fetchTripSettlement(trip.id),
       ])
+      if (request !== latestDetail.current) return
       setDetail({ summary, expenses, settlement })
       setMembers(mem)
       setLocalName(trip.local_name || '')
       setLocalParent(trip.local_parent_group_id ? String(trip.local_parent_group_id) : '')
     } catch (err) {
-      onError(err.message)
+      if (request === latestDetail.current) onError(err.message)
     } finally {
-      setLoadingDetail(false)
+      if (request === latestDetail.current) setLoadingDetail(false)
     }
   }
 
   function toggleExpand(trip) {
     if (expandedId === trip.id) {
+      latestDetail.current += 1 // a request still in flight must not reopen what was just closed
+      setLoadingDetail(false)
       setExpandedId(null)
       setDetail(null)
       setMembers([])
@@ -204,12 +210,12 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
             value={form.budget}
             onChange={(e) => setForm({ ...form, budget: e.target.value })}
           />
-          <input
-            type="text"
-            className="unit-input"
-            placeholder="Cur"
+          <CurrencySelect
             value={form.currency}
-            onChange={(e) => setForm({ ...form, currency: e.target.value })}
+            onChange={(c) => setForm({ ...form, currency: c })}
+            currencies={currencies}
+            defaultCurrency={baseCurrency}
+            title="Currency of this trip"
           />
           <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             {STATUSES.map((s) => (
@@ -301,8 +307,8 @@ export default function TripsPage({ trips, groups, onAddTrip, onUpdateTrip, onDe
                         <div className="auth-error" role="alert">
                           {detail.summary.unconverted_count} expense{detail.summary.unconverted_count === 1 ? '' : 's'} in a
                           currency without an exchange rate {detail.summary.unconverted_count === 1 ? 'is' : 'are'} left
-                          out of these totals. Edit {detail.summary.unconverted_count === 1 ? 'it' : 'them'} on the Expenses
-                          page and choose a supported currency.
+                          out of these totals. Edit {detail.summary.unconverted_count === 1 ? 'it' : 'them'} under Spending
+                          (All items) and choose a supported currency.
                         </div>
                       )}
                       <div className="trip-summary-row">

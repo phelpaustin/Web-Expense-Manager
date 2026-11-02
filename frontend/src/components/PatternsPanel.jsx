@@ -12,6 +12,7 @@ export default function PatternsPanel({ scope, spaceIds, refreshKey }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const latest = useRef(0)
+  const idsKey = (spaceIds || []).join(',')
 
   useEffect(() => {
     const request = ++latest.current
@@ -24,9 +25,7 @@ export default function PatternsPanel({ scope, spaceIds, refreshKey }) {
       .catch((err) => {
         if (request === latest.current) setError(err.message)
       })
-    // spaceIds is a fresh array each render; the scope key in the parent remounts on a real change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [months, scope, refreshKey])
+  }, [months, scope, idsKey, refreshKey])
 
   const heading = (
     <div className="period-header">

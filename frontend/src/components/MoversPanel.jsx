@@ -12,13 +12,14 @@ const GROUPS = [
 
 function Row({ row, kind }) {
   const up = Number(row.change) > 0
+  const down = Number(row.change) < 0
   return (
     <li className="mover-row">
       <span className="mover-name">{row.name}</span>
       {kind === 'new' ? (
         <span className="mover-change">{money(row.now)}</span>
       ) : (
-        <span className={`mover-change ${up ? 'up' : 'down'}`}>
+        <span className={`mover-change ${up ? 'up' : down ? 'down' : ''}`}>
           {row.status === 'stopped' ? `none this month (${signedMoney(row.change)})` : signedMoney(row.change)}
           {row.status !== 'stopped' && pctText(row) && ` (${pctText(row)})`}
         </span>

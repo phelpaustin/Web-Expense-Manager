@@ -38,12 +38,14 @@ export default function IncomePage({
         <form className="add-form" onSubmit={onAddIncome}>
           <input
             type="date"
+            aria-label="Date"
             required
             value={incomeForm.date}
             onChange={(e) => setIncomeForm({ ...incomeForm, date: e.target.value })}
           />
           <input
             type="text"
+            aria-label="Source"
             placeholder="Source (e.g. Salary)"
             required
             value={incomeForm.source}
@@ -51,6 +53,7 @@ export default function IncomePage({
           />
           <input
             type="text"
+            aria-label="Note"
             placeholder="Note (optional)"
             value={incomeForm.note}
             onChange={(e) => setIncomeForm({ ...incomeForm, note: e.target.value })}
@@ -59,6 +62,7 @@ export default function IncomePage({
             type="number"
             step="0.01"
             min="0.01"
+            aria-label="Amount"
             placeholder="Amount"
             required
             value={incomeForm.amount}
@@ -94,7 +98,7 @@ export default function IncomePage({
                   <td>{i.note}</td>
                   <td className="right">{money(i.amount, i.currency)}</td>
                   <td className="right">
-                    <button className="delete-btn" onClick={() => onDeleteIncome(i.id)} title="Delete">
+                    <button className="delete-btn" onClick={() => onDeleteIncome(i.id)} title="Delete" aria-label={`Delete income ${i.source}`}>
                       ✕
                     </button>
                   </td>

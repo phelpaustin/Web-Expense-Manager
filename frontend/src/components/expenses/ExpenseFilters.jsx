@@ -30,11 +30,12 @@ export default function ExpenseFilters({
       <div className="add-form">
         <input
           type="text"
+          aria-label="Search"
           placeholder="Search item, shop, brand…"
           value={search}
           onChange={(e) => resetToFirstPage(setSearch)(e.target.value)}
         />
-        <select value={filterCategory} onChange={(e) => resetToFirstPage(setFilterCategory)(e.target.value)}>
+        <select aria-label="Filter by category" value={filterCategory} onChange={(e) => resetToFirstPage(setFilterCategory)(e.target.value)}>
           <option value="">All categories</option>
           {options.categories.map((c) => (
             <option key={c} value={c}>
@@ -42,7 +43,7 @@ export default function ExpenseFilters({
             </option>
           ))}
         </select>
-        <select value={filterShop} onChange={(e) => resetToFirstPage(setFilterShop)(e.target.value)}>
+        <select aria-label="Filter by shop" value={filterShop} onChange={(e) => resetToFirstPage(setFilterShop)(e.target.value)}>
           <option value="">All shops</option>
           {(options.shops || []).map((s) => (
             <option key={s} value={s}>
@@ -51,7 +52,7 @@ export default function ExpenseFilters({
           ))}
         </select>
         {allSpaces.length > 0 && (
-          <select value={filterGroup} onChange={(e) => resetToFirstPage(setFilterGroup)(e.target.value)}>
+          <select aria-label="Filter by space" value={filterGroup} onChange={(e) => resetToFirstPage(setFilterGroup)(e.target.value)}>
             <option value="">All expenses</option>
             <option value="personal">Personal expenses</option>
             {allSpaces.map((g) => (
