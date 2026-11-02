@@ -40,7 +40,7 @@ def _convert_row(e: dict, currency: str, base_currency: str, rate: Decimal) -> d
 
 
 def convert_expenses(
-    expenses: list[dict], base_currency: str, get_rate: Callable[[str, str], Decimal | None]
+    expenses: list[dict], base_currency: str, get_rate: Callable[..., Decimal | None]
 ) -> list[dict]:
     try:
         base_currency = normalize_currency(base_currency or "SEK")

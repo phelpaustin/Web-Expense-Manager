@@ -167,6 +167,15 @@ def _serialize(opts: models.UserOptions) -> dict:
     }
 
 
+MAX_SHOPS = 2000  # the list is stored as one JSON value; an import must not be able to grow it without limit
+
+
+def _can_add_shop(shops: list[str], name: str) -> bool:
+    """New to the list (ignoring case, so "ICA" and "ica" are one shop) and room is left."""
+    lowered = name.strip().lower()
+    return len(shops) < MAX_SHOPS and all(s.strip().lower() != lowered for s in shops)
+
+
 def ensure_options(
     db: Session,
     user_id: int,
@@ -199,7 +208,7 @@ def ensure_options(
     if unit and unit not in units:
         units.append(unit)
         changed = True
-    if shop and shop not in shops:
+    if shop and _can_add_shop(shops, shop):
         shops.append(shop)
         changed = True
 
@@ -326,14 +335,14 @@ def add_shop(
 ):
     opts = get_or_create_options(db, user.id)
     shops = list(opts.shops or [])
-    if payload.name not in shops:
+    if _can_add_shop(shops, payload.name):
         shops.append(payload.name)
         opts.shops = sorted(shops)
         db.commit()
     return _serialize(opts)
 
 
-@router.delete("/options/category/{name}")
+@router.delete("/options/category/{name:path}")
 def delete_category(
     name: str,
     db: Session = Depends(get_db),
@@ -348,7 +357,7 @@ def delete_category(
     return _serialize(opts)
 
 
-@router.delete("/options/subcategory/{category}/{name}")
+@router.delete("/options/subcategory/{category}/{name:path}")
 def delete_subcategory(
     category: str,
     name: str,
@@ -364,7 +373,7 @@ def delete_subcategory(
     return _serialize(opts)
 
 
-@router.delete("/options/unit/{name}")
+@router.delete("/options/unit/{name:path}")
 def delete_unit(
     name: str,
     db: Session = Depends(get_db),
@@ -376,7 +385,7 @@ def delete_unit(
     return _serialize(opts)
 
 
-@router.delete("/options/shop/{name}")
+@router.delete("/options/shop/{name:path}")
 def delete_shop(
     name: str,
     db: Session = Depends(get_db),

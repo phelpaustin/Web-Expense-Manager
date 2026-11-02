@@ -323,6 +323,9 @@ def list_members(
     return result
 
 
+MAX_PENDING_INVITES = 50
+
+
 @router.post("/groups/{group_id}/invite", status_code=201)
 @limiter.limit("20/hour")
 def invite_member(
@@ -352,6 +355,12 @@ def invite_member(
         .first()
     )
     if existing_invite is None:
+        pending = db.query(models.GroupInvite).filter(models.GroupInvite.group_id == group_id).count()
+        if pending >= MAX_PENDING_INVITES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This space already has {MAX_PENDING_INVITES} pending invitations. Cancel some before inviting more.",
+            )
         db.add(models.GroupInvite(group_id=group_id, email=payload.email, invited_by=user.id, role=role))
         db.commit()
         group = db.get(models.Group, group_id)

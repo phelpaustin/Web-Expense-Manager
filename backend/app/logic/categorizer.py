@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from collections import Counter
 
+from app.logic.taxonomy import UNCATEGORIZED
+
 # Keyword → category rules, ported from the Streamlit app's ml_categorizer.py.
 DEFAULT_RULES: dict[str, list[str]] = {
     "Groceries": [
@@ -117,14 +119,40 @@ def suggest_category(expenses: list[dict], description: str, shop: str = "") -> 
     return {"category": None, "subcategory": "", "confidence": 0.0, "method": "none"}
 
 
+def _is_uncategorized(category) -> bool:
+    current = str(category or "").strip()
+    return not current or current.lower() == UNCATEGORIZED.lower()
+
+
 def auto_categorize_missing(expenses: list[dict]) -> list[tuple[int, str, str]]:
-    """For expenses with a blank/'Uncategorized' category, return [(id, category, subcategory), ...] suggestions."""
+    """For expenses with a blank/'Uncategorized' category, return [(id, category, subcategory), ...] suggestions.
+
+    The history (what each shop was filed under) is read once into an index, so this stays fast with
+    many expenses; looking each one up by scanning all of them took time proportional to missing x total.
+    Expenses that are themselves uncategorised are not history."""
+    by_shop: dict[str, tuple[Counter, dict[str, Counter]]] = {}
+    for e in expenses:
+        shop_norm = str(e.get("shop") or "").strip().lower()
+        category = e.get("category")
+        if not shop_norm or _is_uncategorized(category):
+            continue
+        cats, subs = by_shop.setdefault(shop_norm, (Counter(), {}))
+        cats[category] += 1
+        if e.get("subcategory"):
+            subs.setdefault(category, Counter())[e["subcategory"]] += 1
+
     results = []
     for e in expenses:
-        current = str(e.get("category") or "").strip()
-        if current and current.lower() != "uncategorized":
+        if not _is_uncategorized(e.get("category")):
             continue
-        suggestion = suggest_category(expenses, e.get("description", ""), e.get("shop", ""))
-        if suggestion["category"]:
-            results.append((e["id"], suggestion["category"], suggestion["subcategory"]))
+        category, subcategory = None, ""
+        learned = by_shop.get(str(e.get("shop") or "").strip().lower())
+        if learned:
+            category = learned[0].most_common(1)[0][0]
+            top_sub = learned[1].get(category)
+            subcategory = top_sub.most_common(1)[0][0] if top_sub else ""
+        else:
+            category = categorize_by_rules(e.get("description") or "", e.get("shop") or "")
+        if category:
+            results.append((e["id"], category, subcategory))
     return results

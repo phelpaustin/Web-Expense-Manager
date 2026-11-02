@@ -66,7 +66,7 @@ def init_db() -> None:
             db.refresh(demo)
 
         if db.query(models.Expense).filter(models.Expense.user_id == demo.id).count() == 0:
-            db.add_all(models.Expense(user_id=demo.id, **row) for row in _SEED_EXPENSES)
+            db.add_all(models.Expense(user_id=demo.id, price_per_unit=row["amount"], **row) for row in _SEED_EXPENSES)
         if db.query(models.Budget).filter(models.Budget.user_id == demo.id).count() == 0:
             db.add_all(
                 models.Budget(user_id=demo.id, category=k, amount=v, currency="SEK")

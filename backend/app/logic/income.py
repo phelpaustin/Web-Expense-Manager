@@ -6,6 +6,8 @@ dicts, so this stays storage-agnostic.
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pandas as pd
 
 from app.logic.frame import frame
@@ -28,7 +30,7 @@ def monthly_totals(income: list[dict]) -> list[dict]:
     return [{"month": row.month, "total": quantize_money(row.amount)} for row in monthly.itertuples()]
 
 
-def income_for_month(income: list[dict], month: str | None = None) -> float:
+def income_for_month(income: list[dict], month: str | None = None) -> Decimal:
     """Total income for a 'YYYY-MM' month (defaults to the current month)."""
     df = _to_frame(income)
     if df.empty:
@@ -38,7 +40,7 @@ def income_for_month(income: list[dict], month: str | None = None) -> float:
     return quantize_money(df.loc[df["_ym"] == target, "amount"].sum())
 
 
-def average_monthly_income(income: list[dict]) -> float:
+def average_monthly_income(income: list[dict]) -> Decimal:
     """Average income across the months that have any income recorded."""
     monthly = monthly_totals(income)
     if not monthly:
@@ -46,7 +48,7 @@ def average_monthly_income(income: list[dict]) -> float:
     return quantize_money(sum(m["total"] for m in monthly) / len(monthly))
 
 
-def total_income(income: list[dict]) -> float:
+def total_income(income: list[dict]) -> Decimal:
     df = _to_frame(income)
     return quantize_money(df["amount"].sum()) if not df.empty else quantize_money(0)
 

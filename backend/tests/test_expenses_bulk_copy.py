@@ -112,3 +112,16 @@ def test_rejects_bad_requests(client, make_user):
 
 def test_requires_login(client):
     assert _copy(client, {}, {"ids": [1], "group_id": 1}).status_code in (401, 403)
+
+
+def test_copying_the_same_rows_twice_adds_them_once(client, make_user):
+    uid, h = make_user()
+    gid = client.post("/api/groups", json={"name": "Trip", "space_type": "custom"}, headers=h).json()["id"]
+    ids = [
+        client.post("/api/expenses", json={"date": "2026-02-01", "category": "Food", "description": d, "amount": 10}, headers=h).json()["id"]
+        for d in ("a", "b")
+    ]
+    first = client.post("/api/expenses/bulk-copy", json={"ids": ids, "group_id": gid}, headers=h).json()
+    again = client.post("/api/expenses/bulk-copy", json={"ids": ids, "group_id": gid}, headers=h).json()
+    assert first["copied"] == 2
+    assert again == {"copied": 0, "skipped": 2}

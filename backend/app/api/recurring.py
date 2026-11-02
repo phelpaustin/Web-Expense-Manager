@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api import bill_sync
 from app.api.deps import get_current_user
+from app.api.expenses import MAX_PRICE_PER_UNIT
 from app.api.options import default_currency_for
 from app.core.fx import normalize_convertible_currency
 from app.db.database import get_db
@@ -104,7 +105,7 @@ def _post_expense(db: Session, user_id: int, template: models.RecurringTemplate,
             description=template.item,
             amount=template.amount,
             currency=template.currency,
-            price_per_unit=template.amount,
+            price_per_unit=min(template.amount, MAX_PRICE_PER_UNIT),
             recurring_template_id=template.id,
         )
     )
@@ -269,7 +270,7 @@ def backfill_recurring(
                 description=t.item,
                 amount=amount,
                 currency=t.currency,
-                price_per_unit=amount,
+                price_per_unit=min(amount, MAX_PRICE_PER_UNIT),
                 recurring_template_id=t.id,
             )
         )

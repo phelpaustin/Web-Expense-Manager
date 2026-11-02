@@ -67,7 +67,7 @@ def fetch_income(db: Session, user_id: int) -> list[dict]:
 
 
 def fetch_income_in_reporting_currency(db: Session, user_id: int) -> list[dict]:
-    """Income rows converted into the user's base currency at each row's date."""
+    """Income rows converted into the user's reporting (display) currency at each row's date."""
     return convert_rows(db, user_id, fetch_income(db, user_id))[0]
 
 

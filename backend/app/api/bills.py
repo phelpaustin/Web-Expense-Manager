@@ -20,7 +20,7 @@ from app.core.import_limits import MAX_IMPORT_FILE_BYTES
 from app.core.validation import MAX_NAME, Name, Text
 from app.api import bill_sync
 from app.core import receipt_storage
-from app.api.expenses import ExpenseOut
+from app.api.expenses import MAX_PRICE_PER_UNIT, ExpenseOut
 from app.db.database import get_db
 from app.core.money import MAX_MONEY
 from app.db import models
@@ -152,7 +152,7 @@ def _record_total(
         shop=bill.shop,
         amount=final_amount,
         currency=bill.currency,
-        price_per_unit=final_amount,
+        price_per_unit=min(final_amount, MAX_PRICE_PER_UNIT),
         source_bill_id=bill.id,
         bill_total_only=True,
     )
@@ -595,7 +595,7 @@ def revert_to_total(
             shop=bill.shop,
             amount=bill.amount,
             currency=bill.currency,
-            price_per_unit=bill.amount,
+            price_per_unit=min(bill.amount, MAX_PRICE_PER_UNIT),
             source_bill_id=bill.id,
             bill_total_only=True,
         )

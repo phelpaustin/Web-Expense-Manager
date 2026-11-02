@@ -10,6 +10,11 @@ from fastapi import HTTPException, UploadFile
 from app.core.import_limits import MAX_XLSX_ENTRIES, MAX_XLSX_UNCOMPRESSED_BYTES, UPLOAD_READ_CHUNK_BYTES
 
 
+def _too_large(max_bytes: int) -> str:
+    mb = max_bytes / (1024 * 1024)
+    return f"File too large (max {mb:g} MB)"
+
+
 async def read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
     """Read an upload in bounded chunks, rejecting it as soon as it exceeds max_bytes."""
     chunks: list[bytes] = []
@@ -24,7 +29,7 @@ async def read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
             break
         total += len(chunk)
         if total > max_bytes:
-            raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+            raise HTTPException(status_code=413, detail=_too_large(max_bytes))
         chunks.append(chunk)
 
     return b"".join(chunks)
@@ -45,7 +50,7 @@ def read_upload_limited_sync(file: UploadFile, max_bytes: int, status_code: int 
             break
         total += len(chunk)
         if total > max_bytes:
-            raise HTTPException(status_code=status_code, detail="File too large (max 10 MB)")
+            raise HTTPException(status_code=status_code, detail=_too_large(max_bytes))
         chunks.append(chunk)
     return b"".join(chunks)
 

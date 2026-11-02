@@ -24,6 +24,7 @@ import uuid
 from collections import defaultdict
 from decimal import Decimal
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -84,8 +85,6 @@ def has_unlinked(db: Session, user_id: int) -> bool:
 
 def _set_amounts(db: Session, bills: dict[int, models.PendingBill]) -> None:
     """amount = the sum of the bill's items."""
-    from sqlalchemy import func
-
     for part in _chunks(bills):
         sums = dict(
             db.query(models.Expense.source_bill_id, func.sum(models.Expense.amount))

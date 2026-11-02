@@ -109,7 +109,9 @@ def _digest_signature(alerts: list[dict]) -> str:
 
 
 @router.post("/alerts/send-digest")
+@limiter.limit("30/minute")  # the secret is the only protection, so guessing it must be slow
 def send_alert_digest(
+    request: Request,
     db: Session = Depends(get_db),
     x_cron_secret: str = Header(default=""),
 ):

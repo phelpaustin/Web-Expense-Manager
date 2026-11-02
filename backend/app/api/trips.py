@@ -169,7 +169,9 @@ def create_trip(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    status = payload.status if payload.status in STATUSES else "Planned"
+    if payload.status not in STATUSES:
+        raise HTTPException(status_code=422, detail=f"Status must be one of: {', '.join(STATUSES)}")
+    status = payload.status
     _validate_parent(db, user.id, payload.parent_group_id)
     trip = models.Group(
         owner_id=user.id,

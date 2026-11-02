@@ -15,6 +15,7 @@ exactly what is saved.
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import re
 from collections import Counter, defaultdict
@@ -194,8 +195,6 @@ class Rule(BaseModel):
 
     @model_validator(mode="after")
     def _does_something(self):
-        if not self.contains:
-            raise ValueError("a rule needs some text to look for")
         if self.action is None and not self.category:
             raise ValueError("a rule needs an action or a category")
         return self
@@ -314,8 +313,6 @@ _NAMES = {
 def header_signature(labels: list[str]) -> str:
     """A fingerprint of a statement's column layout, so the same bank's next export is recognised
     and its saved mapping applied. Order and case of the headers count; their values do not."""
-    import hashlib
-
     joined = "\x1f".join(_norm(label) for label in labels if _norm(label))
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:32]
 

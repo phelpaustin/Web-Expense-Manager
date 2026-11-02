@@ -263,9 +263,9 @@ Found in a full code review and deliberately left as they are, so nobody has to 
 
 - **Dates and time zones.** "Today", month boundaries and recurring due dates use the server's local date. Run the backend in the time zone you want months to follow (UTC on most hosts).
 - **Rate limiting is in-process.** Limits are kept in memory per worker, so they reset on restart and are not shared between workers. Behind a proxy set `TRUSTED_PROXY_COUNT` so the real client address is used.
-- **The budget digest endpoint loops over all users** in one request; fine for a small deployment, but move it to a queue before it grows.
+- **The budget digest endpoint loops over all users** in one request; fine for a small deployment, but move it to a queue before it grows. The endpoint is limited to 30 calls a minute, so its secret cannot be guessed quickly.
 - **Exchange rates.** `core/fx.py` makes blocking `requests` calls and falls back to the latest stored rate when the provider is down.
-- **Option lists** (categories, units, shops) are compared exactly for shops but case-insensitively for categories, and are not capped; deleting an option whose name contains `/` relies on the client encoding it.
+- **Option lists** (categories, units, shops): shops are matched ignoring case and capped at 2000. Deleting an option whose name contains `/` works because the client encodes it and the route accepts a path.
 - **Units.** `oz` means weight and `st` means count (pieces).
 - **Uncategorised spending** is stored and shown everywhere as `Uncategorized`.
 - **Budgets** keep the currency they were last saved in; editing one inline re-saves it in the reporting currency.

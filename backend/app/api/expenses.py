@@ -84,13 +84,18 @@ class ExpenseOut(BaseModel):
     covers_to: datetime.date | None = None
 
 
+# price_per_unit is Numeric(12, 4): a large amount over a small quantity must not overflow it.
+MAX_PRICE_PER_UNIT = Decimal("99999999.9999")
+MAX_QUANTITY = 1_000_000_000
+
+
 class ExpenseCreate(BaseModel):
     date: datetime.date
     category: Name
     subcategory: OptionalName = ""
     description: Text = ""
     amount: Decimal = Field(gt=0, le=MAX_MONEY)
-    quantity: float = Field(default=1.0, gt=0)
+    quantity: float = Field(default=1.0, gt=0, le=MAX_QUANTITY)
     unit: OptionalName = "Count"
     shop: OptionalName = ""
     brand: OptionalName = ""
@@ -114,7 +119,7 @@ class ExpenseUpdate(PartialUpdate):
     subcategory: OptionalName | None = None
     description: Text | None = None
     amount: Decimal | None = Field(default=None, gt=0, le=MAX_MONEY)
-    quantity: float | None = Field(default=None, gt=0)
+    quantity: float | None = Field(default=None, gt=0, le=MAX_QUANTITY)
     unit: OptionalName | None = None
     shop: OptionalName | None = None
     brand: OptionalName | None = None
@@ -218,9 +223,19 @@ class ExpenseBulkCreate(BaseModel):
     as_bill: bool = False
 
 
+def _refuse_orphaning(expense, new_group_id) -> None:
+    """An expense whose owner's account is gone (user_id NULL) is only reachable through its space,
+    so it must not be moved out of it: it would belong to nobody and could never be seen again."""
+    if expense.user_id is None and expense.group_id is not None and new_group_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This expense belongs to a deleted account, so it can't be moved out of its space. Delete it or leave it there.",
+        )
+
+
 def _price_per_unit(amount: Decimal, quantity: float) -> Decimal:
     divisor = max(as_decimal(quantity), Decimal("0.01"))
-    return (amount / divisor).quantize(Decimal("0.0001"))
+    return min((amount / divisor).quantize(Decimal("0.0001")), MAX_PRICE_PER_UNIT)
 
 
 def _visible_expenses_query(db: Session, user_id: int, scope: str | None = None, space_ids: str | None = None):
@@ -649,6 +664,7 @@ def update_expenses_bulk(
         _require_group_write_access(db, expense.group_id, user.id, expense.user_id, existing_expense=True)
         if "group_id" in data:
             _require_group_write_access(db, data["group_id"], user.id, expense.user_id, existing_expense=True)
+            _refuse_orphaning(expense, data["group_id"])
 
     bills_by_owner: dict[int, set[int]] = {}
     for expense in expenses:
@@ -679,7 +695,7 @@ def copy_expenses_bulk(
     """Copy many expenses into a space, e.g. bank-statement rows into the trip they belong to.
 
     Reading the originals is enough (they are not changed); writing to the target space is what is
-    checked. Rows already in that space are skipped, so a double click can't double them. The copies
+    checked. Rows already in that space, or already copied there by this user, are skipped, so a double click can't double them. The copies
     are plain expenses: they are not tied to the original's bill or recurring template. All or
     nothing, like the other bulk actions."""
     if payload.ids is not None:
@@ -696,7 +712,30 @@ def copy_expenses_bulk(
         sources = q.all()
 
     _require_group_write_access(db, payload.group_id, user.id)
-    to_copy = [e for e in sources if e.group_id != payload.group_id]
+    # A source is skipped when the target space already holds this user's own copy of it (same date,
+    # amount, description, shop, category and currency). Counted as a multiset, so two genuinely
+    # identical rows copy twice but a repeated click copies nothing new.
+    def same_as(e):
+        return (e.date, as_decimal(e.amount), e.description, e.shop, e.category, e.currency)
+
+    have: dict[tuple, int] = {}
+    for e in (
+        db.query(models.Expense)
+        .filter(models.Expense.group_id == payload.group_id, models.Expense.user_id == user.id)
+        .all()
+        if payload.group_id is not None
+        else []
+    ):
+        have[same_as(e)] = have.get(same_as(e), 0) + 1
+    to_copy = []
+    for e in sources:
+        if e.group_id == payload.group_id:
+            continue
+        key = same_as(e)
+        if have.get(key, 0) > 0:
+            have[key] -= 1
+            continue
+        to_copy.append(e)
     skipped = len(sources) - len(to_copy)
 
     for e in to_copy:
@@ -736,6 +775,7 @@ def update_expense(
         _require_bill_item_currency(db, expense, data["currency"])
     if "group_id" in data:
         _require_group_write_access(db, data["group_id"], user.id, expense.user_id, existing_expense=True)
+        _refuse_orphaning(expense, data["group_id"])
         if data["group_id"] != expense.group_id and "covers_from" not in data:
             data["covers_from"] = data["covers_to"] = None  # the days belonged to the old trip
     if data.get("covers_from") is not None:
@@ -928,7 +968,9 @@ def import_expenses(
             quantize_money(e["amount"]),
             normalize_currency(e.get("currency") or "SEK"),
         )
-        for e in fetch_expenses(db, user.id)
+        # Imports are personal: only the user's own personal rows count as duplicates, not what
+        # other members entered in a shared space.
+        for e in fetch_expenses(db, user.id, scope="personal")
     }
 
     added = skipped = 0
@@ -987,6 +1029,9 @@ def import_expenses(
             if amount <= 0:
                 record_skip(row, "Amount must be greater than 0", line)
                 continue
+            if amount > MAX_MONEY:
+                record_skip(row, "Amount is too large", line)
+                continue
 
             description = str(_cell(row, desc_c) or "").strip()
             subcategory = str(_cell(row, sub_c) or "").strip()
@@ -995,7 +1040,7 @@ def import_expenses(
                 quantity = float(parse_amount(qty_val)) if qty_val is not None else 1.0
             except (TypeError, ValueError, ArithmeticError):
                 quantity = 1.0
-            if quantity <= 0:
+            if quantity <= 0 or quantity > MAX_QUANTITY:
                 quantity = 1.0
             unit = str(_cell(row, unit_c) or "Count").strip() or "Count"
             shop = str(_cell(row, shop_c) or "").strip()
