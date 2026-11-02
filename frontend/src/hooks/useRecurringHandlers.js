@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { createRecurring, updateRecurring, deleteRecurring, backfillRecurring, applyRecurring, applyDueRecurring } from '../api/client.js'
 import { EXPENSE_PARTS, PART } from './useAppData.js'
+import { positiveAmount } from './useExpenseHandlers.js'
 
 const EMPTY_RECURRING = { item: '', category: '', amount: '', currency: '', frequency: 'Monthly', auto_post: false }
 
@@ -30,12 +31,17 @@ export function useRecurringHandlers(loadAll, setError) {
 
   async function handleAddRecurring(e) {
     e.preventDefault()
+    const amount = positiveAmount(recurringForm.amount)
+    if (amount === null) {
+      setError('Enter an amount greater than zero')
+      return
+    }
     setSavingRecurring(true)
     try {
       await createRecurring({
         item: recurringForm.item,
         category: recurringForm.category,
-        amount: parseFloat(recurringForm.amount),
+        amount,
         currency: recurringForm.currency || undefined,
         frequency: recurringForm.frequency,
         auto_post: recurringForm.auto_post,

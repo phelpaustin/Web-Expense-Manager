@@ -30,6 +30,18 @@ beforeEach(() => {
 })
 
 describe('MonthDetailDialog', () => {
+  it('keeps Tab inside the window, wrapping from the last control to the first', async () => {
+    render(<MonthDetailDialog month="2025-01" scope="all" spaceIds={[]} onClose={() => {}} onChangeMonth={() => {}} />)
+    await screen.findByTestId('month-expenses')
+    const dialog = screen.getByRole('dialog')
+    const items = [...dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+    items[items.length - 1].focus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(items[0])
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(items[items.length - 1])
+  })
+
   it('lists that month’s expenses and income', async () => {
     render(<MonthDetailDialog month="2025-01" scope="all" spaceIds={[]} onClose={() => {}} onChangeMonth={() => {}} />)
     const expenses = await screen.findByTestId('month-expenses')

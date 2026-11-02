@@ -51,9 +51,13 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
 
   const queryRef = useRef(query)
   queryRef.current = query
+  // Only the newest load may update the list, and a load still running when the user signs out
+  // must not put their bills on screen for the next person.
+  const latestLoad = useRef(0)
 
   const loadBills = useCallback(
     async (q) => {
+      const request = ++latestLoad.current
       setLoading(true)
       try {
         let res = await fetchBills(q)
@@ -68,6 +72,7 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
             /* keep the first response */
           }
         }
+        if (request !== latestLoad.current) return
         // The page may no longer exist (e.g. the last row on it was deleted): step back.
         if (res.items.length === 0 && res.total > 0 && q.page > 1) {
           setQueryState((prev) => ({ ...prev, page: Math.max(1, Math.ceil(res.total / q.page_size)) }))
@@ -75,9 +80,9 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
         }
         setData(res)
       } catch (err) {
-        setError(err.message)
+        if (request === latestLoad.current) setError(err.message)
       } finally {
-        setLoading(false)
+        if (request === latestLoad.current) setLoading(false)
       }
     },
     [setError],
@@ -87,6 +92,17 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
   useEffect(() => {
     if (enabled) loadBills(query)
   }, [enabled, query, loadBills])
+
+  // Signing out: forget everything, so the next person to sign in starts clean.
+  useEffect(() => {
+    if (enabled) return
+    latestLoad.current += 1
+    setData(EMPTY_BILLS)
+    setQueryState(DEFAULT_QUERY)
+    setSelected(new Set())
+    setNotice(null)
+    setLoading(false)
+  }, [enabled])
 
   // Changing the tab/search/sort goes back to page 1 and clears the selection; changing only the
   // page keeps the selection of the rows you ticked on other pages.

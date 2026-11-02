@@ -238,18 +238,23 @@ export default function ExpensesPage({
     return parts.join(' · ')
   }
 
+  // The filters on screen, as the "every matching expense" bulk actions send them.
+  function currentFilters() {
+    return {
+      scope: filterGroup || undefined,
+      search: debouncedSearch || undefined,
+      category: filterCategory || undefined,
+      shop: filterShop || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      total_only: filterTotalOnly ? true : undefined,
+    }
+  }
+
   async function applyBulk() {
     const body = allMatching
       ? {
-          filters: {
-            scope: filterGroup || undefined,
-            search: debouncedSearch || undefined,
-            category: filterCategory || undefined,
-            shop: filterShop || undefined,
-            date_from: dateFrom || undefined,
-            date_to: dateTo || undefined,
-            total_only: filterTotalOnly ? true : undefined,
-          },
+          filters: currentFilters(),
           changes: bulkChanges,
         }
       : { ids: [...selectedIds], changes: bulkChanges }
@@ -276,15 +281,7 @@ export default function ExpensesPage({
     if (!Number.isInteger(group_id)) return
     const body = allMatching
       ? {
-          filters: {
-            scope: filterGroup || undefined,
-            search: debouncedSearch || undefined,
-            category: filterCategory || undefined,
-            shop: filterShop || undefined,
-            date_from: dateFrom || undefined,
-            date_to: dateTo || undefined,
-            total_only: filterTotalOnly ? true : undefined,
-          },
+          filters: currentFilters(),
           group_id,
         }
       : { ids: [...selectedIds], group_id }

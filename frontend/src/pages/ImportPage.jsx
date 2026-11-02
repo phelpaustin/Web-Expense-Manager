@@ -174,6 +174,7 @@ function StatementImport({ onImported, onError, countBillsAsSpending = true }) {
     if (!chosen) return
     setFile(chosen)
     load(chosen)
+    e.target.value = '' // so choosing the same file again (after fixing it) still fires a change
   }
 
   // Re-run the preview a moment after anything that affects it changes. Only the newest answer

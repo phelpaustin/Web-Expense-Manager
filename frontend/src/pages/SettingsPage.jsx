@@ -1,10 +1,11 @@
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import Switch from '../components/Switch.jsx'
 import GoogleConfirmButton, { GOOGLE_CLIENT_ID } from '../components/GoogleConfirmButton.jsx'
-import { saveAlertDigest, saveCountBillsAsSpending } from '../api/client.js'
 import { useState } from 'react'
 import GroupsPage from './GroupsPage.jsx'
 import {
+  saveAlertDigest,
+  saveCountBillsAsSpending,
   changePassword,
   addCategory,
   deleteCategory,

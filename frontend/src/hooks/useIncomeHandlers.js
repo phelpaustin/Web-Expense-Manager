@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createIncome, deleteIncome } from '../api/client.js'
 import { PART } from './useAppData.js'
+import { positiveAmount } from './useExpenseHandlers.js'
 
 const EMPTY_INCOME = { date: '', source: '', note: '', amount: '', currency: '' }
 
@@ -13,11 +14,16 @@ export function useIncomeHandlers(loadAll, setError) {
 
   async function handleAddIncome(e) {
     e.preventDefault()
+    const amount = positiveAmount(incomeForm.amount)
+    if (amount === null) {
+      setError('Enter an amount greater than zero')
+      return
+    }
     setSavingIncome(true)
     try {
       await createIncome({
         date: incomeForm.date,
-        amount: parseFloat(incomeForm.amount),
+        amount,
         source: incomeForm.source,
         note: incomeForm.note,
         currency: incomeForm.currency || undefined,

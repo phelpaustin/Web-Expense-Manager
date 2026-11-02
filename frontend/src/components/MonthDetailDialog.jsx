@@ -42,6 +42,8 @@ function Totals({ rows }) {
 
 // Every expense and every income entry of one month, opened by clicking that month on a chart.
 // Expenses can be edited or deleted here; onChanged lets the page refresh the charts behind it.
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+
 export default function MonthDetailDialog({
   month, scope, spaceIds, onClose, onChangeMonth, options, groups, trips, onChanged,
 }) {
@@ -57,6 +59,7 @@ export default function MonthDetailDialog({
   const [reloadKey, setReloadKey] = useState(0)
   const latest = useRef(0)
   const closeRef = useRef(null)
+  const panelRef = useRef(null)
   const editingRef = useRef(null)
   const viewKey = useRef('')
   const showIncome = includesIncome(scope, spaceIds)
@@ -97,15 +100,34 @@ export default function MonthDetailDialog({
   }, [month, scope, idsKey, showIncome, reloadKey])
 
   useEffect(() => {
+    const previous = document.activeElement
     closeRef.current?.focus()
     const onKey = (e) => {
+      if (e.key === 'Tab' && panelRef.current) {
+        // Keep Tab inside the window (it is modal), wrapping from the last control to the first.
+        const items = [...panelRef.current.querySelectorAll(FOCUSABLE)]
+        if (items.length === 0) return
+        const first = items[0]
+        const last = items[items.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+        return
+      }
       if (e.key !== 'Escape') return
       // Escape backs out of an edit first; a second press closes the window.
       if (editingRef.current) setEditing(null)
       else onClose()
     }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      previous?.focus?.() // back to the chart or button that opened it
+    }
   }, [onClose])
 
   const { loading, loaded, error, expenses, expenseTotal, income } = state
@@ -318,6 +340,7 @@ export default function MonthDetailDialog({
   return (
     <div className="month-detail-backdrop" onClick={onClose}>
       <div
+        ref={panelRef}
         className="month-detail"
         role="dialog"
         aria-modal="true"
