@@ -12,6 +12,8 @@ export default function ExpenseFilters({
   selectMode,
   groupByBill,
   setGroupByBill,
+  expandAll,
+  collapseAll,
   filterTotalOnly,
   allSpaces,
   hasActiveFilters,
@@ -82,6 +84,16 @@ export default function ExpenseFilters({
         <button type="button" className="ghost-btn" onClick={() => setGroupByBill((v) => !v)}>
           {groupByBill ? '📄 Flat view' : '🧾 Bill view'}
         </button>
+        {groupByBill && (
+          <>
+            <button type="button" className="ghost-btn" onClick={expandAll}>
+              Expand all
+            </button>
+            <button type="button" className="ghost-btn" onClick={collapseAll}>
+              Collapse all
+            </button>
+          </>
+        )}
       </div>
     </section>
   )

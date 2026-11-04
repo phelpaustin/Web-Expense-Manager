@@ -3304,3 +3304,13 @@ label.link-btn input[type='file'] {
   border-radius: 50%;
   margin-right: 0.5rem;
 }
+
+.chevron-btn {
+  background: none;
+  border: 0;
+  padding: 0 0.3rem;
+  cursor: pointer;
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1;
+}

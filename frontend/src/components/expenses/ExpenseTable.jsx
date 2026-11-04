@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { TotalOnlyBadge } from '../BillStatus.jsx'
 import { money } from '../../format.js'
+import { categorySummary } from '../../billGroups.js'
 import { SelectBox } from './shared.jsx'
 import { ExpenseRow } from './ExpenseRow.jsx'
 
@@ -61,6 +62,9 @@ export default function ExpenseTable({
               // A single line with no shop is named after what it is, like its bill on the Bills page.
               const name = group.shop || (single ? single.description : '') || 'No shop'
               const groupEditableIds = group.items.filter(canEditExpense).map((e) => e.id)
+              // A lone, itemised-or-plain purchase (a subscription, a phone bill) is just a normal row:
+              // there is nothing to expand. Only multi-item bills and total-only bills get a header.
+              if (single && !single.bill_total_only) return <ExpenseRow key={single.id} e={single} {...rowProps} />
               return (
                 <Fragment key={group.key}>
                   <tr
@@ -75,8 +79,21 @@ export default function ExpenseTable({
                           onChange={(on) => setSelected(groupEditableIds, on)}
                         />
                       )}{' '}
-                      {isExpanded ? '▾' : '▸'} 🧾 {group.date} · {name} · {group.items.length} item
-                      {group.items.length === 1 ? '' : 's'} · Bill total:{' '}
+                      <button
+                        type="button"
+                        className="chevron-btn"
+                        aria-expanded={isExpanded}
+                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${name}`}
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          toggleBillGroup(group.key)
+                        }}
+                      >
+                        {isExpanded ? '▾' : '▸'}
+                      </button>{' '}
+                      🧾 {group.date} · {name} · {group.items.length} item
+                      {group.items.length === 1 ? '' : 's'}
+                      {group.items.length > 1 && ` · ${categorySummary(group.items)}`} · Bill total:{' '}
                       {money(
                         group.items.reduce((sum, e) => sum + e.amount, 0),
                         group.currency,

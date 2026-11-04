@@ -63,8 +63,25 @@ export default function ExpensesPage({
   const [bulkNotice, setBulkNotice] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  // Under Spending the "By receipt" view already lists bills, so this view starts as a flat list of items.
-  const [groupByBill, setGroupByBill] = useState(!embedded)
+  // Bills (multi-item receipts) show as one collapsible line by default; the choice is remembered.
+  const [groupByBill, setGroupByBillState] = useState(() => {
+    try {
+      return localStorage.getItem('expense_group_by_bill') !== '0'
+    } catch {
+      return true
+    }
+  })
+  const setGroupByBill = useCallback((next) => {
+    setGroupByBillState((prev) => {
+      const value = typeof next === 'function' ? next(prev) : next
+      try {
+        localStorage.setItem('expense_group_by_bill', value ? '1' : '0')
+      } catch {
+        /* storage blocked: the choice just isn't remembered */
+      }
+      return value
+    })
+  }, [])
   const [filterTotalOnly, setFilterTotalOnly] = useState(false)
   // The bill whose items are being entered (set when coming from the Bills page or a total-only row).
   const [itemisingBill, setItemisingBill] = useState(null)
@@ -83,6 +100,13 @@ export default function ExpensesPage({
       else next.add(key)
       return next
     })
+  }
+
+  function expandAll() {
+    setExpandedBillKeys(new Set(billGroups.map((g) => g.key)))
+  }
+  function collapseAll() {
+    setExpandedBillKeys(new Set())
   }
 
   const groupName = (id) => (groups || []).concat(trips || []).find((g) => g.id === id)?.name
@@ -665,6 +689,8 @@ export default function ExpensesPage({
           selectMode={selectMode}
           groupByBill={groupByBill}
           setGroupByBill={setGroupByBill}
+          expandAll={expandAll}
+          collapseAll={collapseAll}
           filterTotalOnly={filterTotalOnly}
           allSpaces={allSpaces}
           hasActiveFilters={hasActiveFilters}

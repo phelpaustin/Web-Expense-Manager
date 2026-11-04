@@ -62,6 +62,7 @@ const BILL = { id: 77, date: '2026-07-21', shop: 'LIDL145MALMOBA', amount: 35.91
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
   loadAll = vi.fn(async () => {})
   setError = vi.fn()
   spaces = { trips: [], groups: [] }
@@ -89,10 +90,12 @@ describe('total-only expenses stand out on the Expenses page', () => {
     expect(special.className).toContain('row-total-only')
     expect(within(special).getByText(/Total only/)).toBeTruthy()
     expect(within(special).getByRole('button', { name: 'Itemise' })).toBeTruthy()
-    const ordinary = await header('Milk')
+    // A lone ordinary purchase is a plain row: no header, no chevron.
+    const ordinary = (await screen.findByText('Milk')).closest('tr')
     expect(ordinary.className).not.toContain('row-total-only')
     expect(within(ordinary).queryByText(/Total only/)).toBeNull()
     expect(within(ordinary).queryByRole('button', { name: 'Itemise' })).toBeNull()
+    expect(within(ordinary).queryByRole('button', { name: /Expand|Collapse/ })).toBeNull()
   })
 
   it('clicking Itemise on the header does not also expand the group', async () => {
@@ -125,7 +128,7 @@ describe('total-only expenses stand out on the Expenses page', () => {
 
   it('can filter to total-only bills', async () => {
     renderAt(undefined)
-    await header('Milk')
+    await screen.findByText('Milk')
     fireEvent.click(screen.getByLabelText('Total-only bills'))
     await waitFor(() => expect(client.fetchExpenses.mock.calls.at(-1)[0]).toMatchObject({ total_only: 'true', page: 1 }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
@@ -190,7 +193,7 @@ describe('itemising from a total-only row', () => {
 describe('Add by bill (a new bill, not itemising an existing one)', () => {
   it('asks the server to make its bill record, so it shows on the Bills page', async () => {
     renderAt(undefined)
-    await header('Milk')
+    await screen.findByText('Milk')
     fireEvent.click(screen.getByRole('button', { name: /Add by bill/ }))
     fireEvent.change(document.querySelector('#add-expense-panel input[type=date]'), { target: { value: '2026-07-21' } })
     await addItem(12)
@@ -205,7 +208,7 @@ describe('Add by bill (a new bill, not itemising an existing one)', () => {
   it('shows the error and keeps the items when the bill cannot be saved', async () => {
     client.createExpensesBulk.mockRejectedValueOnce(new Error('Amount is too large'))
     renderAt(undefined)
-    await header('Milk')
+    await screen.findByText('Milk')
     fireEvent.click(screen.getByRole('button', { name: /Add by bill/ }))
     fireEvent.change(document.querySelector('#add-expense-panel input[type=date]'), { target: { value: '2026-07-21' } })
     await addItem(12)
@@ -251,7 +254,7 @@ describe('arriving from the Bills page', () => {
 
   it('shows nothing special for an ordinary visit', async () => {
     renderAt(undefined)
-    await header('Milk')
+    await screen.findByText('Milk')
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByRole('button', { name: /Add by bill/ })).toBeTruthy()
   })
@@ -355,7 +358,7 @@ describe('"Edit items" on an itemised bill group', () => {
   })
 
   it.each([
-    ['an ordinary group with no bill', [ITEM(1, { source_bill_id: null })]],
+    ['an ordinary group with no bill', [ITEM(1, { source_bill_id: null }), ITEM(2, { source_bill_id: null })]],
     ['a group that mixes two bills', [ITEM(1), ITEM(2, { source_bill_id: 99 })]],
     ['a group that includes a total-only line', [ITEM(1), ITEM(2, { bill_total_only: true })]],
   ])('is not offered for %s', async (_, items) => {
@@ -366,7 +369,7 @@ describe('"Edit items" on an itemised bill group', () => {
   })
 
   it('reports a failure to load the bill', async () => {
-    client.fetchExpenses.mockImplementation(async () => ({ items: [ITEM(1)], total: 1 }))
+    client.fetchExpenses.mockImplementation(async () => ({ items: [ITEM(1), ITEM(2)], total: 2 }))
     client.fetchBill.mockRejectedValueOnce(new Error('Bill not found'))
     renderAt(undefined)
     fireEvent.click(within(await header('ICA Nära')).getByRole('button', { name: 'Edit items' }))
@@ -381,7 +384,8 @@ describe('names of bill groups on the Expenses page', () => {
   it('a single line with no shop is named after what it is (like on the Bills page)', async () => {
     client.fetchExpenses.mockImplementation(async () => ({ items: [line(1, { description: 'Bus ticket' })], total: 1 }))
     renderAt(undefined)
-    expect(await header('Bus ticket')).toBeTruthy()
+    const row = (await screen.findByText('Bus ticket')).closest('tr')
+    expect(row.className).not.toContain('bill-group-header') // a lone line is a plain row
   })
 
   it('a group with a shop uses the shop, whatever the lines are called', async () => {
@@ -393,11 +397,10 @@ describe('names of bill groups on the Expenses page', () => {
   it('shop-less lines are never merged: each is its own bill, named after itself (as on the Bills page)', async () => {
     client.fetchExpenses.mockImplementation(async () => ({ items: [line(1, { group_id: 3 }), line(2, { group_id: 3 })], total: 2 }))
     renderAt(undefined)
-    const first = await header('Item 1')
-    const second = await header('Item 2')
+    const first = (await screen.findByText('Item 1')).closest('tr')
+    const second = (await screen.findByText('Item 2')).closest('tr')
     expect(first).not.toBe(second)
-    expect(first.textContent).toMatch(/1 item ·/)
-    expect(second.textContent).toMatch(/1 item ·/)
+    expect(document.querySelectorAll('.bill-group-header')).toHaveLength(0)
   })
 })
 
@@ -718,9 +721,9 @@ describe('editing expenses together', () => {
 
   it('a bill header ticks all of its items', async () => {
     renderAt(undefined)
-    await screen.findByText(/· Milk ·/)
+    await screen.findByText(/· LIDL145MALMOBA ·/)
     fireEvent.click(screen.getByRole('button', { name: /Edit together/ }))
-    fireEvent.click(screen.getByLabelText('Select Milk'))
+    fireEvent.click(screen.getByLabelText('Select LIDL145MALMOBA'))
     expect(screen.getByTestId('bulk-count').textContent).toContain('1 selected')
   })
 
@@ -837,5 +840,45 @@ describe('deleting an expense row', () => {
     fireEvent.click(within(row).getByTitle('Delete'))
     fireEvent.click(within(row).getByRole('button', { name: 'Yes' }))
     await waitFor(() => expect(client.deleteExpense).toHaveBeenCalledWith(1))
+  })
+})
+
+
+describe('expand and collapse (bill view)', () => {
+  const lidl = (id) => ({ ...NORMAL, id, shop: 'LIDL', description: `Thing ${id}`, category: id === 1 ? 'Food' : 'Home' })
+  beforeEach(() => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [lidl(1), lidl(2), NORMAL_B], total: 3 }))
+  })
+  const NORMAL_B = { ...NORMAL, id: 9, date: '2026-07-19', description: 'Phone bill' }
+
+  it('starts in bill view with multi-item bills collapsed and lone items as plain rows', async () => {
+    renderAt(undefined)
+    const head = await header('LIDL')
+    expect(head.textContent).toContain('2 items')
+    expect(head.textContent).toContain('2 categories')
+    expect(screen.queryByText('Thing 1')).toBeNull()
+    expect(screen.getByText('Phone bill')).toBeTruthy()
+  })
+
+  it('the chevron expands and collapses with aria-expanded', async () => {
+    renderAt(undefined)
+    await header('LIDL')
+    const chevron = screen.getByRole('button', { name: 'Expand LIDL' })
+    expect(chevron.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(chevron)
+    expect(screen.getByRole('button', { name: 'Collapse LIDL' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('Thing 1')).toBeTruthy()
+  })
+
+  it('Expand all and Collapse all work, and the flat/bill choice is remembered', async () => {
+    renderAt(undefined)
+    await header('LIDL')
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    expect(screen.getByText('Thing 2')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
+    expect(screen.queryByText('Thing 2')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Flat view/ }))
+    expect(localStorage.getItem('expense_group_by_bill')).toBe('0')
+    expect(screen.queryByRole('button', { name: 'Expand all' })).toBeNull()
   })
 })
