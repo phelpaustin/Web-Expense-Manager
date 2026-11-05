@@ -9,8 +9,9 @@ recurring template are expected, so they are never flagged.
 
 Possible duplicates: two or more entries with the same date, amount, description and shop. Lines
 that belong to one receipt are one entry (the same item twice on one receipt is not a mistake). Only
-a real receipt counts: expenses typed in by hand are filed under derived bills too, but those group
-unrelated entries, so the caller says which bills are receipts (`receipt_bills`).
+a real receipt counts (one the user created or imported, or built by hand with Add by bill): an expense
+typed in on its own is filed under its own derived bill, so the caller says which bills are receipts
+(`receipt_bills`).
 
 A user can say a group of lookalike entries is not a duplicate. That is remembered under the group's
 `duplicate_key` (a hash of its day, amount, description, shop and category) together with how many

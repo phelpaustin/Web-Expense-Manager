@@ -84,6 +84,20 @@ def test_the_same_line_twice_on_one_receipt_is_not_a_duplicate(client, make_user
     assert get(client, h)["duplicates"]["items"][0]["count"] == 2
 
 
+def test_an_add_by_bill_receipt_counts_once_but_separate_typed_entries_still_count(client, make_user):
+    _, h = make_user()
+    line = {"date": day(3), "category": "Food", "description": "Milk", "amount": "20", "shop": "ICA", "currency": "SEK"}
+    r = client.post("/api/expenses/bulk", json={"items": [line, line], "as_bill": True}, headers=h)
+    assert r.status_code in (200, 201), r.text
+    assert get(client, h)["duplicates"]["items"] == []  # one receipt (hand-built bill): not a mistake
+    # two same-day, same-shop expenses typed in one by one are separate purchases, so they do count
+    other = {**line, "description": "Bread", "amount": "30"}
+    for _ in range(2):
+        assert client.post("/api/expenses", json=other, headers=h).status_code == 201
+    [dup] = get(client, h)["duplicates"]["items"]
+    assert dup["count"] == 2
+
+
 def test_needs_a_login(client):
     assert client.get(URL).status_code in (401, 403)
 

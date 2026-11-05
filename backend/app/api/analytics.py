@@ -2,8 +2,10 @@ import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.api import bill_sync
 from app.api.deps import get_current_user, get_user_group_ids
 from app.db.database import get_db
 from app.db import models
@@ -230,13 +232,15 @@ def analytics_unusual(
     expenses, unconverted = fetch_expenses_in_reporting_currency_ex(db, user.id, scope, space_ids)
 
     def receipt_bills(ids: set) -> set:
-        # A bill the user created or imported is a receipt; a derived bill ("expenses" origin) only
-        # files unrelated entries together, so its lines are not one entry.
+        # A bill the user created or imported is a receipt, and so is one they put together by hand
+        # (Add by bill, Edit items: explicit key). A bill filed automatically from an expense is
+        # one entry or, from before purchases were separate, unrelated ones: not a receipt.
         found: set = set()
         wanted = sorted(ids)
         for i in range(0, len(wanted), 500):
             rows = db.query(models.PendingBill.id).filter(
-                models.PendingBill.id.in_(wanted[i : i + 500]), models.PendingBill.origin.is_(None)
+                models.PendingBill.id.in_(wanted[i : i + 500]),
+                or_(models.PendingBill.origin.is_(None), models.PendingBill.origin_key.like(f"{bill_sync.EXPLICIT_PREFIX}%")),
             )
             found.update(r[0] for r in rows)
         return found
