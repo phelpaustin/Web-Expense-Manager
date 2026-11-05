@@ -903,3 +903,27 @@ describe('quantity and unit', () => {
     expect(screen.getByText('Bread').closest('tr').textContent).not.toMatch(/Count/)
   })
 })
+
+describe('explicit itemise / single-expense options', () => {
+  it('a lone ordinary purchase with a bill has Itemise on its row and in the edit panel', async () => {
+    const lone = { ...NORMAL, id: 5, description: 'LIDL167', source_bill_id: 31 }
+    client.fetchExpenses.mockImplementation(async () => ({ items: [lone], total: 1 }))
+    client.fetchBill.mockResolvedValue({ id: 31, date: '2026-07-20', shop: 'LIDL167', amount: 20, currency: 'SEK', status: 'itemised' })
+    client.fetchBillItems.mockResolvedValue([lone])
+    renderAt(undefined)
+    fireEvent.click(await screen.findByRole('button', { name: 'Itemise' }))
+    await waitFor(() => expect(client.fetchBill).toHaveBeenCalledWith(31))
+  })
+
+  it('a total-only row can be marked as a single expense from its edit panel', async () => {
+    client.fetchExpenses.mockImplementation(async () => ({ items: [TOTAL_ONLY], total: 1 }))
+    client.markBillSingle.mockResolvedValue({ id: 77, status: 'itemised' })
+    renderAt(undefined)
+    await flatView()
+    fireEvent.click(within(rowOf('LIDL145MALMOBA')).getByTitle('Edit'))
+    const panel = document.querySelector('tr.editing')
+    expect(within(panel).getByRole('button', { name: /Itemise/ })).toBeTruthy()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Mark as single expense' }))
+    await waitFor(() => expect(client.markBillSingle).toHaveBeenCalledWith(77))
+  })
+})

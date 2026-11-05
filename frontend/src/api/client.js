@@ -538,6 +538,11 @@ export function recordBillTotals(ids, category) {
   })
 }
 
+// A recorded total that is really one purchase becomes an ordinary expense (no "Total only").
+export function markBillSingle(id) {
+  return request(`/api/bills/${id}/mark-single`, { method: 'POST' })
+}
+
 export function undoBillTotal(id) {
   return request(`/api/bills/${id}/undo`, { method: 'POST' })
 }

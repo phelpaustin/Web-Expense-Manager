@@ -24,6 +24,8 @@ export function ExpenseRow({
   COLS,
   setSelected,
   itemiseFromExpense,
+  editItemsOfBill,
+  markSingle,
   afterMutation,
   afterDelete,
   onPickTrip,
@@ -133,6 +135,33 @@ export function ExpenseRow({
             </label>
           </div>
           <div className="edit-actions">
+            {!billLine && e.source_bill_id && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => {
+                  cancelEdit()
+                  if (e.bill_total_only) itemiseFromExpense(e)
+                  else editItemsOfBill(e.source_bill_id)
+                }}
+                title="Enter the items of this purchase; they replace this single line"
+              >
+                🧾 Itemise…
+              </button>
+            )}
+            {e.bill_total_only && e.source_bill_id && (
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => {
+                  cancelEdit()
+                  markSingle(e)
+                }}
+                title="This is one purchase (a subscription, a phone bill): remove the Total only mark"
+              >
+                Mark as single expense
+              </button>
+            )}
             <button className="icon-btn save" onClick={() => afterMutation(saveEdit(e.id))} title="Save">
               ✓ Save
             </button>
@@ -192,6 +221,15 @@ export function ExpenseRow({
             className="mini-btn primary"
             onClick={() => itemiseFromExpense(e)}
             title="Enter the items on this bill; they replace this single total"
+          >
+            Itemise
+          </button>
+        )}
+        {canEditExpense(e) && !billLine && !e.bill_total_only && e.source_bill_id && (
+          <button
+            className="mini-btn"
+            onClick={() => editItemsOfBill(e.source_bill_id)}
+            title="Break this purchase into items; they replace this single line"
           >
             Itemise
           </button>

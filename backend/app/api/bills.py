@@ -604,6 +604,41 @@ def revert_to_total(
     return _serialize_one(db, user.id, bill)
 
 
+@router.post("/bills/{bill_id}/mark-single")
+def mark_single(
+    bill_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """A bill recorded as a total is really one purchase (a subscription, a phone bill): drop its
+    "total only" flag so it is an ordinary expense. The bill becomes one made from that expense, so
+    it follows the expense from now on."""
+    bill = (
+        db.query(models.PendingBill)
+        .filter(models.PendingBill.id == bill_id, models.PendingBill.user_id == user.id)
+        .with_for_update()
+        .first()
+    )
+    if bill is None:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    if bill.status != STATUS_TOTAL_ONLY:
+        raise HTTPException(status_code=409, detail="Only a bill recorded as a total can be marked as a single expense")
+    items = (
+        db.query(models.Expense)
+        .filter(models.Expense.source_bill_id == bill.id, models.Expense.user_id == user.id)
+        .all()
+    )
+    if len(items) != 1:
+        raise HTTPException(status_code=409, detail="This bill does not have exactly one recorded total")
+    item = items[0]
+    item.bill_total_only = False
+    bill.status = STATUS_ITEMISED
+    bill.origin, bill.origin_key = bill_sync.ORIGIN_EXPENSES, f"e|{item.id}"
+    db.commit()
+    db.refresh(bill)
+    return _serialize_one(db, user.id, bill)
+
+
 @router.post("/bills/{bill_id}/undo")
 def undo_record_total(
     bill_id: int,

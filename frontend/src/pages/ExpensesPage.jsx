@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { money } from '../format.js'
 import { EMPTY_DATE_FILTER, datesFor } from '../datePeriod.js'
-import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems } from '../api/client.js'
+import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems, markBillSingle } from '../api/client.js'
 import AddExpensePanel from '../components/expenses/AddExpensePanel.jsx'
 import BulkEditPanel from '../components/expenses/BulkEditPanel.jsx'
 import ExpenseFilters from '../components/expenses/ExpenseFilters.jsx'
@@ -531,6 +531,15 @@ export default function ExpensesPage({
     }
   }
 
+  // From a recorded total that is really one purchase: it becomes an ordinary expense.
+  async function markSingle(e) {
+    try {
+      await afterMutation(markBillSingle(e.source_bill_id))
+    } catch (err) {
+      onError?.(err.message)
+    }
+  }
+
   async function handleSubmitBill() {
     if (billItems.length === 0) return
     if (billMismatch !== null && billMismatch !== 0) {
@@ -641,6 +650,8 @@ export default function ExpensesPage({
       COLS,
       setSelected,
       itemiseFromExpense,
+      editItemsOfBill,
+      markSingle,
       afterMutation,
       afterDelete,
       onPickTrip: pickTrip,
