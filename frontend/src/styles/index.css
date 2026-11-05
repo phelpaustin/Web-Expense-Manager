@@ -701,6 +701,7 @@ button {
 input[type='text'],
 input[type='number'],
 input[type='date'],
+input[type='month'],
 input[type='email'],
 input[type='password'],
 input[type='search'],
