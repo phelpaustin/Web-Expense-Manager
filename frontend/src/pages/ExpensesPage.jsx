@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { money } from '../format.js'
 import { EMPTY_DATE_FILTER, datesFor } from '../datePeriod.js'
-import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems, markBillSingle } from '../api/client.js'
+import { suggestCategory, autoCategorize, fetchExpenses, fetchBill, fetchBillItems } from '../api/client.js'
 import AddExpensePanel from '../components/expenses/AddExpensePanel.jsx'
 import BulkEditPanel from '../components/expenses/BulkEditPanel.jsx'
 import ExpenseFilters from '../components/expenses/ExpenseFilters.jsx'
@@ -82,7 +82,6 @@ export default function ExpensesPage({
       return value
     })
   }, [])
-  const [filterTotalOnly, setFilterTotalOnly] = useState(false)
   // The bill whose items are being entered (set when coming from the Bills page or a total-only row).
   const [itemisingBill, setItemisingBill] = useState(null)
   const location = useLocation()
@@ -138,7 +137,6 @@ export default function ExpensesPage({
       shop: filterShop,
       date_from: dateFrom,
       date_to: dateTo,
-      total_only: filterTotalOnly ? 'true' : '',
       page,
       page_size: pageSize,
     })
@@ -153,7 +151,7 @@ export default function ExpensesPage({
       .finally(() => {
         if (request === latestFetch.current) setLoadingExpenses(false)
       })
-  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, filterTotalOnly, page, pageSize, onError])
+  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, page, pageSize, onError])
 
   // Fetch the current page whenever filters/pagination change (and once on mount).
   useEffect(() => {
@@ -198,7 +196,7 @@ export default function ExpensesPage({
     }
   }
 
-  const hasActiveFilters = search || filterCategory || filterShop || filterGroup || dateFrom || dateTo || filterTotalOnly
+  const hasActiveFilters = search || filterCategory || filterShop || filterGroup || dateFrom || dateTo
 
   function clearFilters() {
     setSearch('')
@@ -206,7 +204,6 @@ export default function ExpensesPage({
     setFilterShop('')
     setFilterGroup('')
     setDateFilter(EMPTY_DATE_FILTER)
-    setFilterTotalOnly(false)
     setPage(1)
   }
 
@@ -215,7 +212,7 @@ export default function ExpensesPage({
   useEffect(() => {
     setSelectedIds(new Set())
     setAllMatching(false)
-  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo, filterTotalOnly])
+  }, [filterGroup, debouncedSearch, filterCategory, filterShop, dateFrom, dateTo])
 
   const editableIds = pageExpenses.filter(canEditExpense).map((e) => e.id)
   const isSelected = (id) => allMatching || selectedIds.has(id)
@@ -276,7 +273,6 @@ export default function ExpensesPage({
       shop: filterShop || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
-      total_only: filterTotalOnly ? true : undefined,
     }
   }
 
@@ -531,15 +527,6 @@ export default function ExpensesPage({
     }
   }
 
-  // From a recorded total that is really one purchase: it becomes an ordinary expense.
-  async function markSingle(e) {
-    try {
-      await afterMutation(markBillSingle(e.source_bill_id))
-    } catch (err) {
-      onError?.(err.message)
-    }
-  }
-
   async function handleSubmitBill() {
     if (billItems.length === 0) return
     if (billMismatch !== null && billMismatch !== 0) {
@@ -651,7 +638,6 @@ export default function ExpensesPage({
       setSelected,
       itemiseFromExpense,
       editItemsOfBill,
-      markSingle,
       afterMutation,
       afterDelete,
       onPickTrip: pickTrip,
@@ -708,7 +694,6 @@ export default function ExpensesPage({
           setGroupByBill={setGroupByBill}
           expandAll={expandAll}
           collapseAll={collapseAll}
-          filterTotalOnly={filterTotalOnly}
           allSpaces={allSpaces}
           hasActiveFilters={hasActiveFilters}
           clearFilters={clearFilters}
@@ -717,7 +702,6 @@ export default function ExpensesPage({
           setFilterCategory={setFilterCategory}
           setFilterShop={setFilterShop}
           setFilterGroup={setFilterGroup}
-          setFilterTotalOnly={setFilterTotalOnly}
           toggleSelectMode={toggleSelectMode}
         />
       )}

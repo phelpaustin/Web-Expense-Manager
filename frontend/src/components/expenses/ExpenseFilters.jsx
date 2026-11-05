@@ -14,7 +14,6 @@ export default function ExpenseFilters({
   setGroupByBill,
   expandAll,
   collapseAll,
-  filterTotalOnly,
   allSpaces,
   hasActiveFilters,
   clearFilters,
@@ -23,7 +22,6 @@ export default function ExpenseFilters({
   setFilterCategory,
   setFilterShop,
   setFilterGroup,
-  setFilterTotalOnly,
   toggleSelectMode,
 }) {
   return (
@@ -65,14 +63,6 @@ export default function ExpenseFilters({
           </select>
         )}
         <DatePeriodFilter filter={dateFilter} onChange={resetToFirstPage(setDateFilter)} />
-        <label className="toggle-row inline-toggle" title="Show only expenses that are a bill's total with no items yet">
-          <input
-            type="checkbox"
-            checked={filterTotalOnly}
-            onChange={(e) => resetToFirstPage(setFilterTotalOnly)(e.target.checked)}
-          />
-          <span>Total-only bills</span>
-        </label>
         {hasActiveFilters && (
           <button type="button" className="ghost-btn" onClick={clearFilters}>
             Clear filters

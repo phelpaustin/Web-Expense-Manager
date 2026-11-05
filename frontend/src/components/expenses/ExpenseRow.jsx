@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import UnitSelect from '../UnitSelect.jsx'
 import CurrencySelect from '../CurrencySelect.jsx'
-import { TotalOnlyBadge } from '../BillStatus.jsx'
 import { money } from '../../format.js'
 import { SPACE_TYPE_ICONS, SelectBox } from './shared.jsx'
 
@@ -25,7 +24,6 @@ export function ExpenseRow({
   setSelected,
   itemiseFromExpense,
   editItemsOfBill,
-  markSingle,
   afterMutation,
   afterDelete,
   onPickTrip,
@@ -149,19 +147,6 @@ export function ExpenseRow({
                 🧾 Itemise…
               </button>
             )}
-            {e.bill_total_only && e.source_bill_id && (
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => {
-                  cancelEdit()
-                  markSingle(e)
-                }}
-                title="This is one purchase (a subscription, a phone bill): remove the Total only mark"
-              >
-                Mark as single expense
-              </button>
-            )}
             <button className="icon-btn save" onClick={() => afterMutation(saveEdit(e.id))} title="Save">
               ✓ Save
             </button>
@@ -176,7 +161,7 @@ export function ExpenseRow({
   return (
     <tr
       key={e.id}
-      className={`${e.bill_total_only ? 'row-total-only' : ''}${selectMode && isSelected(e.id) ? ' row-selected' : ''}`.trim()}
+      className={selectMode && isSelected(e.id) ? 'row-selected' : undefined}
     >
       {selectMode && (
         <td className="select-cell">
@@ -201,7 +186,6 @@ export function ExpenseRow({
             · {e.quantity} {e.unit}
           </span>
         )}
-        {e.bill_total_only && <TotalOnlyBadge />}
       </td>
       <td>
         {groupName(e.group_id) ? (
@@ -216,24 +200,6 @@ export function ExpenseRow({
         {money(e.amount, e.currency)}
       </td>
       <td className="right nowrap">
-        {canEditExpense(e) && e.bill_total_only && e.source_bill_id && (
-          <button
-            className="mini-btn primary"
-            onClick={() => itemiseFromExpense(e)}
-            title="Enter the items on this bill; they replace this single total"
-          >
-            Itemise
-          </button>
-        )}
-        {canEditExpense(e) && !billLine && !e.bill_total_only && e.source_bill_id && (
-          <button
-            className="mini-btn"
-            onClick={() => editItemsOfBill(e.source_bill_id)}
-            title="Break this purchase into items; they replace this single line"
-          >
-            Itemise
-          </button>
-        )}
         {canEditExpense(e) && (
           <>
             {onPickTrip && allSpaces.some((g) => g.role !== 'viewer') && (

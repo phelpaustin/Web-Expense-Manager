@@ -1,5 +1,4 @@
 import { Fragment } from 'react'
-import { TotalOnlyBadge } from '../BillStatus.jsx'
 import { money } from '../../format.js'
 import { categorySummary } from '../../billGroups.js'
 import { SelectBox } from './shared.jsx'
@@ -49,24 +48,17 @@ export default function ExpenseTable({
         {groupByBill
           ? billGroups.map((group) => {
               const isExpanded = expandedBillKeys.has(group.key)
-              // A bill recorded as a total only (no items yet) is flagged right on its header,
-              // so it is visible without expanding and can be itemised from there.
-              const totalOnlyItems = group.items.filter((e) => e.bill_total_only)
-              const allTotalOnly = totalOnlyItems.length === group.items.length
               const single = group.items.length === 1 ? group.items[0] : null
               // Items that all came from one itemised bill can be re-opened for editing.
               const billIds = new Set(group.items.map((e) => e.source_bill_id))
-              const itemisedBillId = totalOnlyItems.length === 0 && billIds.size === 1 ? [...billIds][0] : null
+              const itemisedBillId = group.items.length > 1 && billIds.size === 1 ? [...billIds][0] : null
               // A single line with no shop is named after what it is, like its bill on the Bills page.
               const name = group.shop || (single ? single.description : '') || 'No shop'
               const groupEditableIds = group.items.filter(canEditExpense).map((e) => e.id)
-              // A lone, itemised-or-plain purchase (a subscription, a phone bill) is just a normal row:
-              // there is nothing to expand. Only multi-item bills and total-only bills get a header.
-              if (single && !single.bill_total_only) return <ExpenseRow key={single.id} e={single} {...rowProps} />
               return (
                 <Fragment key={group.key}>
                   <tr
-                    className={`bill-group-header clickable-row${allTotalOnly ? ' row-total-only' : ''}`}
+                    className="bill-group-header clickable-row"
                     onClick={() => toggleBillGroup(group.key)}
                   >
                     <td colSpan={COLS}>
@@ -89,14 +81,12 @@ export default function ExpenseTable({
                       >
                         {isExpanded ? '▾' : '▸'}
                       </button>{' '}
-                      🧾 {group.date} · {name} · {group.items.length} item
-                      {group.items.length === 1 ? '' : 's'}
-                      {group.items.length > 1 && ` · ${categorySummary(group.items)}`} · Bill total:{' '}
+                      🧾 {group.date} · {name}
+                      {group.items.length > 1 && ` · ${group.items.length} items`} · {categorySummary(group.items)} · Bill total:{' '}
                       {money(
                         group.items.reduce((sum, e) => sum + e.amount, 0),
                         group.currency,
                       )}
-                      {totalOnlyItems.length > 0 && <TotalOnlyBadge />}
                       {single && canEditExpense(single) && (
                         <button
                           type="button"
@@ -138,19 +128,6 @@ export default function ExpenseTable({
                           aria-label={`Move or copy ${name} to a trip`}
                         >
                           ✈ To trip
-                        </button>
-                      )}
-                      {allTotalOnly && single && single.source_bill_id && canEditExpense(single) && (
-                        <button
-                          type="button"
-                          className="mini-btn primary"
-                          onClick={(ev) => {
-                            ev.stopPropagation()
-                            itemiseFromExpense(single)
-                          }}
-                          title="Enter the items on this bill; they replace this single total"
-                        >
-                          Itemise
                         </button>
                       )}
                     </td>

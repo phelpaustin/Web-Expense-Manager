@@ -15,11 +15,3 @@ export function BillStatusChip({ status, itemCount = 0 }) {
     </span>
   )
 }
-
-export function TotalOnlyBadge() {
-  return (
-    <span className="total-only-badge" title="Entered from a bill total with no item breakdown. Click Itemise to add the items; the total stays counted until you do.">
-      🧾 Total only
-    </span>
-  )
-}

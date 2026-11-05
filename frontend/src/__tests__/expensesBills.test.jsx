@@ -83,75 +83,46 @@ const flatView = async () => {
   fireEvent.click(screen.getByRole('button', { name: /Flat view/ }))
 }
 
-describe('total-only expenses stand out on the Expenses page', () => {
-  it('flags the bill header (without expanding) and offers Itemise; ordinary bills get neither', async () => {
+describe('every purchase is one collapsed line', () => {
+  it('shows ordinary and single-line purchases the same way, with no Total only mark or Itemise button', async () => {
     renderAt(undefined)
     const special = await header('LIDL145MALMOBA') // named from its description since it has no shop
-    expect(special.className).toContain('row-total-only')
-    expect(within(special).getByText(/Total only/)).toBeTruthy()
-    expect(within(special).getByRole('button', { name: 'Itemise' })).toBeTruthy()
-    // A lone ordinary purchase is a plain row: no header, no chevron.
-    const ordinary = (await screen.findByText('Milk')).closest('tr')
-    expect(ordinary.className).not.toContain('row-total-only')
-    expect(within(ordinary).queryByText(/Total only/)).toBeNull()
-    expect(within(ordinary).queryByRole('button', { name: 'Itemise' })).toBeNull()
-    expect(within(ordinary).queryByRole('button', { name: /Expand|Collapse/ })).toBeNull()
+    const ordinary = await header('Milk')
+    for (const h of [special, ordinary]) {
+      expect(h.className).toBe('bill-group-header clickable-row')
+      expect(within(h).queryByText(/Total only/)).toBeNull()
+      expect(within(h).queryByRole('button', { name: 'Itemise' })).toBeNull()
+      expect(within(h).getByRole('button', { name: /^Expand / })).toBeTruthy()
+      expect(h.textContent).not.toMatch(/1 item/)
+    }
+    expect(screen.queryByText('Total-only bills')).toBeNull() // the filter is gone too
   })
 
-  it('clicking Itemise on the header does not also expand the group', async () => {
-    renderAt(undefined)
-    const special = await header('LIDL145MALMOBA')
-    fireEvent.click(within(special).getByRole('button', { name: 'Itemise' }))
-    await screen.findByRole('status')
-    expect(special.textContent).toContain('▸') // still collapsed
-  })
-
-  it('in the flat view the row itself is highlighted, badged and itemisable', async () => {
-    renderAt(undefined)
-    await flatView()
-    const special = (await screen.findByText('LIDL145MALMOBA')).closest('tr')
-    expect(special.className).toContain('row-total-only')
-    expect(within(special).getByText(/Total only/)).toBeTruthy()
-    expect(within(special).getByRole('button', { name: 'Itemise' })).toBeTruthy()
-    const ordinary = rowOf('Milk')
-    expect(ordinary.className).not.toContain('row-total-only')
-    expect(within(ordinary).queryByText(/Total only/)).toBeNull()
-    expect(within(ordinary).queryByRole('button', { name: 'Itemise' })).toBeNull()
-  })
-
-  it('expanding a group shows the highlighted row inside it', async () => {
+  it('expanding a single line shows its row, which has no Total only mark either', async () => {
     renderAt(undefined)
     fireEvent.click(await header('LIDL145MALMOBA'))
     const inner = (await screen.findByText('LIDL145MALMOBA', { selector: 'td' })).closest('tr')
-    expect(inner.className).toContain('row-total-only')
+    expect(within(inner).queryByText(/Total only/)).toBeNull()
+    expect(within(inner).queryByRole('button', { name: 'Itemise' })).toBeNull()
   })
 
-  it('can filter to total-only bills', async () => {
+  it('Itemise is inside the edit window of a single line', async () => {
     renderAt(undefined)
-    await screen.findByText('Milk')
-    fireEvent.click(screen.getByLabelText('Total-only bills'))
-    await waitFor(() => expect(client.fetchExpenses.mock.calls.at(-1)[0]).toMatchObject({ total_only: 'true', page: 1 }))
-    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
-    await waitFor(() => expect(client.fetchExpenses.mock.calls.at(-1)[0].total_only).toBe(''))
-  })
-
-  it('a group that mixes a total-only line with items is badged but not made a one-click itemise', async () => {
-    client.fetchExpenses.mockImplementation(async () => ({
-      items: [{ ...TOTAL_ONLY, shop: 'LIDL' }, { ...NORMAL, id: 9, shop: 'LIDL', date: '2026-07-21', description: 'Bread', source_bill_id: 77 }],
-      total: 2,
-    }))
-    renderAt(undefined)
-    const mixed = await header('LIDL')
-    expect(within(mixed).getByText(/Total only/)).toBeTruthy()
-    expect(mixed.className).not.toContain('row-total-only')
-    expect(within(mixed).queryByRole('button', { name: 'Itemise' })).toBeNull()
+    fireEvent.click(within(await header('LIDL145MALMOBA')).getByRole('button', { name: 'Edit LIDL145MALMOBA' }))
+    expect(await screen.findByRole('button', { name: /Itemise…/ })).toBeTruthy()
   })
 })
+
+// Open a single line's editor and choose Itemise… there.
+const itemise = async (name) => {
+  fireEvent.click(within(await header(name)).getByRole('button', { name: `Edit ${name}` }))
+  fireEvent.click(await screen.findByRole('button', { name: /Itemise…/ }))
+}
 
 describe('itemising from a total-only row', () => {
   it('opens bill mode for that bill and says the single line will be replaced', async () => {
     renderAt(undefined)
-    fireEvent.click(within(await header('LIDL145MALMOBA')).getByRole('button', { name: 'Itemise' }))
+    await itemise('LIDL145MALMOBA')
     const banner = await screen.findByRole('status')
     expect(within(banner).getByText(/Itemising: LIDL145MALMOBA/)).toBeTruthy()
     expect(within(banner).getByText(/replaced by these items/)).toBeTruthy()
@@ -163,7 +134,7 @@ describe('itemising from a total-only row', () => {
 
   it('submits the items against the bill, then leaves bill mode', async () => {
     renderAt(undefined)
-    fireEvent.click(within(await header('LIDL145MALMOBA')).getByRole('button', { name: 'Itemise' }))
+    await itemise('LIDL145MALMOBA')
     await screen.findByRole('status')
 
     fireEvent.change(screen.getByPlaceholderText('Category'), { target: { value: 'Food' } })
@@ -182,7 +153,7 @@ describe('itemising from a total-only row', () => {
 
   it('cancelling clears the bill without sending anything', async () => {
     renderAt(undefined)
-    fireEvent.click(within(await header('LIDL145MALMOBA')).getByRole('button', { name: 'Itemise' }))
+    await itemise('LIDL145MALMOBA')
     await screen.findByRole('status')
     fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
@@ -193,7 +164,7 @@ describe('itemising from a total-only row', () => {
 describe('Add by bill (a new bill, not itemising an existing one)', () => {
   it('asks the server to make its bill record, so it shows on the Bills page', async () => {
     renderAt(undefined)
-    await screen.findByText('Milk')
+    await screen.findAllByText(/Milk/)
     fireEvent.click(screen.getByRole('button', { name: /Add by bill/ }))
     fireEvent.change(document.querySelector('#add-expense-panel input[type=date]'), { target: { value: '2026-07-21' } })
     await addItem(12)
@@ -208,7 +179,7 @@ describe('Add by bill (a new bill, not itemising an existing one)', () => {
   it('shows the error and keeps the items when the bill cannot be saved', async () => {
     client.createExpensesBulk.mockRejectedValueOnce(new Error('Amount is too large'))
     renderAt(undefined)
-    await screen.findByText('Milk')
+    await screen.findAllByText(/Milk/)
     fireEvent.click(screen.getByRole('button', { name: /Add by bill/ }))
     fireEvent.change(document.querySelector('#add-expense-panel input[type=date]'), { target: { value: '2026-07-21' } })
     await addItem(12)
@@ -254,7 +225,7 @@ describe('arriving from the Bills page', () => {
 
   it('shows nothing special for an ordinary visit', async () => {
     renderAt(undefined)
-    await screen.findByText('Milk')
+    await screen.findAllByText(/Milk/)
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByRole('button', { name: /Add by bill/ })).toBeTruthy()
   })
@@ -359,7 +330,6 @@ describe('"Edit items" on an itemised bill group', () => {
 
   it.each([
     ['an ordinary group with no bill', [ITEM(1, { source_bill_id: null }), ITEM(2, { source_bill_id: null })]],
-    ['a group that includes a total-only line', [ITEM(1), ITEM(2, { bill_total_only: true })]],
   ])('is not offered for %s', async (_, items) => {
     client.fetchExpenses.mockImplementation(async () => ({ items, total: items.length }))
     renderAt(undefined)
@@ -383,8 +353,7 @@ describe('names of bill groups on the Expenses page', () => {
   it('a single line with no shop is named after what it is (like on the Bills page)', async () => {
     client.fetchExpenses.mockImplementation(async () => ({ items: [line(1, { description: 'Bus ticket' })], total: 1 }))
     renderAt(undefined)
-    const row = (await screen.findByText('Bus ticket')).closest('tr')
-    expect(row.className).not.toContain('bill-group-header') // a lone line is a plain row
+    expect(await header('Bus ticket')).toBeTruthy() // a lone line is a collapsed line like any other
   })
 
   it('a group with a shop uses the shop, whatever the lines are called', async () => {
@@ -396,10 +365,10 @@ describe('names of bill groups on the Expenses page', () => {
   it('shop-less lines are never merged: each is its own bill, named after itself (as on the Bills page)', async () => {
     client.fetchExpenses.mockImplementation(async () => ({ items: [line(1, { group_id: 3 }), line(2, { group_id: 3 })], total: 2 }))
     renderAt(undefined)
-    const first = (await screen.findByText('Item 1')).closest('tr')
-    const second = (await screen.findByText('Item 2')).closest('tr')
+    const first = await header('Item 1')
+    const second = await header('Item 2')
     expect(first).not.toBe(second)
-    expect(document.querySelectorAll('.bill-group-header')).toHaveLength(0)
+    expect(document.querySelectorAll('.bill-group-header')).toHaveLength(2)
   })
 })
 
@@ -436,7 +405,7 @@ describe('editing an expense in the list', () => {
   it('opens a labelled, full-width panel instead of squeezed table cells', async () => {
     renderAt(undefined)
     await flatView()
-    await screen.findByText('Milk')
+    await screen.findAllByText(/Milk/)
     fireEvent.click(within(rowOf('Milk')).getByTitle('Edit'))
     const panel = document.querySelector('tr.editing')
     expect(panel).toBeTruthy()
@@ -640,7 +609,7 @@ describe('the ✈ trip button on a bill or an expense', () => {
     spaces = { trips: [], groups: [] }
     renderAt(undefined)
     await flatView()
-    await screen.findByText('Milk')
+    await screen.findAllByText(/Milk/)
     expect(screen.queryByLabelText('Move or copy Milk to a trip')).toBeNull()
   })
 })
@@ -649,7 +618,7 @@ describe('editing expenses together', () => {
   const start = async () => {
     renderAt(undefined)
     await flatView()
-    await screen.findByText('Milk')
+    await screen.findAllByText(/Milk/)
     fireEvent.click(screen.getByRole('button', { name: /Edit together/ }))
   }
   const fill = (label, value) => fireEvent.change(within(screen.getByTestId('bulk-bar')).getByLabelText(label), { target: { value } })
@@ -856,13 +825,13 @@ describe('expand and collapse (bill view)', () => {
   })
   const NORMAL_B = { ...NORMAL, id: 9, date: '2026-07-19', description: 'Phone bill' }
 
-  it('starts in bill view with multi-item bills collapsed and lone items as plain rows', async () => {
+  it('starts in bill view with every purchase collapsed, lone ones without an item count', async () => {
     renderAt(undefined)
     const head = await header('LIDL')
     expect(head.textContent).toContain('2 items')
     expect(head.textContent).toContain('2 categories')
     expect(screen.queryByText('Thing 1')).toBeNull()
-    expect(screen.getByText('Phone bill')).toBeTruthy()
+    expect((await header('Phone bill')).textContent).not.toMatch(/item/)
   })
 
   it('the chevron expands and collapses with aria-expanded', async () => {
@@ -897,33 +866,22 @@ describe('quantity and unit', () => {
     renderAt(undefined)
     await header('LIDL')
     expect(screen.queryByRole('columnheader', { name: 'Qty' })).toBeNull()
-    expect(screen.getByText('Phone bill').closest('tr').textContent).not.toMatch(/Litre/)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Phone bill' }))
+    expect(screen.getByText('Phone bill', { selector: 'td' }).closest('tr').textContent).not.toMatch(/Litre/)
     fireEvent.click(screen.getByRole('button', { name: 'Expand LIDL' }))
     expect(screen.getByText('Apples').closest('tr').textContent).toContain('2 Kg')
     expect(screen.getByText('Bread').closest('tr').textContent).not.toMatch(/Count/)
   })
 })
 
-describe('explicit itemise / single-expense options', () => {
-  it('a lone ordinary purchase with a bill has Itemise on its row and in the edit panel', async () => {
+describe('itemising a plain single purchase', () => {
+  it('Itemise… in its edit window loads the purchase\'s bill for itemising', async () => {
     const lone = { ...NORMAL, id: 5, description: 'LIDL167', source_bill_id: 31 }
     client.fetchExpenses.mockImplementation(async () => ({ items: [lone], total: 1 }))
     client.fetchBill.mockResolvedValue({ id: 31, date: '2026-07-20', shop: 'LIDL167', amount: 20, currency: 'SEK', status: 'itemised' })
     client.fetchBillItems.mockResolvedValue([lone])
     renderAt(undefined)
-    fireEvent.click(await screen.findByRole('button', { name: 'Itemise' }))
+    await itemise('LIDL167')
     await waitFor(() => expect(client.fetchBill).toHaveBeenCalledWith(31))
-  })
-
-  it('a total-only row can be marked as a single expense from its edit panel', async () => {
-    client.fetchExpenses.mockImplementation(async () => ({ items: [TOTAL_ONLY], total: 1 }))
-    client.markBillSingle.mockResolvedValue({ id: 77, status: 'itemised' })
-    renderAt(undefined)
-    await flatView()
-    fireEvent.click(within(rowOf('LIDL145MALMOBA')).getByTitle('Edit'))
-    const panel = document.querySelector('tr.editing')
-    expect(within(panel).getByRole('button', { name: /Itemise/ })).toBeTruthy()
-    fireEvent.click(within(panel).getByRole('button', { name: 'Mark as single expense' }))
-    await waitFor(() => expect(client.markBillSingle).toHaveBeenCalledWith(77))
   })
 })

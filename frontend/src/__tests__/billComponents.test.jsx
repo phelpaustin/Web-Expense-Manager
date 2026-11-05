@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import Pagination from '../components/Pagination.jsx'
-import { BillStatusChip, TotalOnlyBadge } from '../components/BillStatus.jsx'
+import { BillStatusChip } from '../components/BillStatus.jsx'
 
 describe('Pagination', () => {
   const setup = (props = {}) => {
@@ -76,11 +76,3 @@ describe('BillStatusChip', () => {
   })
 })
 
-describe('TotalOnlyBadge', () => {
-  it('marks an expense that is only a bill total', () => {
-    render(<TotalOnlyBadge />)
-    const badge = screen.getByText(/Total only/)
-    expect(badge.className).toContain('total-only-badge')
-    expect(badge.title).toMatch(/Itemise/)
-  })
-})

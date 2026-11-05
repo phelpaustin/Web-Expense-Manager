@@ -2373,28 +2373,6 @@ label.link-btn input[type='file'] {
   font-size: 0.85rem;
 }
 
-/* An expense that is only a bill's total (no items yet) */
-.row-total-only td {
-  background: rgba(109, 123, 255, 0.07);
-}
-
-.row-total-only td:first-child {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.total-only-badge {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.12rem 0.5rem;
-  border-radius: 999px;
-  background: rgba(109, 123, 255, 0.16);
-  color: #4338ca;
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
 .bill-group-header .mini-btn {
   margin-left: 0.6rem;
   vertical-align: middle;
