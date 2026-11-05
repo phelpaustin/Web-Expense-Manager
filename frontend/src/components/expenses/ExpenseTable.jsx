@@ -19,7 +19,6 @@ export default function ExpenseTable({
   itemiseFromExpense,
   editItemsOfBill,
   billGroups,
-  onPickTrip,
 }) {
   return (
     <table className="table">
@@ -114,20 +113,6 @@ export default function ExpenseTable({
                           title="Change, add or remove the items on this bill"
                         >
                           Edit items
-                        </button>
-                      )}
-                      {onPickTrip && groupEditableIds.length > 0 && rowProps.allSpaces.some((g) => g.role !== 'viewer') && (
-                        <button
-                          type="button"
-                          className="mini-btn"
-                          onClick={(ev) => {
-                            ev.stopPropagation()
-                            onPickTrip(groupEditableIds, `${name} · ${group.date}`)
-                          }}
-                          title="Move or copy this whole bill to a trip"
-                          aria-label={`Move or copy ${name} to a trip`}
-                        >
-                          ✈ To trip
                         </button>
                       )}
                     </td>

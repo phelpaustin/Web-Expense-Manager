@@ -26,7 +26,6 @@ export function ExpenseRow({
   editItemsOfBill,
   afterMutation,
   afterDelete,
-  onPickTrip,
   isBillLine,
 }) {
   const [confirming, setConfirming] = useState(false)
@@ -202,16 +201,6 @@ export function ExpenseRow({
       <td className="right nowrap">
         {canEditExpense(e) && (
           <>
-            {onPickTrip && allSpaces.some((g) => g.role !== 'viewer') && (
-              <button
-                className="icon-btn"
-                onClick={() => onPickTrip([e.id], e.description || e.shop || e.category)}
-                title="Move or copy to a trip"
-                aria-label={`Move or copy ${e.description || e.shop || e.category} to a trip`}
-              >
-                ✈
-              </button>
-            )}
             <button className="icon-btn" onClick={() => startEdit(e)} title="Edit">
               ✎
             </button>
