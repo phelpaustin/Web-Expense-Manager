@@ -46,7 +46,6 @@ def test_defaults_are_unchanged_for_a_new_user(make_user):
     try:
         opts = get_or_create_options(db, user_id)
         assert opts.base_currency == "SEK"
-        assert opts.count_bills_as_spending is True
         assert opts.alert_digest_enabled is True
         assert opts.budget_period == "Monthly"
         assert "Groceries" in opts.categories

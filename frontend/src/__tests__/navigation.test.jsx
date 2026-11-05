@@ -15,7 +15,7 @@ import SettingsPage from '../pages/SettingsPage.jsx'
 
 const OPTIONS = {
   categories: [], subcategories: {}, units: [], shops: [], currencies: ['EUR', 'SEK'],
-  base_currency: 'SEK', display_currency: 'SEK', display_currency_is_custom: false, count_bills_as_spending: true,
+  base_currency: 'SEK', display_currency: 'SEK', display_currency_is_custom: false,
 }
 
 function renderLayout(props = {}, entry = '/') {

@@ -728,15 +728,6 @@ export function saveDisplayCurrency(currency) {
   })
 }
 
-// Record a bill's total as spending automatically when it is uploaded/imported/added.
-export function saveCountBillsAsSpending(enabled) {
-  return request('/api/options/count-bills-as-spending', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled }),
-  })
-}
-
 // Budget-alert digest email on/off (Settings).
 export function saveAlertDigest(enabled) {
   return request('/api/options/alert-digest', {

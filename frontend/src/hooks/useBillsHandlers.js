@@ -14,7 +14,6 @@ import {
   dismissDuplicate,
   viewReceipt,
   deleteReceipt,
-  saveCountBillsAsSpending,
 } from '../api/client.js'
 import { money } from '../format.js'
 import { useDialogs } from './useDialogs.js'
@@ -40,7 +39,7 @@ export function billForItemising(bill) {
 // loadAll refreshes the dashboard/budgets/expenses totals, which change whenever a bill is
 // recorded, undone or itemised. navigate opens the "All items" view of Spending to itemise a bill.
 // enabled: only load once the user is signed in (otherwise the first request would be a 401).
-export function useBillsHandlers(loadAll, setError, setOptions, navigate, enabled = true) {
+export function useBillsHandlers(loadAll, setError, navigate, enabled = true) {
   const [query, setQueryState] = useState(DEFAULT_QUERY)
   const [data, setData] = useState(EMPTY_BILLS)
   const [loading, setLoading] = useState(false)
@@ -295,11 +294,6 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
     if (done) await loadBills(queryRef.current)
   }
 
-  async function handleToggleCount(enabled) {
-    const updated = await run(() => saveCountBillsAsSpending(enabled))
-    if (updated) setOptions(updated)
-  }
-
   return {
     data,
     reload: () => loadBills(queryRef.current),
@@ -330,7 +324,6 @@ export function useBillsHandlers(loadAll, setError, setOptions, navigate, enable
       uploadReceipt: handleUploadReceipt,
       viewReceipt: handleViewReceipt,
       deleteReceipt: handleDeleteReceipt,
-      toggleCount: handleToggleCount,
     },
   }
 }

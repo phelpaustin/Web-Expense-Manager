@@ -399,14 +399,13 @@ def commit(
             added_income += 1
     if new_bills:
         db.flush()
-        if options.count_bills_as_spending:
-            for bill, category in new_bills:
-                # A category the statement could not work out leaves the bill in the usual "Bills" category.
-                chosen = None if category == si.UNCATEGORIZED else category
-                bills_api._record_total(db, user, bill, category=chosen)
-                recorded_bills += 1
-                if chosen:
-                    learned.add((chosen, "", "Count", bill.shop))
+        for bill, category in new_bills:
+            # A category the statement could not work out leaves the bill in the usual "Bills" category.
+            chosen = None if category == si.UNCATEGORIZED else category
+            bills_api._record_total(db, user, bill, category=chosen)
+            recorded_bills += 1
+            if chosen:
+                learned.add((chosen, "", "Count", bill.shop))
     db.commit()
     if recorded_bills:
         bills_api._learn_default_category(db, user.id)

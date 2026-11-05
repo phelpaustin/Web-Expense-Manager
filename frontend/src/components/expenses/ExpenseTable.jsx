@@ -41,8 +41,6 @@ export default function ExpenseTable({
           <th>Shop</th>
           <th>Item name</th>
           <th>Space</th>
-          <th className="right">Qty</th>
-          <th>Unit</th>
           <th className="right">Amount</th>
           <th></th>
         </tr>

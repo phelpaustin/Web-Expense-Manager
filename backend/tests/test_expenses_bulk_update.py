@@ -112,8 +112,9 @@ def test_a_changed_shop_keeps_the_derived_bills_in_step(client, make_user):
     b = _add(client, h, amount="20", shop="ICA")
     _add(client, h, amount="7", shop="Coop")
     assert _bulk(client, h, {"ids": [a["id"], b["id"]], "changes": {"shop": "Coop"}}).json() == {"updated": 2}
-    [bill] = _all_bills(client, h)  # ICA is gone: all three are one Coop bill now
-    assert bill["shop"] == "Coop" and D(str(bill["amount"])) == D("37") and bill["item_count"] == 3
+    bills = _all_bills(client, h)  # each expense is its own purchase; the renamed ones follow their shop
+    assert [bl["shop"] for bl in bills] == ["Coop", "Coop", "Coop"]
+    assert sorted(D(str(bl["amount"])) for bl in bills) == [D("7"), D("10"), D("20")]
 
 
 def test_rejects_bad_requests(client, make_user):

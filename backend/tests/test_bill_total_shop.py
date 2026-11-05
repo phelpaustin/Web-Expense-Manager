@@ -24,12 +24,18 @@ def stored(client, h, **params):
 def new_bill(client, h, shop="ICA Maxi", amount="300", when=None):
     r = client.post("/api/pending-bills", json={"date": when or day(5), "shop": shop, "amount": amount}, headers=h)
     assert r.status_code == 201, r.text
-    return r.json()
+    bill = r.json()
+    if h["Authorization"] in _WAITING:
+        bill = client.post(f"/api/bills/{bill['id']}/undo", headers=h).json()
+    return bill
+
+
+_WAITING: set[str] = set()
 
 
 def manual_mode(client, h):
-    """Bills are not recorded as spending automatically; the user records each one."""
-    assert client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h).status_code == 200
+    """New bills count at once; after this, new_bill sends each back to "To itemise" so the test records it."""
+    _WAITING.add(h["Authorization"])
 
 
 # --- every way a total gets recorded sets the shop -----------------------------------------

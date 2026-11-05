@@ -65,9 +65,6 @@ class UserOptions(Base):
     base_currency = Column(String, nullable=False, default="SEK")
     # Currency totals are shown in; NULL = follow base_currency (the default for new records).
     display_currency = Column(String, nullable=True)
-    # When on, uploaded/imported/added bills are recorded as total-only expenses right away,
-    # so they count towards budgets before they are itemised.
-    count_bills_as_spending = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     # Daily budget-alert digest email. Off after the user unsubscribes.
     alert_digest_enabled = Column(Boolean, nullable=False, default=True, server_default=expression.true())
     budget_period = Column(String, nullable=False, default="Monthly")

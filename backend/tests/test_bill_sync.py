@@ -43,6 +43,26 @@ def _insert(uid, rows):
     return ids
 
 
+def _legacy_bill(uid, expense_ids, shop="Lidl", date=JULY.format(10), currency="SEK", group=0, key=None):
+    """A derived bill as adopted under the old same-day, same-shop rule (key ``s|...``)."""
+    db = SessionLocal()
+    bill = models.PendingBill(
+        user_id=uid, date=dt.date.fromisoformat(date), shop=shop, amount=0, note="", status="itemised", currency=currency,
+        origin="expenses", origin_key=key or f"s|{date}|{shop.strip().lower()}|{currency}|{group}",
+    )
+    db.add(bill)
+    db.flush()
+    total = 0
+    for e in db.query(models.Expense).filter(models.Expense.id.in_(expense_ids)):
+        e.source_bill_id = bill.id
+        total += e.amount
+    bill.amount = total
+    db.commit()
+    bill_id = bill.id
+    db.close()
+    return bill_id
+
+
 def _all_bills(client, h):
     return _bills(client, h, status="all", page_size=200)["items"]
 
@@ -95,13 +115,47 @@ def test_two_shopless_expenses_on_one_day_stay_two_bills(client, make_user):
     assert len(_all_bills(client, h)) == 2
 
 
-def test_lines_from_one_shop_on_one_day_are_one_bill(client, make_user):
+def test_expenses_from_one_shop_on_one_day_are_each_their_own_bill(client, make_user):
     _, h = make_user()
     _add(client, h, amount="10", shop="ICA", description="Milk")
     _add(client, h, amount="20", shop="ica ", description="Bread")  # same shop, different case/space
     _add(client, h, amount="5", shop="ICA", description="Gum")
+    bills = _all_bills(client, h)
+    assert sorted((D(str(b["amount"])), b["item_count"]) for b in bills) == [(D("5"), 1), (D("10"), 1), (D("20"), 1)]
+    assert all(b["from_expenses"] for b in bills)
+
+
+def test_two_same_day_same_shop_expenses_make_two_bills(client, make_user):
+    _, h = make_user()
+    a = _add(client, h, amount="10", shop="ICA")
+    b = _add(client, h, amount="20", shop="ICA")
+    assert _bill_of(client, h, a["id"])["id"] != _bill_of(client, h, b["id"])["id"]
+    assert [x["shop"] for x in _all_bills(client, h)] == ["ICA", "ICA"]
+
+
+def test_a_legacy_bill_keeps_its_grouping_and_a_new_same_shop_expense_does_not_join_it(client, make_user):
+    uid, h = make_user()
+    ids = _insert(uid, [{"shop": "Lidl", "amount": 10}, {"shop": "Lidl", "amount": 5}])
+    legacy_id = _legacy_bill(uid, ids)
+    _sync(client, h)
     [bill] = _all_bills(client, h)
-    assert D(str(bill["amount"])) == D("35") and bill["item_count"] == 3 and bill["shop"] == "ICA"
+    assert bill["id"] == legacy_id and bill["item_count"] == 2 and D(str(bill["amount"])) == D("15")  # not split
+    new = _add(client, h, amount="7", shop="Lidl")  # same day, same shop
+    assert _bill_of(client, h, new["id"])["id"] != legacy_id
+    bills = {b["id"]: b for b in _all_bills(client, h)}
+    assert len(bills) == 2 and bills[legacy_id]["item_count"] == 2 and D(str(bills[legacy_id]["amount"])) == D("15")
+
+
+def test_a_legacy_bill_detaches_only_the_items_that_stop_matching_its_key(client, make_user):
+    uid, h = make_user()
+    ids = _insert(uid, [{"shop": "Lidl", "amount": 10}, {"shop": "Lidl", "amount": 5}])
+    legacy_id = _legacy_bill(uid, ids)
+    _synced_all(client, h)
+    client.put(f"/api/expenses/{ids[0]}", json={"shop": "Coop"}, headers=h)
+    bills = {b["id"]: b for b in _all_bills(client, h)}
+    assert len(bills) == 2 and bills[legacy_id]["item_count"] == 1 and D(str(bills[legacy_id]["amount"])) == D("5")
+    moved = _bill_of(client, h, ids[0])
+    assert moved["id"] != legacy_id and moved["shop"] == "Coop"
 
 
 @pytest.mark.parametrize(
@@ -127,9 +181,9 @@ def test_the_same_shop_in_a_shared_space_is_a_separate_bill(client, make_user):
 def test_expenses_that_already_existed_are_picked_up_on_first_visit(client, make_user):
     uid, h = make_user()
     ids = _insert(uid, [{"shop": "Lidl", "amount": 35.91}, {"shop": "Lidl", "amount": 10}, {"description": "Kiosk", "amount": 25}])
-    assert _synced_bills(client, h, status="all")["total"] == 2  # Lidl (2 lines) + the kiosk expense
-    bills = {b["shop"]: b for b in _synced_all(client, h)}
-    assert D(str(bills["Lidl"]["amount"])) == D("45.91") and bills["Lidl"]["item_count"] == 2
+    assert _synced_bills(client, h, status="all")["total"] == 3  # one bill per expense
+    bills = _all_bills(client, h)
+    assert sorted(D(str(b["amount"])) for b in bills) == [D("10"), D("25"), D("35.91")] and all(b["item_count"] == 1 for b in bills)
     assert all(e["source_bill_id"] for e in _expenses(client, h) if e["id"] in ids)
 
 
@@ -201,7 +255,7 @@ def test_startup_backfill_files_existing_expenses_for_every_user(client, make_us
         assert bill_sync.backfill_all(db) >= 2
     finally:
         db.close()
-    assert len(_all_bills(client, a)) == 1 and len(_all_bills(client, b)) == 1
+    assert len(_all_bills(client, a)) == 2 and len(_all_bills(client, b)) == 1
     assert _bills(client, a)["needs_sync"] is False
 
 
@@ -224,7 +278,7 @@ def test_adoption_is_idempotent_and_changes_no_totals(client, make_user):
     before = _spent(client, h)
     first = {b["id"]: b for b in _synced_all(client, h)}
     again = {b["id"]: b for b in _synced_all(client, h)}
-    assert first.keys() == again.keys() and _bills(client, h)["counts"]["all"] == 2
+    assert first.keys() == again.keys() and _bills(client, h)["counts"]["all"] == 3
     assert _spent(client, h) == before == D("22")
 
 
@@ -352,7 +406,7 @@ def test_without_as_bill_a_bulk_import_is_adopted_by_the_usual_rules(client, mak
     _, h = make_user()
     r = client.post("/api/expenses/bulk", json={"items": _items(5, 6, shop="A")}, headers=h)
     assert all(e["source_bill_id"] is None for e in r.json())  # nothing linked yet...
-    assert len(_synced_all(client, h)) == 1  # ...until the Bills page (or Expenses list) loads: one shop, one bill
+    assert len(_synced_all(client, h)) == 2  # ...until the Bills page (or Expenses list) loads: one bill per expense
 
 
 def test_lines_on_different_days_or_currencies_are_not_forced_into_one_bill(client, make_user):
@@ -366,26 +420,33 @@ def test_lines_on_different_days_or_currencies_are_not_forced_into_one_bill(clie
 # ── editing and deleting expenses keeps the bill right ───────────────────
 def test_editing_an_amount_updates_the_bill_at_once(client, make_user):
     _, h = make_user()
-    e = _add(client, h, amount="10", shop="Coop")
-    _add(client, h, amount="20", shop="Coop")
+    r = client.post("/api/expenses/bulk", json={"items": _items(10, 20, shop="Coop"), "as_bill": True}, headers=h)
+    e = r.json()[0]
     [bill] = _all_bills(client, h)
     assert D(str(bill["amount"])) == D("30")
     client.put(f"/api/expenses/{e['id']}", json={"amount": "15"}, headers=h)
     assert D(str(client.get(f"/api/bills/{bill['id']}", headers=h).json()["amount"])) == D("35")
+    # a purchase of one expense follows it too
+    single = _add(client, h, amount="8", shop="Lidl")
+    client.put(f"/api/expenses/{single['id']}", json={"amount": "9"}, headers=h)
+    assert D(str(_bill_of(client, h, single["id"])["amount"])) == D("9")
 
 
-def test_changing_the_shop_moves_the_expense_to_the_right_bill(client, make_user):
+def test_changing_the_shop_renames_the_expenses_own_bill(client, make_user):
     _, h = make_user()
     a = _add(client, h, amount="10", shop="ICA")
-    _add(client, h, amount="20", shop="ICA")
-    _add(client, h, amount="7", shop="Coop")
+    b = _add(client, h, amount="20", shop="ICA")
+    c = _add(client, h, amount="7", shop="Coop")
+    bill_a = _bill_of(client, h, a["id"])["id"]
     client.put(f"/api/expenses/{a['id']}", json={"shop": "Coop"}, headers=h)
-    bills = {b["shop"]: b for b in _all_bills(client, h)}
-    assert D(str(bills["ICA"]["amount"])) == D("20") and bills["ICA"]["item_count"] == 1
-    assert D(str(bills["Coop"]["amount"])) == D("17") and bills["Coop"]["item_count"] == 2
+    bills = _all_bills(client, h)
+    assert len(bills) == 3  # nothing merged or split: each expense still has its own bill
+    assert _bill_of(client, h, a["id"])["id"] == bill_a and _bill_of(client, h, a["id"])["shop"] == "Coop"
+    assert _bill_of(client, h, b["id"])["shop"] == "ICA" and _bill_of(client, h, c["id"])["shop"] == "Coop"
+    assert sorted((x["shop"], D(str(x["amount"]))) for x in bills) == [("Coop", D("7")), ("Coop", D("10")), ("ICA", D("20"))]
 
 
-def test_changing_the_date_or_currency_moves_it_too(client, make_user):
+def test_changing_the_date_or_currency_updates_the_expenses_own_bill(client, make_user):
     _, h = make_user()
     a = _add(client, h, amount="10", shop="ICA")
     _add(client, h, amount="20", shop="ICA")
@@ -399,10 +460,41 @@ def test_a_bill_with_one_expense_follows_it_when_the_shop_is_added(client, make_
     _, h = make_user()
     a = _add(client, h, description="Coffee", amount="30")
     b2 = _add(client, h, description="Tea", amount="25", shop="Cafe")
+    assert _bill_of(client, h, a["id"])["shop"] == "Coffee"
     client.put(f"/api/expenses/{a['id']}", json={"shop": "Cafe"}, headers=h)
     bills = _all_bills(client, h)
-    assert [b["shop"] for b in bills] == ["Cafe"] and D(str(bills[0]["amount"])) == D("55")
-    assert b2["id"] != a["id"]
+    assert [b["shop"] for b in bills] == ["Cafe", "Cafe"] and sorted(D(str(b["amount"])) for b in bills) == [D("25"), D("30")]
+    assert b2["id"] != a["id"]  # same shop and day, still two purchases
+
+
+def test_editing_a_single_expense_updates_its_bill_header(client, make_user):
+    _, h = make_user()
+    a = _add(client, h, amount="10", shop="ICA")
+    bill_id = _bill_of(client, h, a["id"])["id"]
+    client.put(f"/api/expenses/{a['id']}", json={"date": JULY.format(12), "shop": "Coop", "currency": "EUR"}, headers=h)
+    bill = client.get(f"/api/bills/{bill_id}", headers=h).json()
+    assert (bill["date"], bill["shop"], bill["currency"]) == (JULY.format(12), "Coop", "EUR")
+    assert len(_all_bills(client, h)) == 1
+
+
+@pytest.mark.parametrize(
+    "fields,expected",
+    [({"date": dt.date(2026, 7, 12)}, ("date", JULY.format(12))), ({"shop": "Coop"}, ("shop", "Coop")), ({"currency": "EUR"}, ("currency", "EUR"))],
+    ids=["date", "shop", "currency"],
+)
+def test_a_single_expense_edited_behind_our_back_makes_its_bill_stale_and_the_sync_fixes_the_header(client, make_user, fields, expected):
+    uid, h = make_user()
+    [eid] = _insert(uid, [{"shop": "ICA", "amount": 10}])
+    _sync(client, h)
+    bill_id = _bill_of(client, h, eid)["id"]
+    assert _stale(uid) == set()
+    _db_edit(eid, **fields)
+    assert _stale(uid) == {bill_id}  # the cheap check sees it
+    assert _bills(client, h, status="all")["needs_sync"] is True
+    assert _sync(client, h) is True
+    bill = client.get(f"/api/bills/{bill_id}", headers=h).json()
+    assert bill[expected[0]] == expected[1] and len(_all_bills(client, h)) == 1
+    assert _stale(uid) == set() and _bills(client, h, status="all")["needs_sync"] is False
 
 
 def test_deleting_expenses_shrinks_the_bill_and_removes_it_with_the_last_one(client, make_user):
@@ -451,8 +543,7 @@ def test_such_a_bill_cannot_be_deleted_directly(client, make_user):
 
 def test_editing_the_items_of_such_a_bill_keeps_them_as_one_bill(client, make_user):
     _, h = make_user()
-    _add(client, h, amount="10", shop="ICA", description="Milk")
-    _add(client, h, amount="20", shop="ICA", description="Bread")
+    client.post("/api/expenses/bulk", json={"items": [*_items(10, shop="ICA"), *_items(20, shop="ICA")], "as_bill": True}, headers=h)
     [bill] = _all_bills(client, h)
     new_items = _items(5, 5, 5, shop="")  # no shop on the lines now
     r = client.post("/api/expenses/bulk", json={"items": new_items, "bill_id": bill["id"], "replace": True}, headers=h)
@@ -464,8 +555,7 @@ def test_editing_the_items_of_such_a_bill_keeps_them_as_one_bill(client, make_us
 
 def test_reverting_such_a_bill_hands_it_to_the_user(client, make_user):
     _, h = make_user()
-    _add(client, h, amount="10", shop="ICA")
-    _add(client, h, amount="20", shop="ICA")
+    client.post("/api/expenses/bulk", json={"items": _items(10, 20, shop="ICA"), "as_bill": True}, headers=h)
     [bill] = _all_bills(client, h)
     r = client.post(f"/api/bills/{bill['id']}/revert-to-total", headers=h).json()
     assert r["status"] == "total_only" and r["from_expenses"] is False
@@ -514,8 +604,9 @@ def test_a_concurrent_adopter_losing_the_race_retries_and_finds_the_others_bill(
         return real(db, user_id)
 
     monkeypatch.setattr(bill_sync, "_adopt", racing)
-    [bill] = _synced_all(client, h)
-    assert calls == [1, 2] and bill["item_count"] == 2 and D(str(bill["amount"])) == D("15")
+    bills = _synced_all(client, h)
+    assert calls == [1, 2] and sorted(D(str(b["amount"])) for b in bills) == [D("5"), D("10")]
+    assert all(b["item_count"] == 1 for b in bills)
 
 
 def test_it_gives_up_after_repeated_conflicts_instead_of_looping(client, make_user, monkeypatch):
@@ -563,8 +654,7 @@ def test_many_expenses_are_adopted_in_one_go(client, make_user):
     _insert(uid, rows)
     total = sum(r["amount"] for r in rows)
     result = _synced_bills(client, h, status="all", page_size=200)
-    keys = {(r["shop"].lower(), r["date"]) for r in rows}
-    assert result["total"] == len(keys)
+    assert result["total"] == len(rows)  # one bill per expense
     assert _spent(client, h) == D(str(total))
     db = SessionLocal()
     assert db.query(models.Expense).filter(models.Expense.user_id == uid, models.Expense.source_bill_id.is_(None)).count() == 0
@@ -574,8 +664,13 @@ def test_many_expenses_are_adopted_in_one_go(client, make_user):
 
 def test_key_helpers():
     e = models.Expense(id=7, date=dt.date(2026, 7, 1), shop="  ICA ", currency="SEK", group_id=None, description="x", category="Food")
-    assert bill_sync.implicit_key(e) == "s|2026-07-01|ica|SEK|0"
+    assert bill_sync.implicit_key(e) == "e|7"  # one bill per expense, whatever its shop
     assert bill_sync.implicit_key(models.Expense(id=9, date=dt.date(2026, 7, 1), shop="", currency="SEK")) == "e|9"
+    assert bill_sync._legacy_key(dt.date(2026, 7, 1), "  ICA ", "SEK", None) == "s|2026-07-01|ica|SEK|0"
+    assert bill_sync._legacy_key(dt.date(2026, 7, 1), "", "SEK", None) is None
+    assert bill_sync._belongs("e|7", 7, e.date, e.shop, e.currency, None) and not bill_sync._belongs("e|7", 8, e.date, e.shop, e.currency, None)
+    assert bill_sync._belongs("s|2026-07-01|ica|SEK|0", 8, e.date, e.shop, e.currency, None)
+    assert not bill_sync._belongs("s|2026-07-01|ica|SEK|0", 8, e.date, "Coop", e.currency, None)
     assert bill_sync.bill_name(e) == "ICA"
     assert bill_sync.bill_name(models.Expense(shop="", description="", category="Food")) == "Food"
     assert bill_sync.bill_name(models.Expense(shop="", description="", category="")) == "Expense"
@@ -643,9 +738,10 @@ def test_nothing_is_stale_after_a_sync(client, make_user):
     assert _stale(uid) == set()
 
 
-def test_an_item_whose_shop_changed_behind_our_back_makes_its_bill_stale(client, make_user):
+def test_an_item_whose_shop_changed_behind_our_back_makes_its_legacy_bill_stale(client, make_user):
     uid, h = make_user()
     ids = _insert(uid, [{"shop": "Coop", "amount": 10}, {"shop": "Coop", "amount": 5}])
+    _legacy_bill(uid, ids, shop="Coop")
     _synced_all(client, h)
     bill_id = _bill_of(client, h, ids[0])["id"]
     _db_edit(ids[0], shop="Lidl")
@@ -659,6 +755,7 @@ def test_an_item_whose_shop_changed_behind_our_back_makes_its_bill_stale(client,
 def test_an_amount_that_is_no_longer_the_sum_of_its_items_is_stale(client, make_user):
     uid, h = make_user()
     ids = _insert(uid, [{"shop": "Coop", "amount": 10}, {"shop": "Coop", "amount": 5}])
+    _legacy_bill(uid, ids, shop="Coop")
     _synced_all(client, h)
     bill_id = _bill_of(client, h, ids[0])["id"]
     _db_edit(ids[1], amount=6)
@@ -695,10 +792,17 @@ def test_items_of_a_hand_grouped_bill_may_differ_in_shop_without_being_stale(cli
     assert _stale(uid) == set()
 
 
-def test_the_check_and_the_orm_agree_on_which_bill_an_expense_belongs_to(client, make_user):
-    uid, _ = make_user()
-    ids = _insert(uid, [{"shop": " Coop ", "amount": 1, "currency": "USD"}, {"shop": "", "amount": 2}])
+def test_the_check_and_the_orm_agree_on_which_items_stay_in_a_bill(client, make_user):
+    """_stale_bill_ids (column reads) and _reconcile_ids (ORM) apply the same _belongs rule."""
+    uid, h = make_user()
+    ids = _insert(uid, [{"shop": " Coop ", "amount": 1}, {"shop": "coop", "amount": 2}, {"shop": "Lidl", "amount": 4}])
+    legacy_id = _legacy_bill(uid, ids[:2], shop="Coop")
+    # a third item was wrongly linked to the legacy bill (different shop): both paths must see it as not belonging
     db = SessionLocal()
-    for e in db.query(models.Expense).filter(models.Expense.id.in_(ids)):
-        assert bill_sync.implicit_key(e) == bill_sync._implicit_key(e.id, e.date, e.shop, e.currency, e.group_id)
+    db.query(models.Expense).filter(models.Expense.id == ids[2]).update({"source_bill_id": legacy_id})
+    db.commit()
     db.close()
+    assert _stale(uid) == {legacy_id}
+    _sync(client, h)
+    assert _stale(uid) == set()
+    assert _bill_of(client, h, ids[2])["id"] != legacy_id and _bill_of(client, h, ids[0])["id"] == legacy_id == _bill_of(client, h, ids[1])["id"]

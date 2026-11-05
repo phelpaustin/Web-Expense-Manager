@@ -18,16 +18,24 @@ PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
 D = Decimal
 
 
+_WAITING: set[str] = set()
+
+
 def _setting(client, h, enabled):
-    r = client.post("/api/options/count-bills-as-spending", json={"enabled": enabled}, headers=h)
-    assert r.status_code == 200, r.text
-    return r.json()
+    """New bills always count as spending at once. Tests that need bills waiting in "To itemise"
+    call this with False: _bill then sends each new bill straight back with Undo."""
+    (_WAITING.discard if enabled else _WAITING.add)(h["Authorization"])
 
 
 def _bill(client, h, shop="Lidl", amount="35.91", date=TODAY, **kw):
     r = client.post("/api/pending-bills", json={"date": date, "shop": shop, "amount": amount, **kw}, headers=h)
     assert r.status_code == 201, r.text
-    return r.json()
+    bill = r.json()
+    if h["Authorization"] in _WAITING and bill["status"] == "total_only":
+        u = client.post(f"/api/bills/{bill['id']}/undo", headers=h)
+        assert u.status_code == 200, u.text
+        bill = u.json()
+    return bill
 
 
 def _bills(client, h, **params):
@@ -72,15 +80,6 @@ def _flag_duplicate(bill_id):
         db.commit()
 
 
-# ── the setting ──────────────────────────────────────────────────────────
-def test_setting_defaults_on_and_can_be_toggled(client, make_user):
-    _, h = make_user()
-    assert client.get("/api/options", headers=h).json()["count_bills_as_spending"] is True
-    assert _setting(client, h, False)["count_bills_as_spending"] is False
-    assert client.get("/api/options", headers=h).json()["count_bills_as_spending"] is False
-    assert _setting(client, h, True)["count_bills_as_spending"] is True
-
-
 # ── counted as spending straight away (setting on) ───────────────────────
 def test_new_bill_is_recorded_as_a_total_only_expense(client, make_user):
     _, h = make_user()
@@ -91,14 +90,6 @@ def test_new_bill_is_recorded_as_a_total_only_expense(client, make_user):
     assert e["bill_total_only"] is True and e["source_bill_id"] == b["id"]
     assert _spent(client, h) == D("35.91")  # pooled into the totals budgets use
     assert "Bills" in client.get("/api/options", headers=h).json()["categories"]
-
-
-def test_with_the_setting_off_a_bill_waits_and_counts_nothing(client, make_user):
-    _, h = make_user()
-    _setting(client, h, False)
-    b = _bill(client, h)
-    assert b["status"] == "pending" and b["item_count"] == 0
-    assert _expenses(client, h) == [] and _spent(client, h) == 0
 
 
 def test_total_only_expenses_count_against_budgets(client, make_user):
@@ -123,14 +114,6 @@ def test_statement_import_records_totals_and_leaves_out_duplicates(client, make_
     [typed] = _bills(client, h, status="itemised")["items"]
     assert typed["from_expenses"] is True and typed["item_count"] == 1
     assert _spent(client, h) == D("120.50") + D("80") + D("45.30")  # the pre-existing expense + 2 recorded; no double count
-
-
-def test_statement_import_with_the_setting_off_records_nothing(client, make_user):
-    _, h = make_user()
-    _setting(client, h, False)
-    out = _import(client, h, [("2026-09-01", "ICA", "-80"), ("2026-09-03", "Willys", "-45.30")])
-    assert out["added_bills"] == 2 and out["recorded_bills"] == 0
-    assert _bills(client, h)["counts"]["pending"] == 2 and _spent(client, h) == 0
 
 
 # ── record total / undo ──────────────────────────────────────────────────
@@ -477,7 +460,6 @@ def test_0017_links_old_total_only_expenses_and_copies_manual_bills():
     assert linked == [("LIDL", 1)]
     manual = {r[0]: r for r in con.execute("SELECT shop, status, possible_duplicate, note FROM pending_bills WHERE shop IN ('Rent', 'Twin')")}
     assert manual["Rent"][1:] == ("pending", 0, "monthly") and manual["Twin"][1] == "pending" and manual["Twin"][2] == 1 and manual["Twin"][3] == "Manual entry"
-    assert con.execute("SELECT count_bills_as_spending FROM user_options").fetchone() == (1,)  # on for existing users
     assert con.execute("SELECT count(*) FROM manual_bills").fetchone() == (2,)  # the old table is left alone
     con.close()
 

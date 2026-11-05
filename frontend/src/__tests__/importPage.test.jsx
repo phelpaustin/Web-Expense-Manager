@@ -218,13 +218,6 @@ describe('statement import page', () => {
     expect(onImported).toHaveBeenCalledTimes(1)
   })
 
-  it('says bills will wait when the setting is off', async () => {
-    setup({ options: { count_bills_as_spending: false } })
-    await open()
-    fireEvent.click(screen.getByRole('radio', { name: /Bills/ }))
-    expect(screen.getByText(/do not count as spending until you record them/)).toBeTruthy()
-  })
-
   it('does not offer to import when nothing is new', async () => {
     setup()
     api.previewStatement.mockResolvedValue({ ...PREVIEW, summary: { ...PREVIEW.summary, new_expenses: 0, new_income: 0 } })

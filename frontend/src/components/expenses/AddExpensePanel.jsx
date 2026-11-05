@@ -112,22 +112,26 @@ export default function AddExpensePanel({
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
         />
-        <label className="field-label">
-          <span>Quantity</span>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            placeholder="Qty"
-            className="qty-input"
-            value={form.quantity}
-            onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-          />
-        </label>
-        <label className="field-label">
-          <span>Unit</span>
-          <UnitSelect value={form.unit} units={options.units} onChange={(u) => setForm({ ...form, unit: u })} />
-        </label>
+        {billMode && (
+          <>
+          <label className="field-label">
+            <span>Quantity</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="Qty"
+              className="qty-input"
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+            />
+          </label>
+          <label className="field-label">
+            <span>Unit</span>
+            <UnitSelect value={form.unit} units={options.units} onChange={(u) => setForm({ ...form, unit: u })} />
+          </label>
+          </>
+        )}
         <CurrencySelect
           value={form.currency}
           onChange={(c) => setForm({ ...form, currency: c })}

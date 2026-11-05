@@ -161,13 +161,11 @@ def _record_total(
 
 
 def _auto_record(db: Session, user: models.User, bills: list[models.PendingBill]) -> int:
-    """Record new bills as total-only expenses when the user's setting is on.
+    """Record new bills as total-only expenses so they count as spending straight away.
 
     Bills flagged as possible duplicates are left for review (recording them could
     double count), and so are bills with no readable amount. Caller commits.
     """
-    if not get_or_create_options(db, user.id).count_bills_as_spending:
-        return 0
     recorded = 0
     for b in bills:
         if b.possible_duplicate or b.amount is None or b.amount <= 0 or b.status != STATUS_PENDING:

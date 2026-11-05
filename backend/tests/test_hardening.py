@@ -10,6 +10,8 @@ from app.core.parsing import parse_amount, read_csv_bytes
 from app.db import models
 from app.db.database import SessionLocal
 
+_WAITING: set[str] = set()
+
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TODAY = dt.date.today().isoformat()
 PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
@@ -82,11 +84,15 @@ def test_oversized_amounts_are_rejected_not_a_database_error(client, make_user):
 
 # ── record total (the old one-click "itemise") ───────────────────────────
 def _manual_mode(client, h):
-    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h)
+    """Bills now count at once; _bill sends them back to "To itemise" when this was called."""
+    _WAITING.add(h["Authorization"])
 
 
 def _bill(client, h, amount="50", shop="Elbolag"):
-    return client.post("/api/pending-bills", json={"date": TODAY, "shop": shop, "amount": amount}, headers=h).json()
+    b = client.post("/api/pending-bills", json={"date": TODAY, "shop": shop, "amount": amount}, headers=h).json()
+    if h["Authorization"] in _WAITING:
+        b = client.post(f"/api/bills/{b['id']}/undo", headers=h).json()
+    return b
 
 
 def test_recording_a_total_happens_once(client, make_user):

@@ -56,7 +56,7 @@ export default function App() {
   const income = useIncomeHandlers(data.loadAll, data.setError)
   const recurring = useRecurringHandlers(data.loadAll, data.setError)
   const navigate = useNavigate()
-  const bills = useBillsHandlers(data.loadAll, data.setError, data.setOptions, navigate, !!auth.user)
+  const bills = useBillsHandlers(data.loadAll, data.setError, navigate, !!auth.user)
   const tripHandlers = useTripHandlers(data.loadAll, data.setError)
   const groupHandlers = useGroupHandlers(data.loadAll, data.setError)
   const budgetHandlers = useBudgetHandlers(data.loadAll, data.setError)

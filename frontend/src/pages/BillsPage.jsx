@@ -4,7 +4,6 @@ import CurrencySelect from '../components/CurrencySelect.jsx'
 import DialogHost from '../components/DialogHost.jsx'
 import Pagination from '../components/Pagination.jsx'
 import RowMenu from '../components/RowMenu.jsx'
-import Switch from '../components/Switch.jsx'
 import { BillStatusChip } from '../components/BillStatus.jsx'
 import { money } from '../format.js'
 
@@ -171,7 +170,6 @@ export default function BillsPage({ state, options, embedded = false }) {
   }, [searchText])
 
   const categories = [...new Set(['Bills', ...(options.categories || [])])]
-  const countAsSpending = options.count_bills_as_spending !== false
   const items = data.items
   const allOnPageSelected = items.length > 0 && items.every((b) => selected.has(b.id))
   const filtered = query.q || query.date_from || query.date_to
@@ -196,17 +194,6 @@ export default function BillsPage({ state, options, embedded = false }) {
               {showAdd ? '✕ Close' : '➕ Add bill'}
             </button>
           </div>
-          <Switch
-            checked={countAsSpending}
-            onChange={actions.toggleCount}
-            label="Count new bills as spending right away"
-            title="When on, a bill's whole amount counts towards your budgets as soon as it is added. You can itemise it any time; the items then replace the total."
-            description={
-              countAsSpending
-                ? 'On: bills go to “Total only” and count towards budgets. Itemise whenever you like.'
-                : 'Off: bills wait in “To itemise” and are not counted until you record or itemise them.'
-            }
-          />
         </div>
 
         {notice && (

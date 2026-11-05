@@ -114,7 +114,7 @@ function SavedMappings({ refreshKey, onError }) {
   )
 }
 
-function StatementImport({ onImported, onError, countBillsAsSpending = true }) {
+function StatementImport({ onImported, onError }) {
   const [file, setFile] = useState(null)
   const [analysis, setAnalysis] = useState(null)
   const [mapping, setMapping] = useState(null)
@@ -391,9 +391,7 @@ function StatementImport({ onImported, onError, countBillsAsSpending = true }) {
               ))}
               {saveAs === 'bills' && (
                 <p className="subtitle">
-                  {countBillsAsSpending
-                    ? 'Bills count as spending straight away, as a single total each. Itemise them from Bills whenever you like.'
-                    : 'Bills wait under Spending, By receipt, and do not count as spending until you record them (see Settings).'}
+                  Bills count as spending straight away, as a single total each. Itemise them from Bills whenever you like.
                 </p>
               )}
             </fieldset>
@@ -621,7 +619,7 @@ export default function ImportPage({ options, onImported, onError }) {
         </button>
       </div>
       <div hidden={tab !== 'statement'}>
-        <StatementImport onImported={onImported} onError={onError} countBillsAsSpending={options?.count_bills_as_spending !== false} />
+        <StatementImport onImported={onImported} onError={onError} />
       </div>
       <div hidden={tab !== 'file'}>
         <ExpenseFileImport options={options} onImported={onImported} onError={onError} />

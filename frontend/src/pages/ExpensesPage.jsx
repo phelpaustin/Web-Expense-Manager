@@ -183,8 +183,13 @@ export default function ExpensesPage({
     return result
   }
 
-  // Same-day, same-shop rows are one "bill" group (see billGroups.js).
+  // Rows of one bill are one purchase group (see billGroups.js).
   const billGroups = useMemo(() => groupIntoBills(pageExpenses), [pageExpenses])
+  // Quantity and unit only mean something on a line of a multi-item bill, not on a lone purchase.
+  const lineIds = useMemo(
+    () => new Set(billGroups.filter((g) => g.items.length > 1).flatMap((g) => g.items.map((i) => i.id))),
+    [billGroups],
+  )
 
   function resetToFirstPage(setter) {
     return (value) => {
@@ -217,7 +222,7 @@ export default function ExpensesPage({
   const selectionState = (ids) => (ids.length && ids.every(isSelected) ? 'all' : ids.some(isSelected) ? 'some' : 'none')
   const selectedCount = allMatching ? total : selectedIds.size
   const pageAllSelected = editableIds.length > 0 && editableIds.every(isSelected)
-  const COLS = selectMode ? 11 : 10
+  const COLS = selectMode ? 9 : 8
 
   // Ticking or unticking while "all matching" is on narrows it to this page's rows first.
   function setSelected(ids, on) {
@@ -639,6 +644,7 @@ export default function ExpensesPage({
       afterMutation,
       afterDelete,
       onPickTrip: pickTrip,
+      isBillLine: (e) => lineIds.has(e.id),
     }
 
 

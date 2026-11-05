@@ -415,16 +415,6 @@ def test_saving_as_bills_files_each_expense_as_a_bill_and_counts_it_as_spending(
     assert len(client.get("/api/income", headers=h).json()) == 1
 
 
-def test_saving_as_bills_with_the_setting_off_leaves_them_waiting_on_the_bills_page(client, make_user):
-    _, h = make_user()
-    assert client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h).status_code == 200
-    _, mapping = _import_flow(client, h)
-    body = _post(client, "commit", h, mapping=mapping, save_as="bills").json()
-    assert (body["added_bills"], body["recorded_bills"]) == (2, 0)
-    assert _bill_counts(client, h)["pending"] == 2
-    assert _items(client, h) == []
-
-
 def test_importing_the_same_statement_as_bills_twice_adds_nothing(client, make_user):
     _, h = make_user()
     _, mapping = _import_flow(client, h)
@@ -434,11 +424,17 @@ def test_importing_the_same_statement_as_bills_twice_adds_nothing(client, make_u
     assert _bill_counts(client, h)["all"] == 2
 
 
+def _send_bills_back(client, h):
+    """Undo every recorded total, so the bills wait in "To itemise" again."""
+    for b in client.get("/api/bills?status=total_only&page_size=100", headers=h).json()["items"]:
+        assert client.post(f"/api/bills/{b['id']}/undo", headers=h).status_code == 200
+
+
 def test_bills_still_waiting_count_as_already_there_so_copies_do_not_pile_up(client, make_user):
     _, h = make_user()
-    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h)
     _, mapping = _import_flow(client, h)
     _post(client, "commit", h, mapping=mapping, save_as="bills")
+    _send_bills_back(client, h)
 
     p = _post(client, "preview", h, mapping=mapping, save_as="bills").json()
     assert p["summary"]["new_expenses"] == 0
@@ -479,7 +475,7 @@ def test_unknown_save_as_is_rejected_and_expenses_stays_the_default(client, make
 def test_another_users_waiting_bills_do_not_hide_my_rows(client, make_user):
     _, h1 = make_user()
     _, h2 = make_user()
-    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h1)
     _, mapping = _import_flow(client, h1)
     _post(client, "commit", h1, mapping=mapping, save_as="bills")
+    _send_bills_back(client, h1)
     assert _post(client, "commit", h2, mapping=mapping, save_as="bills").json()["added_bills"] == 2

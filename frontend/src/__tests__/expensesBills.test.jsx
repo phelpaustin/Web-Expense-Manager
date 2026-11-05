@@ -137,7 +137,7 @@ describe('total-only expenses stand out on the Expenses page', () => {
 
   it('a group that mixes a total-only line with items is badged but not made a one-click itemise', async () => {
     client.fetchExpenses.mockImplementation(async () => ({
-      items: [{ ...TOTAL_ONLY, shop: 'LIDL' }, { ...NORMAL, id: 9, shop: 'LIDL', date: '2026-07-21', description: 'Bread' }],
+      items: [{ ...TOTAL_ONLY, shop: 'LIDL' }, { ...NORMAL, id: 9, shop: 'LIDL', date: '2026-07-21', description: 'Bread', source_bill_id: 77 }],
       total: 2,
     }))
     renderAt(undefined)
@@ -359,7 +359,6 @@ describe('"Edit items" on an itemised bill group', () => {
 
   it.each([
     ['an ordinary group with no bill', [ITEM(1, { source_bill_id: null }), ITEM(2, { source_bill_id: null })]],
-    ['a group that mixes two bills', [ITEM(1), ITEM(2, { source_bill_id: 99 })]],
     ['a group that includes a total-only line', [ITEM(1), ITEM(2, { bill_total_only: true })]],
   ])('is not offered for %s', async (_, items) => {
     client.fetchExpenses.mockImplementation(async () => ({ items, total: items.length }))
@@ -412,6 +411,9 @@ describe('Add expense form labels', () => {
     expect(screen.getByPlaceholderText('Item name')).toBeTruthy()
     expect(screen.queryByPlaceholderText('Description')).toBeNull()
     expect(screen.queryAllByText('Description')).toHaveLength(0)
+    // Quantity and unit belong to the lines of a bill, not to a single expense.
+    expect(screen.queryByText('Quantity')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Add by bill/ }))
     const unit = screen.getAllByRole('combobox', { name: 'Unit' })[0]
     expect([...unit.options].map((o) => o.value)).toEqual(expect.arrayContaining(['Count', 'Kg', 'Litre']))
     expect(screen.getByText('Quantity')).toBeTruthy()
@@ -439,9 +441,12 @@ describe('editing an expense in the list', () => {
     const panel = document.querySelector('tr.editing')
     expect(panel).toBeTruthy()
     expect(panel.querySelectorAll('td')).toHaveLength(1) // one cell spanning the table
-    for (const label of ['Date', 'Category', 'Subcategory', 'Shop', 'Item name', 'Quantity', 'Unit', 'Amount', 'Currency']) {
+    for (const label of ['Date', 'Category', 'Subcategory', 'Shop', 'Item name', 'Amount', 'Currency']) {
       expect(within(panel).getByLabelText(label)).toBeTruthy()
     }
+    // A lone purchase has no quantity or unit to edit.
+    expect(within(panel).queryByLabelText('Quantity')).toBeNull()
+    expect(within(panel).queryByLabelText('Unit')).toBeNull()
     expect(within(panel).getByLabelText('Item name').value).toBe('Milk')
     expect(within(panel).getByTitle('Save')).toBeTruthy()
     fireEvent.click(within(panel).getByTitle('Cancel'))
@@ -880,5 +885,21 @@ describe('expand and collapse (bill view)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Flat view/ }))
     expect(localStorage.getItem('expense_group_by_bill')).toBe('0')
     expect(screen.queryByRole('button', { name: 'Expand all' })).toBeNull()
+  })
+})
+
+describe('quantity and unit', () => {
+  it('only show on the lines of a multi-item bill, next to the item name', async () => {
+    const a = { ...NORMAL, id: 1, shop: 'LIDL', description: 'Apples', quantity: 2, unit: 'Kg', source_bill_id: 5 }
+    const b = { ...NORMAL, id: 2, shop: 'LIDL', description: 'Bread', source_bill_id: 5 }
+    const lone = { ...NORMAL, id: 3, date: '2026-07-19', description: 'Phone bill', quantity: 3, unit: 'Litre' }
+    client.fetchExpenses.mockImplementation(async () => ({ items: [a, b, lone], total: 3 }))
+    renderAt(undefined)
+    await header('LIDL')
+    expect(screen.queryByRole('columnheader', { name: 'Qty' })).toBeNull()
+    expect(screen.getByText('Phone bill').closest('tr').textContent).not.toMatch(/Litre/)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand LIDL' }))
+    expect(screen.getByText('Apples').closest('tr').textContent).toContain('2 Kg')
+    expect(screen.getByText('Bread').closest('tr').textContent).not.toMatch(/Count/)
   })
 })

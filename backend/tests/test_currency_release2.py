@@ -104,8 +104,8 @@ def test_recurring_currency_can_be_set_and_changed(client, make_user):
 def test_recorded_bills_keep_the_bills_currency(client, make_user):
     _, h = make_user()
     _set_base(client, h, "EUR")
-    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h)
     b = client.post("/api/pending-bills", json={"date": TODAY, "shop": "Hotel", "amount": "80", "currency": "USD"}, headers=h).json()
+    b = client.post(f"/api/bills/{b['id']}/undo", headers=h).json()  # back to "To itemise"
     assert b["currency"] == "USD" and b["status"] == "pending"
     assert client.post(f"/api/bills/{b['id']}/record-total", headers=h).status_code == 200
     e = client.get("/api/expenses?search=Hotel", headers=h).json()["items"][0]

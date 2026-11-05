@@ -5,8 +5,10 @@ entered any other way (the Expenses page, an import, a recurring item, "Add by b
 so they were invisible on the Bills page. This module fixes that by *adopting* them into
 "derived" bills (``origin == 'expenses'``):
 
-* Grouping matches the Expenses page's own bill view: expenses with a shop share one bill per
-  (date, shop, currency, space); an expense with no shop is a bill by itself.
+* Every expense entered on its own is its own purchase (so two same-day trips to the same shop stay
+  separate); lines only share a bill when the user put them together (Add by bill, itemise, a receipt).
+  Bills adopted before this rule (key ``s|...``) keep their same-day, same-shop grouping until their
+  items change.
 * Derived bills are always "itemised" (their expenses are real, categorised lines) and their
   amount is the sum of their items. They disappear with their last item, unless a receipt is
   attached, in which case they become an ordinary bill to itemise so the receipt is not lost.
@@ -38,20 +40,29 @@ _CHUNK = 400  # keep IN (...) lists well under every database's parameter limit
 _RETRIES = 3
 
 
-def _implicit_key(expense_id, date, shop, currency, group_id) -> str:
+def _legacy_key(date, shop, currency, group_id) -> str | None:
     shop = (shop or "").strip().lower()
-    if shop:
-        return f"s|{date.isoformat()}|{shop}|{currency}|{group_id or 0}"
-    return f"e|{expense_id}"  # no shop: not enough to say it belongs with anything else
+    return f"s|{date.isoformat()}|{shop}|{currency}|{group_id or 0}" if shop else None
+
+
+def _belongs(key: str, expense_id, date, shop, currency, group_id) -> bool:
+    """Does the expense still fit the derived bill with this key?"""
+    if key.startswith("s|"):  # adopted under the old same-day, same-shop rule: keep that grouping
+        return _legacy_key(date, shop, currency, group_id) == key
+    return key == f"e|{expense_id}"
 
 
 def implicit_key(e: models.Expense) -> str:
-    """Which derived bill an expense belongs to, by its own fields."""
-    return _implicit_key(e.id, e.date, e.shop, e.currency, e.group_id)
+    """The derived bill a not-yet-filed expense gets: its own, one purchase per expense."""
+    return f"e|{e.id}"
+
+
+def _name(shop, description, category) -> str:
+    return (shop or "").strip() or (description or "").strip() or (category or "").strip() or "Expense"
 
 
 def bill_name(e: models.Expense) -> str:
-    return (e.shop or "").strip() or (e.description or "").strip() or (e.category or "").strip() or "Expense"
+    return _name(e.shop, e.description, e.category)
 
 
 def new_explicit_key() -> str:
@@ -160,7 +171,14 @@ def _stale_bill_ids(db: Session, user_id: int, bill_ids: list[int] | None = None
     (which does the actual fixing, only for the bills returned here): a bill with no items, an
     item that no longer belongs to its implicit bill, or an amount that is not the items' sum.
     """
-    q = db.query(models.PendingBill.id, models.PendingBill.amount, models.PendingBill.origin_key).filter(
+    q = db.query(
+        models.PendingBill.id,
+        models.PendingBill.amount,
+        models.PendingBill.origin_key,
+        models.PendingBill.date,
+        models.PendingBill.shop,
+        models.PendingBill.currency,
+    ).filter(
         models.PendingBill.user_id == user_id,
         models.PendingBill.origin == ORIGIN_EXPENSES,
         models.PendingBill.status == "itemised",
@@ -169,7 +187,7 @@ def _stale_bill_ids(db: Session, user_id: int, bill_ids: list[int] | None = None
         if not bill_ids:
             return []
         q = q.filter(models.PendingBill.id.in_(bill_ids))
-    bills = {bill_id: (amount, key) for bill_id, amount, key in q.all()}
+    bills = {bill_id: (amount, key, date, shop, currency) for bill_id, amount, key, date, shop, currency in q.all()}
     if not bills:
         return []
 
@@ -184,18 +202,25 @@ def _stale_bill_ids(db: Session, user_id: int, bill_ids: list[int] | None = None
             models.Expense.currency,
             models.Expense.group_id,
             models.Expense.bill_total_only,
+            models.Expense.description,
+            models.Expense.category,
         ).filter(models.Expense.source_bill_id.in_(part), models.Expense.user_id == user_id):
             items_by_bill[row[0]].append(row[1:])
 
     stale = []
-    for bill_id, (amount, key) in bills.items():
+    for bill_id, (amount, key, b_date, b_shop, b_currency) in bills.items():
         items = items_by_bill.get(bill_id, [])
         if not items:
             stale.append(bill_id)
             continue
         if key and not is_explicit(key):
-            keep = [it for it in items if _implicit_key(it[0], it[2], it[3], it[4], it[5]) == key and not it[6]]
+            keep = [it for it in items if _belongs(key, it[0], it[2], it[3], it[4], it[5]) and not it[6]]
             if len(keep) != len(items):
+                stale.append(bill_id)
+                continue
+        if key and key.startswith("e|") and len(items) == 1:
+            _, _, e_date, e_shop, e_currency, _, _, e_desc, e_cat = items[0]
+            if (b_date, b_shop, b_currency) != (e_date, _name(e_shop, e_desc, e_cat), e_currency):
                 stale.append(bill_id)
                 continue
         if amount != sum((it[1] for it in items), Decimal("0")):
@@ -252,7 +277,7 @@ def _reconcile_ids(db: Session, user_id: int, bill_ids: list[int]) -> bool:
         if b.origin_key and not is_explicit(b.origin_key):
             keep = []
             for e in items:
-                if implicit_key(e) == b.origin_key and not e.bill_total_only:
+                if _belongs(b.origin_key, e.id, e.date, e.shop, e.currency, e.group_id) and not e.bill_total_only:
                     keep.append(e)
                 else:
                     e.source_bill_id = None
@@ -265,6 +290,13 @@ def _reconcile_ids(db: Session, user_id: int, bill_ids: list[int]) -> bool:
                 db.delete(b)
             changed = True
             continue
+        if b.origin_key and b.origin_key.startswith("e|") and len(items) == 1:
+            # A purchase of one expense is that expense: its date, name and currency follow it.
+            e = items[0]
+            for attr, value in (("date", e.date), ("shop", bill_name(e)), ("currency", e.currency)):
+                if getattr(b, attr) != value:
+                    setattr(b, attr, value)
+                    changed = True
         total = sum((e.amount for e in items), Decimal("0"))
         if b.amount != total:
             b.amount = total

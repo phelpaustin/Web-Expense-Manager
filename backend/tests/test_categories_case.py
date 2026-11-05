@@ -141,9 +141,9 @@ def test_import_files_filed_under_the_listed_spelling(client, make_user):
 
 def test_a_recorded_bill_total_uses_the_listed_spelling(client, make_user):
     _, h = make_user()
-    client.post("/api/options/count-bills-as-spending", json={"enabled": False}, headers=h)
     add_category(client, h, "Groceries")
     bill = client.post("/api/pending-bills", json={"date": TODAY, "shop": "ICA", "amount": "99"}, headers=h).json()
+    bill = client.post(f"/api/bills/{bill['id']}/undo", headers=h).json()  # back to "To itemise"
 
     client.post(f"/api/bills/{bill['id']}/record-total", json={"category": "groceries"}, headers=h)
 

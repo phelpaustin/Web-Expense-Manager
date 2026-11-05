@@ -1,12 +1,16 @@
-// Club same-day, same-shop rows into one "bill": that is how a single receipt is entered, whether one
-// item at a time or in bill mode. Rows without a shop aren't grouped; nothing ties them to a receipt.
+// Group expense rows into purchases. Rows that belong to the same bill (source_bill_id) are one
+// purchase, so two trips to the same shop on one day stay two purchases. Rows with no bill link
+// (only seen before the server files them) fall back to the old same-day, same-shop guess; rows
+// without a shop are never merged.
 // Shared by the Spending page and the month detail window so both group the same way.
 export function groupIntoBills(expenses) {
   const groups = []
   const indexByKey = new Map()
   for (const e of expenses) {
     const shop = (e.shop || '').trim()
-    const key = shop
+    const key = e.source_bill_id
+      ? `bill-${e.source_bill_id}`
+      : shop
       ? `${e.date}::${shop}::${e.group_id ?? 'personal'}::${e.currency || 'SEK'}`
       : `single-${e.id}`
     let group = indexByKey.get(key)

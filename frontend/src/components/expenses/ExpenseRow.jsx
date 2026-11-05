@@ -27,8 +27,10 @@ export function ExpenseRow({
   afterMutation,
   afterDelete,
   onPickTrip,
+  isBillLine,
 }) {
   const [confirming, setConfirming] = useState(false)
+  const billLine = Boolean(isBillLine && isBillLine(e))
   if (editingId === e.id) {
     return (
       <tr key={e.id} className="editing">
@@ -92,20 +94,24 @@ export function ExpenseRow({
                 </select>
               </label>
             )}
-            <label className="edit-field">
-              <span>Quantity</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={editForm.quantity}
-                onChange={(ev) => setEditForm({ ...editForm, quantity: ev.target.value })}
-              />
-            </label>
-            <label className="edit-field">
-              <span>Unit</span>
-              <UnitSelect value={editForm.unit} units={options.units} onChange={(u) => setEditForm({ ...editForm, unit: u })} />
-            </label>
+            {billLine && (
+              <>
+              <label className="edit-field">
+                <span>Quantity</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={editForm.quantity}
+                  onChange={(ev) => setEditForm({ ...editForm, quantity: ev.target.value })}
+                />
+              </label>
+              <label className="edit-field">
+                <span>Unit</span>
+                <UnitSelect value={editForm.unit} units={options.units} onChange={(u) => setEditForm({ ...editForm, unit: u })} />
+              </label>
+              </>
+            )}
             <label className="edit-field">
               <span>Amount</span>
               <input
@@ -160,6 +166,12 @@ export function ExpenseRow({
       <td>{e.shop}</td>
       <td>
         {e.description}
+        {billLine && (Number(e.quantity) !== 1 || (e.unit && e.unit !== 'Count')) && (
+          <span className="subtitle">
+            {' '}
+            · {e.quantity} {e.unit}
+          </span>
+        )}
         {e.bill_total_only && <TotalOnlyBadge />}
       </td>
       <td>
@@ -171,8 +183,6 @@ export function ExpenseRow({
           '—'
         )}
       </td>
-      <td className="right">{e.quantity}</td>
-      <td>{e.unit}</td>
       <td className="right" title={`${e.price_per_unit}/unit · ${e.currency}`}>
         {money(e.amount, e.currency)}
       </td>

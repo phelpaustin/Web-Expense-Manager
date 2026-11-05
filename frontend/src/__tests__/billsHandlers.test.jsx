@@ -15,9 +15,9 @@ const COUNTS = { pending: 2, total_only: 1, itemised: 0, all: 3 }
 const page = (items, extra = {}) => ({ items, total: items.length, page: 1, page_size: 25, counts: COUNTS, ...extra })
 const BILL = (id, extra = {}) => ({ id, date: '2026-07-21', shop: `Shop ${id}`, amount: 10, currency: 'SEK', status: 'pending', has_receipt: false, ...extra })
 
-let loadAll, setError, setOptions, navigate
+let loadAll, setError, navigate
 const setup = async (enabled = true) => {
-  const hook = renderHook(() => useBillsHandlers(loadAll, setError, setOptions, navigate, enabled))
+  const hook = renderHook(() => useBillsHandlers(loadAll, setError, navigate, enabled))
   await waitFor(() => expect(hook.result.current.loading).toBe(false))
   return hook
 }
@@ -37,7 +37,6 @@ async function withDialog(result, start, answer) {
 beforeEach(() => {
   loadAll = vi.fn(async () => {})
   setError = vi.fn()
-  setOptions = vi.fn()
   navigate = vi.fn()
   client.fetchBills.mockImplementation(async () => page([BILL(1), BILL(2)]))
 })
@@ -87,7 +86,7 @@ describe('loading', () => {
   })
 
   it('does nothing before sign-in (no 401 on the login screen)', async () => {
-    renderHook(() => useBillsHandlers(loadAll, setError, setOptions, navigate, false))
+    renderHook(() => useBillsHandlers(loadAll, setError, navigate, false))
     await act(async () => {})
     expect(client.fetchBills).not.toHaveBeenCalled()
   })
@@ -350,13 +349,5 @@ describe('adding a bill and receipts', () => {
     await act(async () => { await result.current.actions.dismissDuplicate(4) })
     expect(client.dismissDuplicate).toHaveBeenCalledWith(4)
     expect(loadAll).not.toHaveBeenCalled()
-  })
-
-  it('saves the spending setting and hands the new options to the app', async () => {
-    client.saveCountBillsAsSpending.mockResolvedValueOnce({ count_bills_as_spending: false })
-    const { result } = await setup()
-    await act(async () => { await result.current.actions.toggleCount(false) })
-    expect(client.saveCountBillsAsSpending).toHaveBeenCalledWith(false)
-    expect(setOptions).toHaveBeenCalledWith({ count_bills_as_spending: false })
   })
 })

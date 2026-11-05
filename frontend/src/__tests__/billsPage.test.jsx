@@ -11,7 +11,7 @@ const BILLS = [
   { id: 5, date: '2026-07-18', shop: 'Unreadable receipt', amount: 0, currency: 'SEK', note: 'my note', status: 'pending', has_receipt: true, possible_duplicate: false, item_count: 0 },
 ]
 
-const ACTIONS = ['add', 'uploadBill', 'recordTotal', 'bulkRecord', 'undo', 'revertToTotal', 'itemise', 'dismissDuplicate', 'remove', 'bulkDelete', 'uploadReceipt', 'viewReceipt', 'deleteReceipt', 'toggleCount']
+const ACTIONS = ['add', 'uploadBill', 'recordTotal', 'bulkRecord', 'undo', 'revertToTotal', 'itemise', 'dismissDuplicate', 'remove', 'bulkDelete', 'uploadReceipt', 'viewReceipt', 'deleteReceipt']
 
 function makeState(overrides = {}) {
   return {
@@ -32,7 +32,7 @@ function makeState(overrides = {}) {
   }
 }
 
-const OPTIONS = { categories: ['Food', 'Transport'], currencies: ['EUR', 'SEK'], base_currency: 'SEK', count_bills_as_spending: true }
+const OPTIONS = { categories: ['Food', 'Transport'], currencies: ['EUR', 'SEK'], base_currency: 'SEK' }
 
 const renderPage = (state = makeState(), options = OPTIONS) => {
   render(<MemoryRouter><BillsPage state={state} options={options} /></MemoryRouter>)
@@ -265,23 +265,6 @@ describe('Bills page: selection and the bulk bar', () => {
     renderPage(state)
     fireEvent.click(screen.getByLabelText('Select all bills on this page'))
     expect(state.toggleSelect).toHaveBeenCalledTimes(BILLS.length)
-  })
-})
-
-describe('Bills page: the spending setting', () => {
-  it('reflects the setting and toggles it', () => {
-    const state = renderPage()
-    const box = screen.getByRole('switch', { name: /Count new bills as spending right away/ })
-    expect(box.checked).toBe(true)
-    expect(screen.getByText(/count towards budgets/i)).toBeTruthy()
-    fireEvent.click(box)
-    expect(state.actions.toggleCount).toHaveBeenCalledWith(false)
-  })
-
-  it('explains what happens when it is off', () => {
-    renderPage(makeState(), { ...OPTIONS, count_bills_as_spending: false })
-    expect(screen.getByLabelText(/Count new bills as spending right away/).checked).toBe(false)
-    expect(screen.getByText(/not counted until you record or itemise/i)).toBeTruthy()
   })
 })
 
