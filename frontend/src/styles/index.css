@@ -2923,6 +2923,15 @@ label.link-btn input[type='file'] {
   margin-bottom: 0.9rem;
 }
 
+.movers-group .card-label {
+  display: block;
+}
+
+/* .subtitle pulls up under a heading; an empty-state line here sits below its label instead */
+.movers-group .subtitle {
+  margin: 0.25rem 0 0;
+}
+
 .movers-list {
   list-style: none;
   margin: 0.25rem 0 0;
