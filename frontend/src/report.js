@@ -1,4 +1,5 @@
 // Presentation helpers for the yearly / monthly report. No React, so they are easy to test.
+import { billTotal, categorySummary, groupIntoBills } from './billGroups.js'
 import { money } from './format.js'
 
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -22,23 +23,34 @@ export function changeDirection(data) {
   return data.previous && Number(data.previous.change) >= 0 ? 'up' : 'down'
 }
 
-// The report's expense list, sorted by one column. Text compares without regard to case; ties keep
-// the server's order (biggest first), so the result is stable.
-export const EXPENSE_COLUMNS = ['date', 'item', 'shop', 'category', 'amount']
-
-function sortValue(x, key) {
-  if (key === 'item') return (x.description || x.category || '').toLowerCase()
-  if (key === 'amount') return Number(x.amount)
-  return String(x[key] || '').toLowerCase()
+// The report's expenses as purchases: the items of one bill are one line (shop, item count, total) that
+// opens to show them, like the Expenses page; any other expense is a line by itself.
+export function reportPurchases(expenses) {
+  return groupIntoBills(expenses.map((x, i) => ({ ...x, source_bill_id: x.bill || `solo-${x.id ?? i}` }))).map((g) => {
+    const single = g.items.length === 1 ? g.items[0] : null
+    return {
+      key: g.key,
+      date: g.date,
+      item: single ? single.description || single.category || '' : g.shop || 'No shop',
+      shop: g.shop,
+      category: categorySummary(g.items),
+      amount: billTotal(g.items).total,
+      items: g.items,
+      single,
+    }
+  })
 }
 
-export function sortExpenses(rows, key, dir) {
+// Purchases sorted by one column (date, item, shop, category or amount). Text compares without regard
+// to case; ties keep the server's order (biggest first), so the result is stable.
+export function sortPurchases(rows, key, dir) {
   const sign = dir === 'asc' ? 1 : -1
+  const value = (p) => (key === 'amount' ? Number(p.amount) : String(p[key] || '').toLowerCase())
   return rows
     .map((x, i) => [x, i])
     .sort(([a, i], [b, j]) => {
-      const va = sortValue(a, key)
-      const vb = sortValue(b, key)
+      const va = value(a)
+      const vb = value(b)
       const c = va < vb ? -1 : va > vb ? 1 : 0
       return c ? c * sign : i - j
     })

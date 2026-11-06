@@ -318,37 +318,53 @@ describe('opening the expenses behind a category', () => {
 })
 
 describe('All expenses table', () => {
-  const X = (date, description, shop, category, amount) => ({ date, description, shop, category, amount })
+  const X = (date, description, shop, category, amount, bill = null) => ({ date, description, shop, category, amount, bill })
   const LIST = [
     X('2026-02-11', 'Rent', 'Landlord', 'Housing', 600),
     X('2026-03-02', 'bread', 'ICA', 'Food', 20),
     X('2026-01-15', 'Apples', 'ICA', 'Food', 20),
     X('2026-04-01', 'Cinema', '', 'Fun', 90),
   ]
-  const firstColumn = (col) =>
-    [...document.querySelectorAll('tbody')].at(-1).querySelectorAll('tr') && // the expenses table is the last one
-    [...[...document.querySelectorAll('tbody')].at(-1).querySelectorAll('tr')].map((r) => r.children[col].textContent)
+  const BILL = [
+    X('2026-02-05', 'Milk', 'Lidl', 'Dairy', 15, 9),
+    X('2026-02-05', 'Mince', 'Lidl', 'Meat', 85, 9),
+    X('2026-02-05', 'Soap', 'Lidl', 'Home', 50, 9),
+  ]
+  const column = (col) => [...[...document.querySelectorAll('tbody')].at(-1).querySelectorAll('tr')].map((r) => r.children[col].textContent)
 
-  it('sortExpenses orders by any column, ignores case and keeps ties in server order', async () => {
-    const { sortExpenses } = await import('../report.js')
-    expect(sortExpenses(LIST, 'amount', 'desc').map((x) => x.description)).toEqual(['Rent', 'Cinema', 'bread', 'Apples'])
-    expect(sortExpenses(LIST, 'item', 'asc').map((x) => x.description)).toEqual(['Apples', 'bread', 'Cinema', 'Rent'])
-    expect(sortExpenses(LIST, 'date', 'asc').map((x) => x.date)[0]).toBe('2026-01-15')
-    expect(sortExpenses(LIST, 'shop', 'asc').map((x) => x.shop)).toEqual(['', 'ICA', 'ICA', 'Landlord'])
+  it('turns the items of one bill into one purchase and sorts purchases by any column', async () => {
+    const { reportPurchases, sortPurchases } = await import('../report.js')
+    const purchases = reportPurchases([...BILL, ...LIST])
+    expect(purchases).toHaveLength(5)
+    const lidl = purchases.find((p) => p.shop === 'Lidl')
+    expect(lidl.items).toHaveLength(3)
+    expect(lidl.amount).toBe(150)
+    expect(lidl.category).toBe('3 categories')
+    expect(sortPurchases(purchases, 'amount', 'desc').map((p) => p.item)).toEqual(['Rent', 'Lidl', 'Cinema', 'bread', 'Apples'])
+    expect(sortPurchases(purchases, 'item', 'asc').map((p) => p.item)).toEqual(['Apples', 'bread', 'Cinema', 'Lidl', 'Rent'])
+    expect(sortPurchases(purchases, 'shop', 'asc')[0].shop).toBe('')
   })
 
-  it('lists every expense, biggest first, and sorts when a column is clicked', async () => {
-    client.fetchReport.mockResolvedValue(REPORT({ expenses: LIST }))
+  it('same-day, same-shop expenses without a bill stay separate purchases', async () => {
+    const { reportPurchases } = await import('../report.js')
+    expect(reportPurchases([X('2026-02-01', 'a', 'S', 'Fun', 1), X('2026-02-01', 'b', 'S', 'Fun', 2)])).toHaveLength(2)
+  })
+
+  it('shows a bill as one line that opens to its items, and sorts when a column is clicked', async () => {
+    client.fetchReport.mockResolvedValue(REPORT({ expenses: [...BILL, ...LIST] }))
     show()
     await screen.findByText(/All expenses/)
-    expect(firstColumn(1)).toEqual(['Rent', 'Cinema', 'bread', 'Apples'])
+    expect(column(1)).toEqual(['Rent', '▸Lidl3 items', 'Cinema', 'bread', 'Apples'])
+    expect(screen.queryByText('Mince')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Lidl' }))
+    expect(column(1).slice(1, 5)).toEqual(['▾Lidl3 items', 'Milk', 'Mince', 'Soap'])
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Lidl' }))
+    expect(screen.queryByText('Mince')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /^Item/ }))
-    expect(firstColumn(1)).toEqual(['Apples', 'bread', 'Cinema', 'Rent'])
+    expect(column(1)).toEqual(['Apples', 'bread', 'Cinema', '▸Lidl3 items', 'Rent'])
     expect(screen.getByRole('columnheader', { name: /Item/ }).getAttribute('aria-sort')).toBe('ascending')
-    fireEvent.click(screen.getByRole('button', { name: /^Item/ }))
-    expect(firstColumn(1)).toEqual(['Rent', 'Cinema', 'bread', 'Apples'])
     fireEvent.click(screen.getByRole('button', { name: /^Date/ }))
-    expect(firstColumn(0)[0]).toBe('2026-04-01') // dates start latest first
+    expect(column(0)[0]).toBe('2026-04-01') // dates start latest first
   })
 
   it('shows the first 100 and the rest on request', async () => {
@@ -356,8 +372,8 @@ describe('All expenses table', () => {
     client.fetchReport.mockResolvedValue(REPORT({ expenses: many }))
     show()
     await screen.findByText(/All expenses/)
-    expect(firstColumn(1)).toHaveLength(100)
+    expect(column(1)).toHaveLength(100)
     fireEvent.click(screen.getByRole('button', { name: 'Show all 130' }))
-    expect(firstColumn(1)).toHaveLength(130)
+    expect(column(1)).toHaveLength(130)
   })
 })

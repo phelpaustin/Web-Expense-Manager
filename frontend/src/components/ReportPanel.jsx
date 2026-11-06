@@ -8,7 +8,7 @@ import MonthDetailDialog from './MonthDetailDialog.jsx'
 import { monthRange } from '../monthDetail.js'
 import {
   MONTH_NAMES, categoryChartHeight, changeDirection, changeText, chartCategories, describeCategoryChart, describePeriodChart,
-  periodChartRows, sortExpenses, summaryText, tickLabel, yearChoices,
+  periodChartRows, reportPurchases, sortPurchases, summaryText, tickLabel, yearChoices,
 } from '../report.js'
 
 const axis = { stroke: '#9aa3b8', fontSize: 12 }
@@ -53,9 +53,20 @@ export default function ReportPanel({ scope, spaceIds, refreshKey, options, grou
   const [showAll, setShowAll] = useState(false)
   const latest = useRef(0)
   const idsKey = (spaceIds || []).join(',')
-  const sorted = useMemo(() => (data ? sortExpenses(data.expenses, sort.key, sort.dir) : []), [data, sort])
+  const purchases = useMemo(() => (data ? reportPurchases(data.expenses) : []), [data])
+  const sorted = useMemo(() => sortPurchases(purchases, sort.key, sort.dir), [purchases, sort])
+  const [open, setOpen] = useState(() => new Set()) // keys of the bills shown open
   const shown = showAll ? sorted : sorted.slice(0, FIRST_ROWS)
-  useEffect(() => setShowAll(false), [data])
+  useEffect(() => {
+    setShowAll(false)
+    setOpen(new Set())
+  }, [data])
+  const toggleOpen = (key) =>
+    setOpen((cur) => {
+      const next = new Set(cur)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
 
   // A new column starts with the likelier direction: biggest/latest first for numbers and dates, A to Z for text.
   function toggleSort(key) {
@@ -296,7 +307,7 @@ export default function ReportPanel({ scope, spaceIds, refreshKey, options, grou
         <section className="panel">
           <h2>🧾 All expenses</h2>
           <p className="subtitle">
-            {data.expenses.length} expense{data.expenses.length === 1 ? '' : 's'} in {data.label}. Click a column to sort.
+            {purchases.length} purchase{purchases.length === 1 ? '' : 's'} ({data.expenses.length} expense{data.expenses.length === 1 ? '' : 's'}) in {data.label}. Click a column to sort; a bill opens to show its items.
           </p>
           <table className="table">
             <thead>
@@ -312,15 +323,47 @@ export default function ReportPanel({ scope, spaceIds, refreshKey, options, grou
               </tr>
             </thead>
             <tbody>
-              {shown.map((x, i) => (
-                <tr key={`${x.date}|${x.description}|${x.amount}|${i}`}>
-                  <td>{x.date}</td>
-                  <td>{x.description || x.category}</td>
-                  <td>{x.shop}</td>
-                  <td>{x.category}</td>
-                  <td className="right">{money(x.amount)}</td>
-                </tr>
-              ))}
+              {shown.map((p) => {
+                const isBill = !p.single
+                const isOpen = open.has(p.key)
+                return [
+                  <tr key={p.key} className={isBill ? 'bill-group-header clickable-row' : undefined} onClick={isBill ? () => toggleOpen(p.key) : undefined}>
+                    <td>{p.date}</td>
+                    <td>
+                      {isBill && (
+                        <button
+                          type="button"
+                          className="chevron-btn"
+                          aria-expanded={isOpen}
+                          aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${p.item}`}
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            toggleOpen(p.key)
+                          }}
+                        >
+                          {isOpen ? '▾' : '▸'}
+                        </button>
+                      )}
+                      {p.item}
+                      {isBill && <span className="report-sub">{p.items.length} items</span>}
+                    </td>
+                    <td>{p.shop}</td>
+                    <td>{p.category}</td>
+                    <td className="right">{money(p.amount)}</td>
+                  </tr>,
+                  ...(isBill && isOpen
+                    ? p.items.map((x, i) => (
+                        <tr key={`${p.key}-${i}`} className="report-item-row">
+                          <td />
+                          <td className="report-item-name">{x.description || x.category}</td>
+                          <td />
+                          <td>{x.category}</td>
+                          <td className="right">{money(x.amount)}</td>
+                        </tr>
+                      ))
+                    : []),
+                ]
+              })}
             </tbody>
           </table>
           {sorted.length > shown.length && (

@@ -3147,6 +3147,15 @@ label.link-btn input[type='file'] {
 }
 
 /* A second line under a value in the report: .subtitle's negative top margin would pull it into the first. */
+.report-item-row td {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.report-item-name {
+  padding-left: 1.6rem;
+}
+
 .sort-btn {
   all: unset;
   cursor: pointer;

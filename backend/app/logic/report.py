@@ -188,6 +188,8 @@ def build_report(
             "description": clean_name(e.get("description")),
             "shop": clean_name(e.get("shop")),
             "amount": quantize_money(amount),
+            "id": e.get("id"),
+            "bill": e.get("source_bill_id"),  # items of one bill are shown together
         }
         for day, e, amount in biggest
     ]

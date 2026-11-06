@@ -168,7 +168,15 @@ def test_every_expense_is_listed_biggest_first():
     rows = [e("2026-02-01", 10 + i, description=f"item {i}", shop="S", category="Fun") for i in range(15)]
     r = year(rows)
     assert len(r["expenses"]) == 15
-    assert r["expenses"][0] == {"date": "2026-02-01", "category": "Fun", "description": "item 14", "shop": "S", "amount": D("24.00")}
+    top = r["expenses"][0]
+    assert {k: top[k] for k in ("date", "category", "description", "shop", "amount")} == {
+        "date": "2026-02-01", "category": "Fun", "description": "item 14", "shop": "S", "amount": D("24.00")}
+    assert top["bill"] is None and top["id"]
+
+
+def test_expenses_carry_their_bill_so_the_screen_can_group_the_items():
+    r = year([e("2026-02-01", 10, description="Milk", shop="Lidl", source_bill_id=7), e("2026-02-01", 20, description="Mince", shop="Lidl", source_bill_id=7)])
+    assert [x["bill"] for x in r["expenses"]] == [7, 7]
     assert [x["amount"] for x in r["expenses"]] == sorted((x["amount"] for x in r["expenses"]), reverse=True)
 
 
