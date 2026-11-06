@@ -174,7 +174,6 @@ class ExpenseBulkFilters(BaseModel):
     shop: str | None = None
     date_from: datetime.date | None = None
     date_to: datetime.date | None = None
-    total_only: bool | None = None
 
 
 # Far above what one person edits at once, but a hard stop on a runaway request.
@@ -391,7 +390,7 @@ def _require_group_write_access(
         raise HTTPException(status_code=403, detail="Editors can only edit or delete their own expenses in this space")
 
 
-def _apply_list_filters(q, search, category, shop, date_from, date_to, total_only):
+def _apply_list_filters(q, search, category, shop, date_from, date_to):
     """The Expenses page's search & filter, shared by the list and by "edit everything that matches"."""
     # Case does not matter: "milk" finds what was entered as "Milk" or "MILK".
     if category and category.strip():
@@ -413,8 +412,6 @@ def _apply_list_filters(q, search, category, shop, date_from, date_to, total_onl
         q = q.filter(models.Expense.date >= date_from)
     if date_to:
         q = q.filter(models.Expense.date <= date_to)
-    if total_only is not None:
-        q = q.filter(models.Expense.bill_total_only == total_only)
     if search and search.strip():
         like = like_pattern(search)
         q = q.filter(
@@ -438,7 +435,6 @@ def list_expenses(
     shop: str | None = None,
     date_from: datetime.date | None = None,
     date_to: datetime.date | None = None,
-    total_only: bool | None = None,
     page: int = 1,
     page_size: int = 25,
     db: Session = Depends(get_db),
@@ -454,7 +450,7 @@ def list_expenses(
     if q is None:
         return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
-    q = _apply_list_filters(q, search, category, shop, date_from, date_to, total_only)
+    q = _apply_list_filters(q, search, category, shop, date_from, date_to)
 
     total = q.count()
     rows = (
@@ -663,7 +659,7 @@ def update_expenses_bulk(
         q = _visible_expenses_query(db, user.id, f.scope, f.space_ids)
         if q is None:
             return {"updated": 0}
-        q = _apply_list_filters(q, f.search, f.category, f.shop, f.date_from, f.date_to, f.total_only)
+        q = _apply_list_filters(q, f.search, f.category, f.shop, f.date_from, f.date_to)
         if q.count() > MAX_BULK_UPDATE:
             raise HTTPException(status_code=422, detail=f"That is more than {MAX_BULK_UPDATE} expenses; narrow the filters first")
         expenses = q.all()
@@ -717,7 +713,7 @@ def copy_expenses_bulk(
         q = _visible_expenses_query(db, user.id, f.scope, f.space_ids)
         if q is None:
             return {"copied": 0, "skipped": 0}
-        q = _apply_list_filters(q, f.search, f.category, f.shop, f.date_from, f.date_to, f.total_only)
+        q = _apply_list_filters(q, f.search, f.category, f.shop, f.date_from, f.date_to)
         if q.count() > MAX_BULK_UPDATE:
             raise HTTPException(status_code=422, detail=f"That is more than {MAX_BULK_UPDATE} expenses; narrow the filters first")
         sources = q.all()

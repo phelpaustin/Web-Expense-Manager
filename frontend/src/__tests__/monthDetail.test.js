@@ -1,16 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isMonthKey, monthRange, shiftMonth, monthTitle, incomeInMonth, totalsByCurrency, includesIncome, scopeFilters,
+monthRange, shiftMonth, monthTitle, incomeInMonth, totalsByCurrency, includesIncome, scopeFilters,
   editFormFor, expenseChanges, canEditExpense, tripCategoryIds, movableTrips, spaceName, moveChanges, movedMessage, copiedMessage,
 } from '../monthDetail.js'
 
 describe('monthDetail helpers', () => {
-  it('validates month keys', () => {
-    expect(isMonthKey('2025-01')).toBe(true)
-    expect(isMonthKey('2025-13')).toBe(false)
-    expect(isMonthKey('Nov')).toBe(false)
-  })
-
   it('gives the first and last day of a month, leap years included', () => {
     expect(monthRange('2025-01')).toEqual({ from: '2025-01-01', to: '2025-01-31' })
     expect(monthRange('2024-02')).toEqual({ from: '2024-02-01', to: '2024-02-29' })

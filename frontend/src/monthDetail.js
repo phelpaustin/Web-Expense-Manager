@@ -2,10 +2,6 @@
 
 const pad = (n) => String(n).padStart(2, '0')
 
-export function isMonthKey(value) {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || ''))
-}
-
 // "2025-02" -> { from: "2025-02-01", to: "2025-02-28" }
 export function monthRange(month) {
   const [y, m] = month.split('-').map(Number)

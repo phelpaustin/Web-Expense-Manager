@@ -31,10 +31,6 @@ export function periodRange(key, now = new Date()) {
   }
 }
 
-export function periodLabel(key) {
-  return (PERIODS.find((p) => p.key === key) || PERIODS[0]).label
-}
-
 // What to call a member: their name, else their email, with "(you)" for the person looking.
 export function memberLabel(m) {
   const base = m.name || m.email || (m.user_id == null ? 'Unknown' : 'Member')
@@ -65,14 +61,6 @@ export function trendRows(data) {
     for (const b of mo.by_member) row[`m${b.user_id}`] = Number(b.total)
     return row
   })
-}
-
-// "Ann (you) 80% · Bob 20%", biggest first.
-export function sharesText(data) {
-  return data.members
-    .filter((m) => m.count > 0)
-    .map((m) => `${memberLabel(m)} ${m.share_pct}%`)
-    .join(' · ')
 }
 
 // "Across Home and Goa Trip".

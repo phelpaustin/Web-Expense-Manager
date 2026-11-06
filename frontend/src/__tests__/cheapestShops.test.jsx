@@ -10,7 +10,7 @@ vi.mock('../api/client.js', async (importOriginal) => {
 
 import * as client from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
-import { describeSaving, itemName, lookbackLabel, summaryText, timesText } from '../cheapestShops.js'
+import { describeSaving, itemName, summaryText, timesText } from '../cheapestShops.js'
 import CheapestShopsPanel from '../components/CheapestShopsPanel.jsx'
 
 beforeAll(() => setDisplayCurrency('USD'))
@@ -32,12 +32,6 @@ describe('cheapest shop helpers', () => {
   it('counts purchases in words', () => {
     expect(timesText(1)).toBe('once')
     expect(timesText(3)).toBe('3 times')
-  })
-
-  it('labels the look-back, including one that is not on the list', () => {
-    expect(lookbackLabel(12)).toBe('Last 12 months')
-    expect(lookbackLabel(0)).toBe('All time')
-    expect(lookbackLabel(18)).toBe('Last 18 months')
   })
 
   it('describes a saving in a sentence', () => {

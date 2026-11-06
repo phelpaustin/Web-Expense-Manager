@@ -307,14 +307,12 @@ def test_list_rejects_bad_parameters(client, make_user, params):
     assert client.get(f"/api/bills?{params}", headers=h).status_code == 422
 
 
-def test_expenses_list_filters_total_only_and_exposes_the_link(client, make_user):
+def test_expenses_list_exposes_the_bill_link(client, make_user):
     _, h = make_user()
     b = _bill(client, h, shop="Totals only")
     client.post("/api/expenses", json={"date": TODAY, "category": "Food", "amount": "3", "currency": "SEK"}, headers=h)
-    only = _expenses(client, h, total_only="true")
-    assert [e["source_bill_id"] for e in only] == [b["id"]]
-    assert len(_expenses(client, h, total_only="false")) == 1
-    assert len(_expenses(client, h)) == 2
+    links = [e["source_bill_id"] for e in _expenses(client, h)]
+    assert b["id"] in links and all(links)  # every expense is filed under a bill (its own, if typed in)
 
 
 # ── receipts: attach / create (nothing is read from the file) ───────────

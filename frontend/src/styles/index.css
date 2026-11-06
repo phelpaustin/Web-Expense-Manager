@@ -1891,15 +1891,6 @@ button {
   line-height: 1.4;
 }
 
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
 /* Tabs with counts */
 .bill-tabs {
   max-width: 100%;

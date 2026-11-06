@@ -239,10 +239,6 @@ export function fetchDashboard(scope, spaceIds, { includeAlerts = true } = {}) {
   return request(`/api/dashboard${joined ? `?${joined}` : ''}`)
 }
 
-export function fetchSummary(scope, spaceIds) {
-  return request(`/api/expenses/summary${scopeQuery(scope, spaceIds)}`)
-}
-
 // What explains the change in spending versus the month before. `month` is 'YYYY-MM'; leave it
 // out for the last finished month.
 export function fetchCategoryChange({ month, scope, spaceIds } = {}) {

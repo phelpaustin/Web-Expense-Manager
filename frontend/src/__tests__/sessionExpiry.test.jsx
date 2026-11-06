@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 
-import { fetchMe, fetchSummary, forgotPassword, onSessionExpired } from '../api/client.js'
+import { fetchMe, fetchOptions, forgotPassword, onSessionExpired } from '../api/client.js'
 import { useAuth } from '../hooks/useAuth.js'
 
 const TOKEN_KEY = 'expense_token'
@@ -157,7 +157,7 @@ describe('useAuth', () => {
     let rejected = false
     fakeServer({
       '/api/auth/me': { status: 200, body: ME },
-      '/api/expenses/summary': () => (rejected ? { status: 401, body: {} } : { status: 200, body: {} }),
+      '/api/options': () => (rejected ? { status: 401, body: {} } : { status: 200, body: {} }),
     })
 
     const { result, resetData } = mount()
@@ -165,7 +165,7 @@ describe('useAuth', () => {
 
     rejected = true
     await act(async () => {
-      await fetchSummary().catch(() => {})
+      await fetchOptions().catch(() => {})
     })
 
     expect(result.current.user).toBeNull()

@@ -7,10 +7,6 @@ export const WINDOWS = [
   { days: 90, label: 'Last 90 days' },
 ]
 
-export function windowLabel(days) {
-  return (WINDOWS.find((w) => w.days === days) || { label: `Last ${days} days` }).label
-}
-
 // "Milk (Arla)" when the brand is part of what is followed.
 export function riseName(i) {
   return i.brand ? `${i.item} (${i.brand})` : i.item

@@ -17,7 +17,7 @@ vi.mock('recharts', () => {
 import * as client from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
 import {
-  PERIODS, cellAmount, describeBars, memberBars, memberColors, memberLabel, OTHER_COLOR, periodLabel, periodRange, sharesText, spacesText, summaryText,
+  PERIODS, cellAmount, describeBars, memberBars, memberColors, memberLabel, OTHER_COLOR, periodRange, spacesText, summaryText,
   topCategoriesText, trendRows,
 } from '../members.js'
 import MembersPanel from '../components/MembersPanel.jsx'
@@ -58,10 +58,8 @@ describe('period ranges', () => {
     expect(periodRange('last_90', new Date(2026, 1, 10))).toEqual({ dateFrom: '2025-11-13', dateTo: '2026-02-10' })
   })
 
-  it('labels the periods, falling back to the first', () => {
+  it('lists the periods in order', () => {
     expect(PERIODS.map((p) => p.key)).toEqual(['this_month', 'last_month', 'last_90', 'this_year', 'all'])
-    expect(periodLabel('last_90')).toBe('Last 90 days')
-    expect(periodLabel('nonsense')).toBe('This month')
   })
 })
 
@@ -92,10 +90,6 @@ describe('member helpers', () => {
     const rows = trendRows(DATA())
     expect(rows[0]).toEqual({ month: '2026-09', name: 'Sep 26', total: 150, m1: 100, m2: 50, m3: 0 })
     expect(rows[1].name).toBe('Oct 26')
-  })
-
-  it('writes the shares, leaving out members who spent nothing', () => {
-    expect(sharesText(DATA())).toBe('Ann (you) 80% · bob@x.com 20%')
   })
 
   it('names the spaces in a sentence', () => {

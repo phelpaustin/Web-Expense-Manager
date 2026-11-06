@@ -11,7 +11,6 @@ from app.api.deps import get_current_user
 from app.api.options import (
     default_currency_for,
     ensure_options,
-    get_or_create_options,
 )
 from app.core.fx import normalize_convertible_currency
 from app.core.file_validation import detect_receipt_content_type

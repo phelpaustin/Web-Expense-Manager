@@ -10,7 +10,7 @@ vi.mock('../api/client.js', async (importOriginal) => {
 
 import * as client from '../api/client.js'
 import { setDisplayCurrency } from '../format.js'
-import { describeRise, isBigRise, riseName, summaryText, windowLabel } from '../priceRises.js'
+import { describeRise, isBigRise, riseName, summaryText } from '../priceRises.js'
 import PriceRisesPanel from '../components/PriceRisesPanel.jsx'
 
 beforeAll(() => setDisplayCurrency('USD'))
@@ -34,11 +34,6 @@ describe('price rise helpers', () => {
   it('treats 25% and over as big, as the bell does', () => {
     expect(isBigRise({ rise_pct: 25 })).toBe(true)
     expect(isBigRise({ rise_pct: 24.9 })).toBe(false)
-  })
-
-  it('labels the window, including one that is not on the list', () => {
-    expect(windowLabel(30)).toBe('Last 30 days')
-    expect(windowLabel(45)).toBe('Last 45 days')
   })
 
   it('says why there is nothing to show', () => {

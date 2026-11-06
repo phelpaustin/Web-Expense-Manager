@@ -9,10 +9,6 @@ export const LOOKBACKS = [
   { months: 0, label: 'All time' },
 ]
 
-export function lookbackLabel(months) {
-  return (LOOKBACKS.find((l) => l.months === months) || { label: `Last ${months} months` }).label
-}
-
 // 'once' / '3 times'
 export function timesText(n) {
   return n === 1 ? 'once' : `${n} times`
