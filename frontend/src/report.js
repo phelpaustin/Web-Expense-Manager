@@ -22,6 +22,29 @@ export function changeDirection(data) {
   return data.previous && Number(data.previous.change) >= 0 ? 'up' : 'down'
 }
 
+// The report's expense list, sorted by one column. Text compares without regard to case; ties keep
+// the server's order (biggest first), so the result is stable.
+export const EXPENSE_COLUMNS = ['date', 'item', 'shop', 'category', 'amount']
+
+function sortValue(x, key) {
+  if (key === 'item') return (x.description || x.category || '').toLowerCase()
+  if (key === 'amount') return Number(x.amount)
+  return String(x[key] || '').toLowerCase()
+}
+
+export function sortExpenses(rows, key, dir) {
+  const sign = dir === 'asc' ? 1 : -1
+  return rows
+    .map((x, i) => [x, i])
+    .sort(([a, i], [b, j]) => {
+      const va = sortValue(a, key)
+      const vb = sortValue(b, key)
+      const c = va < vb ? -1 : va > vb ? 1 : 0
+      return c ? c * sign : i - j
+    })
+    .map(([x]) => x)
+}
+
 // One or two sentences on the whole report.
 export function summaryText(data) {
   const t = data.totals

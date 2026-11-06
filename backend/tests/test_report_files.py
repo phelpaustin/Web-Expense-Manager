@@ -58,12 +58,12 @@ def test_file_names():
 
 def test_a_year_workbook_has_the_expected_sheets():
     wb = book(rf.report_xlsx(year_report(), "SEK"))
-    assert wb.sheetnames == ["Summary", "Categories", "By month", "Category by month", "Top shops", "Largest expenses"]
+    assert wb.sheetnames == ["Summary", "Categories", "By month", "Category by month", "Top shops", "All expenses"]
 
 
 def test_a_month_workbook_is_by_day_and_has_no_category_by_month_sheet():
     wb = book(rf.report_xlsx(month_report(), "SEK"))
-    assert wb.sheetnames == ["Summary", "Categories", "By day", "Top shops", "Largest expenses"]
+    assert wb.sheetnames == ["Summary", "Categories", "By day", "Top shops", "All expenses"]
     assert len(sheet_rows(wb["By day"])) == 1 + 28
 
 
@@ -111,7 +111,7 @@ def test_the_category_by_month_sheet_adds_up():
 def test_dates_are_real_dates_and_text_cannot_run_as_a_formula():
     rows = [e("2026-02-01", 10, "=SUM(A1)", "=HYPERLINK(\"http://evil\")", "+cmd|calc"), e("2026-02-02", 5, "Food", "ok", "@x")]
     wb = book(rf.report_xlsx(rp.build_report(rows, [], 2026, None, today=TODAY), "SEK"))
-    largest = sheet_rows(wb["Largest expenses"])
+    largest = sheet_rows(wb["All expenses"])
     assert isinstance(largest[1][0], dt.datetime) and largest[1][0].date() == dt.date(2026, 2, 1)
     evil = largest[1]
     assert evil[1].startswith("'=") and evil[2].startswith("'=") and evil[3].startswith("'+")
@@ -127,7 +127,7 @@ def test_an_empty_report_still_makes_a_valid_workbook():
     empty = rp.build_report([], [], 2026, None, today=TODAY)
     wb = book(rf.report_xlsx(empty, "SEK"))
     assert len(wb["Categories"]._charts) == 0 and sheet_rows(wb["Categories"]) == [["Category", "Amount (SEK)", "Share", "Expenses"]]
-    assert sheet_rows(wb["Largest expenses"])[1:] == []
+    assert sheet_rows(wb["All expenses"])[1:] == []
     book(rf.report_xlsx(rp.build_report([], [], 2026, 2, today=TODAY), "SEK"))
 
 

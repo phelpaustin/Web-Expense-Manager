@@ -72,7 +72,7 @@ describe('Insights page', () => {
       kind: 'year', year: 2026, month: null, label: '2026', years: [2026], currency: 'SEK', unconverted_count: 0, peak: null,
       totals: { spent: 0, count: 0, income: 0, net: 0, savings_rate_pct: null, avg_per_day: 0, avg_per_month: 0 },
       previous: { label: '2025', spent: 0, count: 0, change: 0, change_pct: null },
-      categories: [], periods: [], top_shops: [], largest: [], category_matrix: null,
+      categories: [], periods: [], top_shops: [], expenses: [], category_matrix: null,
     }))
     insights({ initialTab: 'report' })
     expect(screen.getByRole('tab', { name: 'Report', selected: true })).toBeTruthy()

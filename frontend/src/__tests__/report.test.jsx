@@ -36,7 +36,7 @@ const REPORT = (extra = {}) => ({
   periods: [{ key: '2026-01', label: 'Jan', total: 400, count: 5 }, { key: '2026-02', label: 'Feb', total: 600, count: 7 }],
   peak: { key: '2026-02', label: 'February', total: 600 },
   top_shops: [{ shop: 'ICA', total: 250, count: 8, share_pct: 25 }],
-  largest: [{ date: '2026-02-11', category: 'Rent', description: 'Rent', shop: 'Landlord', amount: 600 }],
+  expenses: [{ date: '2026-02-11', category: 'Rent', description: 'Rent', shop: 'Landlord', amount: 600 }],
   category_matrix: null, ...extra,
 })
 const show = (props = {}) => render(<ReportPanel scope="personal" refreshKey={0} {...props} />)
@@ -125,7 +125,7 @@ describe('ReportPanel', () => {
     show()
     await screen.findByText(/Top shops/)
     expect(screen.getByText('ICA')).toBeTruthy()
-    expect(screen.getByText(/Largest expenses/)).toBeTruthy()
+    expect(screen.getByText(/All expenses/)).toBeTruthy()
     expect(screen.getByText('Landlord')).toBeTruthy()
     expect(screen.getByText('2026-02-11')).toBeTruthy()
   })
@@ -198,7 +198,7 @@ describe('ReportPanel', () => {
   it('shows a short note and no charts or tables when nothing was spent', async () => {
     client.fetchReport.mockResolvedValue(REPORT({
       totals: { spent: 0, count: 0, income: 0, net: 0, savings_rate_pct: null, avg_per_day: 0, avg_per_month: 0 },
-      categories: [], top_shops: [], largest: [], peak: null, previous: { label: '2025', spent: 0, count: 0, change: 0, change_pct: null },
+      categories: [], top_shops: [], expenses: [], peak: null, previous: { label: '2025', spent: 0, count: 0, change: 0, change_pct: null },
     }))
     show()
     await screen.findByText('No spending recorded in 2026.')
@@ -314,5 +314,50 @@ describe('opening the expenses behind a category', () => {
     await screen.findByRole('dialog')
     fireEvent.click(screen.getByLabelText('Close'))
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+describe('All expenses table', () => {
+  const X = (date, description, shop, category, amount) => ({ date, description, shop, category, amount })
+  const LIST = [
+    X('2026-02-11', 'Rent', 'Landlord', 'Housing', 600),
+    X('2026-03-02', 'bread', 'ICA', 'Food', 20),
+    X('2026-01-15', 'Apples', 'ICA', 'Food', 20),
+    X('2026-04-01', 'Cinema', '', 'Fun', 90),
+  ]
+  const firstColumn = (col) =>
+    [...document.querySelectorAll('tbody')].at(-1).querySelectorAll('tr') && // the expenses table is the last one
+    [...[...document.querySelectorAll('tbody')].at(-1).querySelectorAll('tr')].map((r) => r.children[col].textContent)
+
+  it('sortExpenses orders by any column, ignores case and keeps ties in server order', async () => {
+    const { sortExpenses } = await import('../report.js')
+    expect(sortExpenses(LIST, 'amount', 'desc').map((x) => x.description)).toEqual(['Rent', 'Cinema', 'bread', 'Apples'])
+    expect(sortExpenses(LIST, 'item', 'asc').map((x) => x.description)).toEqual(['Apples', 'bread', 'Cinema', 'Rent'])
+    expect(sortExpenses(LIST, 'date', 'asc').map((x) => x.date)[0]).toBe('2026-01-15')
+    expect(sortExpenses(LIST, 'shop', 'asc').map((x) => x.shop)).toEqual(['', 'ICA', 'ICA', 'Landlord'])
+  })
+
+  it('lists every expense, biggest first, and sorts when a column is clicked', async () => {
+    client.fetchReport.mockResolvedValue(REPORT({ expenses: LIST }))
+    show()
+    await screen.findByText(/All expenses/)
+    expect(firstColumn(1)).toEqual(['Rent', 'Cinema', 'bread', 'Apples'])
+    fireEvent.click(screen.getByRole('button', { name: /^Item/ }))
+    expect(firstColumn(1)).toEqual(['Apples', 'bread', 'Cinema', 'Rent'])
+    expect(screen.getByRole('columnheader', { name: /Item/ }).getAttribute('aria-sort')).toBe('ascending')
+    fireEvent.click(screen.getByRole('button', { name: /^Item/ }))
+    expect(firstColumn(1)).toEqual(['Rent', 'Cinema', 'bread', 'Apples'])
+    fireEvent.click(screen.getByRole('button', { name: /^Date/ }))
+    expect(firstColumn(0)[0]).toBe('2026-04-01') // dates start latest first
+  })
+
+  it('shows the first 100 and the rest on request', async () => {
+    const many = Array.from({ length: 130 }, (_, i) => X('2026-02-01', `item ${i}`, 'S', 'Fun', 200 - i))
+    client.fetchReport.mockResolvedValue(REPORT({ expenses: many }))
+    show()
+    await screen.findByText(/All expenses/)
+    expect(firstColumn(1)).toHaveLength(100)
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 130' }))
+    expect(firstColumn(1)).toHaveLength(130)
   })
 })

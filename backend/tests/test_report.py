@@ -85,7 +85,7 @@ def test_a_tie_for_the_peak_goes_to_the_earlier_period():
 
 def test_no_spending_means_no_peak_and_empty_lists():
     r = year([])
-    assert r["peak"] is None and r["categories"] == [] and r["top_shops"] == [] and r["largest"] == []
+    assert r["peak"] is None and r["categories"] == [] and r["top_shops"] == [] and r["expenses"] == []
     assert r["totals"]["spent"] == D("0.00") and r["totals"]["count"] == 0 and r["previous"]["change_pct"] is None
     assert len(r["periods"]) == 12 and all(p["total"] == 0 for p in r["periods"])
 
@@ -164,17 +164,17 @@ def test_top_shops_are_merged_by_name_ranked_and_capped():
     assert len(many["top_shops"]) == 10 and many["top_shops"][0]["shop"] == "Shop 14"
 
 
-def test_the_largest_expenses_are_listed_biggest_first_and_capped():
+def test_every_expense_is_listed_biggest_first():
     rows = [e("2026-02-01", 10 + i, description=f"item {i}", shop="S", category="Fun") for i in range(15)]
     r = year(rows)
-    assert len(r["largest"]) == 10
-    assert r["largest"][0] == {"date": "2026-02-01", "category": "Fun", "description": "item 14", "shop": "S", "amount": D("24.00")}
-    assert [x["amount"] for x in r["largest"]] == sorted((x["amount"] for x in r["largest"]), reverse=True)
+    assert len(r["expenses"]) == 15
+    assert r["expenses"][0] == {"date": "2026-02-01", "category": "Fun", "description": "item 14", "shop": "S", "amount": D("24.00")}
+    assert [x["amount"] for x in r["expenses"]] == sorted((x["amount"] for x in r["expenses"]), reverse=True)
 
 
 def test_equal_amounts_are_listed_oldest_first():
     r = year([e("2026-05-01", 50, description="later"), e("2026-02-01", 50, description="earlier")])
-    assert [x["description"] for x in r["largest"]] == ["earlier", "later"]
+    assert [x["description"] for x in r["expenses"]] == ["earlier", "later"]
 
 
 def test_refunds_count_so_the_total_matches_the_dashboard():

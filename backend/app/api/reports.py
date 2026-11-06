@@ -51,7 +51,7 @@ def get_report(
     user: models.User = Depends(get_current_user),
 ):
     """Totals, change from the previous period, spending by category, by month (a year) or by day
-    (a month), top shops and largest expenses. Amounts are in the reporting currency; income is the
+    (a month), top shops and every expense, biggest first. Amounts are in the reporting currency; income is the
     user's own whatever the scope."""
     return _build(db, user, year, month, scope, space_ids)
 

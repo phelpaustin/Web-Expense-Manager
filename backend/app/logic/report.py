@@ -7,7 +7,7 @@ screen and the files can never disagree.
 A report holds: totals (spent, income, net, savings rate, daily/monthly average), the change from
 the previous year/month, spending by category (amount and share), spending over the period (by
 month for a year, by day for a month) with its peak, a category-by-month table for a year, the top
-shops and the largest single expenses. Every expense counts, refunds included, so the total equals
+shops and every expense, biggest first. Every expense counts, refunds included, so the total equals
 the one on the dashboard. Categories and shops that differ only in case or spacing are one.
 
 Pure functions: no DB, no FastAPI.
@@ -27,7 +27,7 @@ from app.logic.taxonomy import UNCATEGORIZED
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 SHORT_MONTHS = [m[:3] for m in MONTH_NAMES]
 TOP_SHOPS = 10
-TOP_EXPENSES = 10
+TOP_EXPENSES = 10  # the PDF's "Largest expenses"; the on-screen list and the Excel sheet carry every expense
 
 
 def period_label(year: int, month: int | None) -> str:
@@ -180,8 +180,8 @@ def build_report(
         for k, (t, c) in sorted(by_shop.items(), key=lambda kv: (-kv[1][0], shop_names[kv[0]]))[:TOP_SHOPS]
     ]
 
-    biggest = sorted(rows, key=lambda r: (-r[2], r[0], r[1].get("id") or 0))[:TOP_EXPENSES]
-    largest = [
+    biggest = sorted(rows, key=lambda r: (-r[2], r[0], r[1].get("id") or 0))
+    expenses = [
         {
             "date": day.isoformat(),
             "category": clean_name(e.get("category")) or UNCATEGORIZED,
@@ -220,5 +220,5 @@ def build_report(
         "peak": peak,
         "category_matrix": category_matrix,
         "top_shops": top_shops,
-        "largest": largest,
+        "expenses": expenses,
     }

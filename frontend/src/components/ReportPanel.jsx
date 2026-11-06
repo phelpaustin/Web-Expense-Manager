@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { money } from '../format.js'
 import { downloadReport, fetchReport } from '../api/client.js'
@@ -8,12 +8,20 @@ import MonthDetailDialog from './MonthDetailDialog.jsx'
 import { monthRange } from '../monthDetail.js'
 import {
   MONTH_NAMES, categoryChartHeight, changeDirection, changeText, chartCategories, describeCategoryChart, describePeriodChart,
-  periodChartRows, summaryText, tickLabel, yearChoices,
+  periodChartRows, sortExpenses, summaryText, tickLabel, yearChoices,
 } from '../report.js'
 
 const axis = { stroke: '#9aa3b8', fontSize: 12 }
 const ACCENT = '#6d7bff'
 const MUTED = '#c3c8d8'
+const EXPENSE_HEADS = [
+  ['date', 'Date'],
+  ['item', 'Item'],
+  ['shop', 'Shop'],
+  ['category', 'Category'],
+  ['amount', 'Amount', true],
+]
+const FIRST_ROWS = 100 // a year can hold thousands of expenses; the rest is one click away
 
 function AmountTip({ active, payload }) {
   if (!active || !payload || !payload.length) return null
@@ -41,8 +49,20 @@ export default function ReportPanel({ scope, spaceIds, refreshKey, options, grou
   const [busy, setBusy] = useState(null)
   const [downloadError, setDownloadError] = useState(null)
   const [drill, setDrill] = useState(null) // { category, period } while a category's expenses are open
+  const [sort, setSort] = useState({ key: 'amount', dir: 'desc' })
+  const [showAll, setShowAll] = useState(false)
   const latest = useRef(0)
   const idsKey = (spaceIds || []).join(',')
+  const sorted = useMemo(() => (data ? sortExpenses(data.expenses, sort.key, sort.dir) : []), [data, sort])
+  const shown = showAll ? sorted : sorted.slice(0, FIRST_ROWS)
+  useEffect(() => setShowAll(false), [data])
+
+  // A new column starts with the likelier direction: biggest/latest first for numbers and dates, A to Z for text.
+  function toggleSort(key) {
+    setSort((s) =>
+      s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'amount' || key === 'date' ? 'desc' : 'asc' },
+    )
+  }
   const monthArg = kind === 'month' ? month : undefined
 
   useEffect(() => {
@@ -272,32 +292,42 @@ export default function ReportPanel({ scope, spaceIds, refreshKey, options, grou
         </section>
       )}
 
-      {data.largest.length > 0 && (
+      {data.expenses.length > 0 && (
         <section className="panel">
-          <h2>💎 Largest expenses</h2>
+          <h2>🧾 All expenses</h2>
+          <p className="subtitle">
+            {data.expenses.length} expense{data.expenses.length === 1 ? '' : 's'} in {data.label}. Click a column to sort.
+          </p>
           <table className="table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Item</th>
-                <th>Category</th>
-                <th className="right">Amount</th>
+                {EXPENSE_HEADS.map(([key, label, right]) => (
+                  <th key={key} className={right ? 'right' : undefined} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <button type="button" className="sort-btn" onClick={() => toggleSort(key)}>
+                      {label}
+                      <span aria-hidden="true">{sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</span>
+                    </button>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {data.largest.map((x, i) => (
+              {shown.map((x, i) => (
                 <tr key={`${x.date}|${x.description}|${x.amount}|${i}`}>
                   <td>{x.date}</td>
-                  <td>
-                    {x.description || x.category}
-                    {x.shop && <span className="report-sub">{x.shop}</span>}
-                  </td>
+                  <td>{x.description || x.category}</td>
+                  <td>{x.shop}</td>
                   <td>{x.category}</td>
                   <td className="right">{money(x.amount)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {sorted.length > shown.length && (
+            <button type="button" className="ghost-btn" onClick={() => setShowAll(true)}>
+              Show all {sorted.length}
+            </button>
+          )}
         </section>
       )}
       {error && <p className="subtitle">Couldn’t refresh: {error}</p>}

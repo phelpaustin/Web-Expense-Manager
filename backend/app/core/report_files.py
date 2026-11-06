@@ -26,6 +26,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.parsing import escape_formula
+from app.logic.report import TOP_EXPENSES
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 PDF_MEDIA_TYPE = "application/pdf"
@@ -175,9 +176,9 @@ def report_xlsx(report: dict, currency: str) -> bytes:
         ws.cell(row=r, column=4, value=s["count"])
     _widths(ws, [30, 18, 10, 12])
 
-    ws = wb.create_sheet("Largest expenses")
+    ws = wb.create_sheet("All expenses")
     _header(ws, 1, ["Date", "Category", "Item", "Shop", f"Amount ({currency})"])
-    for r, x in enumerate(report["largest"], start=2):
+    for r, x in enumerate(report["expenses"], start=2):
         ws.cell(row=r, column=1, value=date.fromisoformat(x["date"])).number_format = "yyyy-mm-dd"
         ws.cell(row=r, column=2, value=_text(x["category"]))
         ws.cell(row=r, column=3, value=_text(x["description"]))
@@ -364,7 +365,7 @@ def report_pdf(report: dict, currency: str, generated: date | None = None) -> by
 
         story.append(_p("Largest expenses", h2))
         rows = [["Date", "Item", "Category", f"Amount ({currency})"]]
-        for x in report["largest"]:
+        for x in report["expenses"][:TOP_EXPENSES]:
             what = x["description"] or x["category"]
             if x["shop"]:
                 what = f"{what} · {x['shop']}"

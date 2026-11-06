@@ -40,7 +40,7 @@ def test_a_year_report(client, make_user):
     assert [p["total"] for p in r["periods"]][:3] == [0, 350, 70] and len(r["periods"]) == 12
     assert r["peak"]["label"] == "February"
     assert [s["shop"] for s in r["top_shops"]] == ["Landlord", "SF", "ICA"]
-    assert r["largest"][0]["description"] == "Rent" and r["category_matrix"]["rows"][0]["category"] == "Rent"
+    assert r["expenses"][0]["description"] == "Rent" and r["category_matrix"]["rows"][0]["category"] == "Rent"
     assert r["currency"] and r["unconverted_count"] == 0 and 2026 in r["years"] and 2025 in r["years"]
 
 
@@ -65,7 +65,7 @@ def test_the_year_defaults_to_this_year(client, make_user):
 def test_an_empty_report(client, make_user):
     _, h = make_user()
     r = get(client, h, year=2026).json()
-    assert r["totals"]["spent"] == 0 and r["categories"] == [] and r["peak"] is None and r["top_shops"] == [] and r["largest"] == []
+    assert r["totals"]["spent"] == 0 and r["categories"] == [] and r["peak"] is None and r["top_shops"] == [] and r["expenses"] == []
 
 
 def test_shop_merges_apply(client, make_user):
