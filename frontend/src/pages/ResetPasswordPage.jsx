@@ -1,3 +1,4 @@
+import PasswordInput from '../components/PasswordInput.jsx'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { resetPassword } from '../api/client.js'
@@ -50,16 +51,16 @@ export default function ResetPasswordPage() {
           </>
         ) : (
           <form className="auth-form" onSubmit={handleSubmit}>
-            <input
-              type="password"
+            <PasswordInput
+              
               placeholder="New password (min 12 characters)"
               required
               minLength={12}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <input
-              type="password"
+            <PasswordInput
+              
               placeholder="Confirm new password"
               required
               value={confirm}

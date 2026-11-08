@@ -1,3 +1,4 @@
+import PasswordInput from '../components/PasswordInput.jsx'
 import BackupPanel from '../components/BackupPanel.jsx'
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import Switch from '../components/Switch.jsx'
@@ -156,23 +157,23 @@ export default function SettingsPage({
 
           <h3>Change password</h3>
           <form className="stack-form" onSubmit={handleChangePassword}>
-            <input
-              type="password"
+            <PasswordInput
+              
               placeholder="Current password"
               required
               value={pwCurrent}
               onChange={(e) => setPwCurrent(e.target.value)}
             />
-            <input
-              type="password"
+            <PasswordInput
+              
               placeholder="New password (min 12 characters)"
               required
               minLength={12}
               value={pwNew}
               onChange={(e) => setPwNew(e.target.value)}
             />
-            <input
-              type="password"
+            <PasswordInput
+              
               placeholder="Confirm new password"
               required
               value={pwConfirm}
@@ -194,8 +195,8 @@ export default function SettingsPage({
             cannot be undone.
           </p>
           <form className="add-form" onSubmit={handleDelete}>
-            <input
-              type="password"
+            <PasswordInput
+              
               placeholder="Confirm your password"
               required
               value={delPassword}

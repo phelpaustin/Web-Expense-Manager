@@ -1,3 +1,4 @@
+import PasswordInput from '../components/PasswordInput.jsx'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { verifyEmail } from '../api/client.js'
@@ -57,16 +58,16 @@ export default function VerifyEmailPage() {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
-              <input
-                type="password"
+              <PasswordInput
+                
                 placeholder="Choose a password (min 12 characters)"
                 required
                 minLength={12}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
-              <input
-                type="password"
+              <PasswordInput
+                
                 placeholder="Confirm password"
                 required
                 value={confirm}

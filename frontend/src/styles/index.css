@@ -3323,3 +3323,25 @@ label.link-btn input[type='file'] {
 .legacy-group { border-top: 1px solid var(--border, rgba(128, 128, 128, 0.25)); padding: 0.6rem 0; }
 .legacy-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; align-items: center; }
 .legacy-items { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+
+/* Password field with a Show/Hide button */
+.password-field { position: relative; display: block; flex: 1 1 auto; min-width: 0; }
+.password-field input { width: 100%; box-sizing: border-box; padding-right: 4.2rem; }
+.auth-form .password-toggle,
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  background: transparent;
+  color: var(--muted, #6b7280);
+  border: none;
+  box-shadow: none;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+.auth-form .password-toggle:hover,
+.password-toggle:hover { filter: none; color: var(--text, inherit); background: rgba(128, 128, 128, 0.12); }

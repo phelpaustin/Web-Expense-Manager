@@ -1,3 +1,4 @@
+import PasswordInput from './components/PasswordInput.jsx'
 import { useState, useEffect, useRef } from 'react'
 import { login, register, forgotPassword, googleLogin, resendVerification } from './api/client.js'
 
@@ -121,8 +122,8 @@ export default function AuthScreen({ onAuthed, sessionNotice = null }) {
             onChange={(e) => setEmail(e.target.value)}
           />
           {mode === 'login' && (
-            <input
-              type="password"
+            <PasswordInput
+              
               placeholder="Password"
               required
               value={password}
