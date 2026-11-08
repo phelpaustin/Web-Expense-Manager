@@ -486,7 +486,11 @@ export function fetchLegacyGroups() {
 
 // action: 'keep' (accept as an itemised bill) | 'split' (one purchase per expense)
 export function resolveLegacyGroups(action, ids) {
-  return request('/api/bills/legacy-groups/resolve', { method: 'POST', body: JSON.stringify({ action, ids }) })
+  return request('/api/bills/legacy-groups/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ids }),
+  })
 }
 
 export function fetchBill(id) {

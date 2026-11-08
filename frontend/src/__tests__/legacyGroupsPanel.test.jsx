@@ -61,5 +61,6 @@ describe('LegacyGroupsPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Review' }))
     fireEvent.click(screen.getByRole('button', { name: 'Split' }))
     await waitFor(() => expect(onError).toHaveBeenCalledWith('nope'))
+    expect((await screen.findByRole('alert')).textContent).toBe('nope')
   })
 })

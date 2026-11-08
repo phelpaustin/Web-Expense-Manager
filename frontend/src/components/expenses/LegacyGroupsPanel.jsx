@@ -9,6 +9,7 @@ export default function LegacyGroupsPanel({ onChanged, onError }) {
   const [groups, setGroups] = useState([])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -24,11 +25,13 @@ export default function LegacyGroupsPanel({ onChanged, onError }) {
 
   async function resolve(action, ids) {
     setBusy(true)
+    setError('')
     try {
       await resolveLegacyGroups(action, ids)
       await load()
       await onChanged?.()
     } catch (err) {
+      setError(err.message)
       onError?.(err.message)
     } finally {
       setBusy(false)
@@ -53,6 +56,7 @@ export default function LegacyGroupsPanel({ onChanged, onError }) {
             <b>Keep as one bill</b> if these items really were on one receipt. <b>Split</b> if they were
             separate purchases: each expense then becomes its own purchase.
           </p>
+          {error && <div className="auth-error" role="alert">{error}</div>}
           <div className="legacy-actions">
             <button type="button" disabled={busy} onClick={() => resolve('keep', allIds)}>
               Keep all as bills
