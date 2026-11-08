@@ -233,6 +233,10 @@ What the AI sees: only the column headings, about ten sample rows (cells cut to 
 
 Export CSV or Excel under **Settings → App data**. The yearly/monthly report has its own Excel and PDF download on **Insights → Report**. In the PDF, characters the built-in font cannot draw (for example Japanese shop names) print as `?`; the Excel file keeps them.
 
+### Full backup
+
+**Settings → App data → Download full backup** saves one zip with everything the account owns: expenses together with the bills they belong to (a bill stays a container, so itemised bills keep their items and nothing is regrouped by date and shop), receipts, budgets, income, recurring items, savings goals, name rules, import profiles and settings. Expense Spaces and the expenses filed in them are not included. **Restore a backup** loads such a file into an account that has no expenses, bills, budgets, income, recurring items or savings goals yet (otherwise it is refused, so histories are never mixed or overwritten): register a new account, then restore there. The file is checked before anything is written, and a file that fails any check changes nothing. This is the way to move to another installation (for example the Docker setup in `deploy/onprem`) when you do not want to copy the database.
+
 Text cells in the CSV/XLSX export that start with `=`, `+`, `-` or `@` (or a tab/line break) get a leading `'`, so Excel, Sheets and LibreOffice show them as text instead of running them as formulas (a shop named `=HYPERLINK(...)` is harmless). Amounts, quantities and dates stay real numbers/dates. Importing one of our own exports (expenses or bills) removes that quote again, so the original text comes back.
 
 ## Receipts

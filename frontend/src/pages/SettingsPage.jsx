@@ -1,3 +1,4 @@
+import BackupPanel from '../components/BackupPanel.jsx'
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import Switch from '../components/Switch.jsx'
 import GoogleConfirmButton, { GOOGLE_CLIENT_ID } from '../components/GoogleConfirmButton.jsx'
@@ -234,6 +235,8 @@ export default function SettingsPage({
               </div>
             </section>
           )}
+
+          <BackupPanel onError={onError} />
 
           <section className="panel">
             <h2>Base currency</h2>

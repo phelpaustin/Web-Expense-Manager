@@ -778,6 +778,19 @@ export async function exportExpenses(format) {
   return downloadFile(`/api/expenses/export?format=${format}`, format === 'xlsx' ? 'expenses.xlsx' : 'expenses.csv', 'Export failed')
 }
 
+// A full backup of the account (one zip: expenses with their bills, receipts, budgets, income, ...).
+export function downloadBackup() {
+  const day = new Date().toISOString().slice(0, 10)
+  return downloadFile('/api/backup', `expense-backup-${day}.zip`, 'Couldn’t create the backup')
+}
+
+// Load a backup made by downloadBackup into this (empty) account. Returns what was restored.
+export function restoreBackup(file) {
+  const body = new FormData()
+  body.append('file', file)
+  return request('/api/backup/restore', { method: 'POST', body })
+}
+
 function reportQuery({ year, month, scope, spaceIds, format } = {}) {
   const query = scopeQuery(scope, spaceIds).replace(/^\?/, '')
   const parts = [query]

@@ -27,7 +27,13 @@ digest  ── daily 07:00 UTC ──► backend            backup ── nightl
    ```
 5. Open `http://<machine address>:8080` and create your account. Database migrations run on their own at backend start-up.
 
-## Moving your data from Render/Supabase
+## Moving your data from the old site
+
+**Easiest: the app's own backup.** On the old site go to Settings → App data → *Download full backup*. On the new site register an account (do not add anything yet), then Settings → App data → *Restore a backup* and choose the file. Expenses come back with their bills as containers, plus receipts, budgets, income, recurring items, savings goals and settings. Expense Spaces are not included.
+
+**Exact copy of the whole database** (every account, spaces included) is the second way, below.
+
+## Copying the whole database from Render/Supabase
 
 On the old setup, dump the database (Supabase: Project Settings → Database → connection string), then load it into the new one **before** first use:
 
