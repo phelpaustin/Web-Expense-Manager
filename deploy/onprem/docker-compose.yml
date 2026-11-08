@@ -1,0 +1,106 @@
+# Self-hosted stack: PostgreSQL + backend + web (nginx), plus a daily digest job and a nightly backup.
+#
+#   cd deploy/onprem
+#   cp .env.example .env      # then edit it
+#   docker compose up -d --build
+#
+# The site is then at http://<this-machine>:${WEB_PORT:-8080}. See README.md in this folder.
+
+name: expense-manager
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: expense
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: expense
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expense -d expense"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/onprem/backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://expense:${POSTGRES_PASSWORD}@db:5432/expense
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/onprem/frontend.Dockerfile
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+  # Replaces .github/workflows/alert-digest.yml: calls the digest endpoint every day at 07:00 UTC.
+  digest:
+    image: curlimages/curl:8.10.1
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$CRON_SECRET" ]; then echo "CRON_SECRET is not set: digest disabled"; tail -f /dev/null; fi
+        while true; do
+          now=$$(date -u +%s)
+          next=$$(( now - now % 86400 + 7 * 3600 ))
+          [ "$$next" -le "$$now" ] && next=$$(( next + 86400 ))
+          sleep $$(( next - now ))
+          curl --fail-with-body --silent --show-error --request POST http://backend:8000/api/alerts/send-digest \
+            --header "X-Cron-Secret: $$CRON_SECRET" --connect-timeout 30 --max-time 180 \
+            --retry 5 --retry-delay 30 --retry-all-errors || echo "digest failed"
+        done
+
+  # Nightly database dump at 02:00 UTC into ${BACKUP_DIR}, keeping the newest ${BACKUP_KEEP_DAYS} days.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          now=$$(date -u +%s)
+          next=$$(( now - now % 86400 + 2 * 3600 ))
+          [ "$$next" -le "$$now" ] && next=$$(( next + 86400 ))
+          sleep $$(( next - now ))
+          f=/backups/expense-$$(date -u +%Y%m%d-%H%M).sql.gz
+          if pg_dump -h db -U expense expense | gzip > "$$f.tmp"; then mv "$$f.tmp" "$$f"; echo "backup written: $$f"; else rm -f "$$f.tmp"; echo "backup FAILED"; fi
+          find /backups -name 'expense-*.sql.gz' -mtime +"$$KEEP_DAYS" -delete
+        done
+
+volumes:
+  db-data:

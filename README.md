@@ -160,6 +160,10 @@ Optional settings:
 
 To schedule the alert digest using the included GitHub Actions workflow, add repository secrets `ALERT_DIGEST_URL` (the full endpoint URL) and `CRON_SECRET` (matching the Render environment value). The workflow runs daily at 07:00 UTC and can also be started manually. The workflow waits for the sleeping free Render service and retries for a few minutes. GitHub stops scheduled workflows after 60 days with no commits to the repository; if digests stop, re-enable it under the Actions tab.
 
+### Self-hosting
+
+`deploy/onprem/` runs the whole app on your own machine with Docker Compose (PostgreSQL, backend, website, daily digest job and nightly backup). See `deploy/onprem/README.md` for setup, moving data from Render/Supabase, backups and a Mac mini checklist.
+
 ## API overview
 
 All application data routes require a bearer token. Authentication routes cover registration, email verification, login, Google sign-in, password reset/change, logout, and account deletion. Feature routes cover expenses, budgets, analytics, income, recurring templates, bills and receipts, settings, alerts, trips, and Expense Spaces. See `/docs` on a running backend for the complete request and response schemas.

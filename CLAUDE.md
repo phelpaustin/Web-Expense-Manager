@@ -1,7 +1,7 @@
 # Web-Expense-Manager
 
 FastAPI + SQLAlchemy backend (`backend/`), React 18 + Vite frontend (`frontend/`).
-Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supabase (SQLite locally).
+Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supabase (SQLite locally). Self-hosting: `deploy/onprem/` (Docker Compose; same code, same-origin nginx, no code changes needed).
 
 ## Commands
 - Backend tests: `cd backend && python -m pytest -q` (SQLite temp DB, FX provider is faked; ~2 min)

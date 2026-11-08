@@ -24,3 +24,6 @@ dist/
 # OS / editor
 .DS_Store
 *.log
+
+# On-prem nightly database dumps
+deploy/onprem/backups/
