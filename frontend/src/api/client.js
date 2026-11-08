@@ -479,6 +479,16 @@ export function syncBills() {
   return request('/api/bills/sync', { method: 'POST' })
 }
 
+// Purchases an older version grouped by date and shop on its own, waiting for the user's decision.
+export function fetchLegacyGroups() {
+  return request('/api/bills/legacy-groups')
+}
+
+// action: 'keep' (accept as an itemised bill) | 'split' (one purchase per expense)
+export function resolveLegacyGroups(action, ids) {
+  return request('/api/bills/legacy-groups/resolve', { method: 'POST', body: JSON.stringify({ action, ids }) })
+}
+
 export function fetchBill(id) {
   return request(`/api/bills/${id}`)
 }

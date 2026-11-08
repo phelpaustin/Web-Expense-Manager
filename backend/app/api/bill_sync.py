@@ -304,6 +304,88 @@ def _reconcile_ids(db: Session, user_id: int, bill_ids: list[int]) -> bool:
     return changed
 
 
+def _legacy_bills(db: Session, user_id: int, bill_ids: list[int] | None = None) -> list[models.PendingBill]:
+    """Derived bills adopted by an older version under the same-day, same-shop rule (key ``s|...``)
+    that still hold more than one expense: the only bills whose grouping the app chose, not the user."""
+    q = (
+        db.query(models.PendingBill)
+        .join(models.Expense, models.Expense.source_bill_id == models.PendingBill.id)
+        .filter(
+            models.PendingBill.user_id == user_id,
+            models.PendingBill.origin == ORIGIN_EXPENSES,
+            models.PendingBill.status == "itemised",
+            models.PendingBill.origin_key.like("s|%"),
+            models.Expense.bill_total_only.is_(False),
+        )
+        .group_by(models.PendingBill.id)
+        .having(func.count(models.Expense.id) > 1)
+        .order_by(models.PendingBill.date.desc(), models.PendingBill.id.desc())
+    )
+    if bill_ids is not None:
+        q = q.filter(models.PendingBill.id.in_(bill_ids))
+    return q.all()
+
+
+def legacy_groups(db: Session, user_id: int) -> list[dict]:
+    """Read-only: the auto-grouped purchases waiting for the user's decision, with their items."""
+    bills = _legacy_bills(db, user_id)
+    items_by_bill: dict[int, list[dict]] = defaultdict(list)
+    for part in _chunks([b.id for b in bills]):
+        for e in (
+            db.query(models.Expense)
+            .filter(models.Expense.source_bill_id.in_(part), models.Expense.user_id == user_id)
+            .order_by(models.Expense.id)
+        ):
+            items_by_bill[e.source_bill_id].append(
+                {"id": e.id, "description": e.description, "category": e.category, "amount": e.amount}
+            )
+    return [
+        {
+            "id": b.id,
+            "date": b.date,
+            "shop": b.shop,
+            "currency": b.currency,
+            "amount": b.amount,
+            "items": items_by_bill.get(b.id, []),
+        }
+        for b in bills
+    ]
+
+
+def keep_legacy(db: Session, user_id: int, bill_ids: list[int]) -> int:
+    """Accept these auto-grouped bills as real itemised bills: they get an explicit key, so they are
+    never regrouped or split by date and shop again. Returns how many were changed."""
+    bills = _legacy_bills(db, user_id, bill_ids)
+    for b in bills:
+        b.origin_key = new_explicit_key()
+    db.commit()
+    return len(bills)
+
+
+def split_legacy(db: Session, user_id: int, bill_ids: list[int]) -> int:
+    """Turn these auto-grouped bills into one purchase per expense. A bill with a receipt stays as a
+    bill to itemise so the receipt is not lost. Returns how many were split."""
+    bills = _legacy_bills(db, user_id, bill_ids)
+    if not bills:
+        return 0
+    ids = [b.id for b in bills]
+    with_receipt = {
+        r.pending_bill_id for r in db.query(models.Receipt.pending_bill_id).filter(models.Receipt.pending_bill_id.in_(ids))
+    }
+    db.query(models.Expense).filter(
+        models.Expense.source_bill_id.in_(ids), models.Expense.user_id == user_id
+    ).update({"source_bill_id": None}, synchronize_session=False)
+    for b in bills:
+        if b.id in with_receipt:
+            b.status, b.origin, b.origin_key = "pending", None, None
+        else:
+            db.delete(b)
+    db.flush()
+    _adopt(db, user_id)
+    db.commit()
+    return len(bills)
+
+
 def sync_user_bills(db: Session, user_id: int, bill_ids: list[int] | None = None, reconcile: bool = True) -> bool:
     """Reconcile derived bills (all of them, or just ``bill_ids``) and adopt unlinked expenses.
 

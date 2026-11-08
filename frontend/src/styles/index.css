@@ -3316,3 +3316,10 @@ label.link-btn input[type='file'] {
   font-size: 1rem;
   line-height: 1;
 }
+
+/* Review of purchases an older version grouped by date and shop */
+.legacy-groups { margin-bottom: 1rem; }
+.legacy-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.legacy-group { border-top: 1px solid var(--border, rgba(128, 128, 128, 0.25)); padding: 0.6rem 0; }
+.legacy-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; align-items: center; }
+.legacy-items { margin: 0.4rem 0 0; padding-left: 1.2rem; }

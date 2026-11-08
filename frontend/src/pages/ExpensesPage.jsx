@@ -7,6 +7,7 @@ import AddExpensePanel from '../components/expenses/AddExpensePanel.jsx'
 import BulkEditPanel from '../components/expenses/BulkEditPanel.jsx'
 import ExpenseFilters from '../components/expenses/ExpenseFilters.jsx'
 import ExpensePager from '../components/expenses/ExpensePager.jsx'
+import LegacyGroupsPanel from '../components/expenses/LegacyGroupsPanel.jsx'
 import ExpenseTable from '../components/expenses/ExpenseTable.jsx'
 import { groupIntoBills } from '../billGroups.js'
 import OptionLists from '../components/expenses/OptionLists.jsx'
@@ -645,6 +646,8 @@ export default function ExpensesPage({
         handleSubmitBill={handleSubmitBill}
       />
       <OptionLists form={form} editForm={editForm} options={options} bulk={bulk} />
+
+      <LegacyGroupsPanel onChanged={refetch} onError={onError} />
 
       {(total > 0 || hasActiveFilters) && (
         <ExpenseFilters

@@ -239,6 +239,12 @@ def sync_bills(db: Session = Depends(get_db), user: models.User = Depends(get_cu
     return {"changed": bill_sync.sync_user_bills(db, user.id)}
 
 
+@router.get("/bills/legacy-groups")
+def list_legacy_groups(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """Purchases an older version grouped by date and shop on its own, for the user to review."""
+    return bill_sync.legacy_groups(db, user.id)
+
+
 @router.get("/bills/{bill_id}")
 def get_bill(
     bill_id: int,
@@ -441,6 +447,22 @@ class BulkIds(BaseModel):
 
 class BulkRecordIn(BulkIds):
     category: str | None = Field(default=None, max_length=100)
+
+
+class LegacyResolveIn(BulkIds):
+    action: str = Field(pattern=r"^(keep|split)$")
+
+
+@router.post("/bills/legacy-groups/resolve")
+def resolve_legacy_groups(
+    payload: LegacyResolveIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """keep = accept the grouping as a real itemised bill; split = one purchase per expense."""
+    if payload.action == "keep":
+        return {"changed": bill_sync.keep_legacy(db, user.id, payload.ids)}
+    return {"changed": bill_sync.split_legacy(db, user.id, payload.ids)}
 
 
 @router.post("/bills/bulk-delete")
