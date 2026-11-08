@@ -29,9 +29,9 @@ digest  ── daily 07:00 UTC ──► backend            backup ── nightl
 
 ## Moving your data from the old site
 
-**Easiest: the app's own backup.** On the old site go to Settings → App data → *Download full backup*. On the new site register an account (do not add anything yet), then Settings → App data → *Restore a backup* and choose the file. Expenses come back with their bills as containers, plus receipts, budgets, income, recurring items, savings goals and settings. Expense Spaces are not included.
+**Easiest: the app's own backup.** On the old site go to Settings → App data → *Download full backup*. On the new site register an account (do not add anything yet), then Settings → App data → *Restore a backup* and choose the file. Expenses come back with their bills as containers, plus receipts, budgets, income, recurring items, savings goals and settings. Your Expense Spaces come back too, with your own entries, and you as their only member (invite the others again).
 
-**Exact copy of the whole database** (every account, spaces included) is the second way, below.
+**Exact copy of the whole database** (every account, including other people's entries in shared spaces) is the second way, below.
 
 ## Copying the whole database from Render/Supabase
 

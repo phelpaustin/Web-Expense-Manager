@@ -4,8 +4,12 @@ The zip holds ``backup.json`` plus one file per receipt (``receipts/<bill>``). B
 containers: a bill row says which expenses are its items (``bill`` on each expense), so a restore
 brings back exactly the same purchases and nothing is regrouped by date and shop.
 
-Not included: Expense Spaces and the expenses filed in them (they belong to several people), the
-login itself (restoring needs an account to restore into) and exchange-rate caches.
+Expense Spaces the account belongs to are included with the account's own entries in them: a restore
+recreates each space (name, type, trip details, filing under a parent space) with the restoring
+account as its only member and owner. Other members, pending invites and other people's entries are
+not part of the backup (they belong to those people) and have to be invited and entered again.
+
+Not included: the login itself (restoring needs an account to restore into) and exchange-rate caches.
 
 Restore only fills an account that has no data yet, so it can never mix two histories together or
 overwrite anything. Ids are renumbered; ``e|<expense id>`` keys of derived bills are renumbered with them.
@@ -60,21 +64,25 @@ def build_backup(db: Session, user: models.User) -> tuple[bytes, dict]:
     """The backup zip for this user and a small summary (counts, what was left out)."""
     uid = user.id
     opts = db.query(models.UserOptions).filter(models.UserOptions.user_id == uid).first()
-    expenses = (
-        db.query(models.Expense)
-        .filter(models.Expense.user_id == uid, models.Expense.group_id.is_(None))
-        .order_by(models.Expense.id)
-        .all()
+    expenses = db.query(models.Expense).filter(models.Expense.user_id == uid).order_by(models.Expense.id).all()
+    memberships = {
+        m.group_id: m for m in db.query(models.GroupMember).filter(models.GroupMember.user_id == uid)
+    }
+    groups = (
+        db.query(models.Group).filter(models.Group.id.in_(list(memberships))).order_by(models.Group.id).all()
+        if memberships else []
     )
-    in_spaces = (
+    space_ids = {g.id for g in groups}
+    others_entries = (
         db.query(func.count(models.Expense.id))
-        .filter(models.Expense.user_id == uid, models.Expense.group_id.isnot(None))
+        .filter(models.Expense.group_id.in_(list(space_ids)), models.Expense.user_id != uid)
         .scalar()
+        if space_ids else 0
     )
     has_items = {e.source_bill_id for e in expenses if e.source_bill_id is not None}
     bills = []
     for b in db.query(models.PendingBill).filter(models.PendingBill.user_id == uid).order_by(models.PendingBill.id):
-        # An itemised bill whose items are all in a space has nothing left to hold.
+        # An itemised bill with no expenses left has nothing to hold.
         if b.status == "itemised" and b.id not in has_items:
             continue
         bills.append(b)
@@ -107,6 +115,18 @@ def build_backup(db: Session, user: models.User) -> tuple[bytes, dict]:
             else:
                 missing_receipts += 1
         bill_rows.append(row)
+
+    space_rows = []
+    for g in groups:
+        m = memberships[g.id]
+        space_rows.append({
+            "id": g.id, "name": g.name, "space_type": g.space_type,
+            "parent": g.parent_group_id if g.parent_group_id in space_ids else None,
+            "destination": g.destination, "start_date": _d(g.start_date), "end_date": _d(g.end_date),
+            "budget": _n(g.budget), "currency": g.currency, "status": g.status,
+            "local_name": m.local_name,
+            "local_parent": m.local_parent_group_id if m.local_parent_group_id in space_ids else None,
+        })
 
     goals = []
     for g in db.query(models.SavingsGoal).filter(models.SavingsGoal.user_id == uid).order_by(models.SavingsGoal.id):
@@ -146,6 +166,7 @@ def build_backup(db: Session, user: models.User) -> tuple[bytes, dict]:
              "schedule_anchor": _d(t.schedule_anchor), "currency": t.currency}
             for t in templates
         ],
+        "spaces": space_rows,
         "bills": bill_rows,
         "expenses": [
             {"id": e.id, "date": _d(e.date), "category": e.category, "subcategory": e.subcategory,
@@ -153,6 +174,7 @@ def build_backup(db: Session, user: models.User) -> tuple[bytes, dict]:
              "shop": e.shop, "brand": e.brand, "currency": e.currency, "price_per_unit": _n(e.price_per_unit),
              "bill": e.source_bill_id if e.source_bill_id in bill_ids else None,
              "bill_total_only": bool(e.bill_total_only), "recurring": e.recurring_template_id,
+             "space": e.group_id if e.group_id in space_ids else None,
              "covers_from": _d(e.covers_from), "covers_to": _d(e.covers_to)}
             for e in expenses
         ],
@@ -173,7 +195,8 @@ def build_backup(db: Session, user: models.User) -> tuple[bytes, dict]:
     summary = {
         "expenses": len(data["expenses"]), "bills": len(bill_rows), "receipts": len(files),
         "income": len(data["income"]), "budgets": len(data["budgets"]), "recurring": len(templates),
-        "savings_goals": len(goals), "left_out_space_expenses": in_spaces, "missing_receipts": missing_receipts,
+        "savings_goals": len(goals), "spaces": len(space_rows), "others_entries_not_included": others_entries,
+        "missing_receipts": missing_receipts,
     }
     data["summary"] = summary
 
@@ -205,15 +228,15 @@ class _Row(BaseModel):
 
 
 class _Money(_Row):
-    @field_validator("amount", "price_per_unit", "target_amount", mode="before", check_fields=False)
+    @field_validator("amount", "price_per_unit", "target_amount", "budget", mode="before", check_fields=False)
     @classmethod
     def _amount(cls, v):
-        return _money(v)
+        return None if v is None else _money(v)
 
     @field_validator("currency", mode="before", check_fields=False)
     @classmethod
     def _currency(cls, v):
-        return normalize_currency(str(v))
+        return None if v in (None, "") else normalize_currency(str(v))
 
 
 class OptionsIn(_Row):
@@ -260,6 +283,21 @@ class RecurringIn(_Money):
     currency: str
 
 
+class SpaceIn(_Money):
+    id: int
+    name: str = Field(min_length=1, max_length=200)
+    space_type: str = Field(default="custom", pattern=r"^(personal|household|business|rental|trip|custom)$")
+    parent: int | None = None
+    destination: str | None = Field(default=None, max_length=200)
+    start_date: dt.date | None = None
+    end_date: dt.date | None = None
+    budget: Decimal | None = None
+    currency: str | None = None
+    status: str | None = Field(default=None, max_length=30)
+    local_name: str | None = Field(default=None, max_length=200)
+    local_parent: int | None = None
+
+
 class ReceiptIn(_Row):
     file: str
     filename: str = Field(default="receipt", max_length=200)
@@ -297,6 +335,7 @@ class ExpenseIn(_Money):
     recurring: int | None = None
     covers_from: dt.date | None = None
     covers_to: dt.date | None = None
+    space: int | None = None
 
 
 class ContributionIn(_Money):
@@ -338,6 +377,7 @@ class BackupIn(_Row):
     budgets: list[BudgetIn] = Field(default_factory=list)
     income: list[IncomeIn] = Field(default_factory=list)
     recurring: list[RecurringIn] = Field(default_factory=list)
+    spaces: list[SpaceIn] = Field(default_factory=list, max_length=1000)
     bills: list[BillIn] = Field(default_factory=list)
     expenses: list[ExpenseIn] = Field(default_factory=list)
     savings_goals: list[GoalIn] = Field(default_factory=list)
@@ -394,6 +434,20 @@ def read_backup(raw: bytes) -> tuple[BackupIn, dict[str, bytes]]:
 
 
 def _check_links(p: BackupIn) -> None:
+    space_ids = {g.id for g in p.spaces}
+    if len(space_ids) != len(p.spaces):
+        raise BackupError("The backup lists the same space twice.")
+    parents = {g.id: g.parent for g in p.spaces}
+    for g in p.spaces:
+        for ref in (g.parent, g.local_parent):
+            if ref is not None and ref not in space_ids:
+                raise BackupError(f"Space {g.name} is filed under a space that is not in the backup.")
+        seen, cur = {g.id}, g.parent  # a space cannot sit under itself, however indirectly
+        while cur is not None:
+            if cur in seen:
+                raise BackupError(f"Space {g.name} is filed under itself.")
+            seen.add(cur)
+            cur = parents.get(cur)
     bill_ids = {b.id for b in p.bills}
     if len(bill_ids) != len(p.bills):
         raise BackupError("The backup lists the same bill twice.")
@@ -402,6 +456,8 @@ def _check_links(p: BackupIn) -> None:
     for e in p.expenses:
         if e.bill is not None and e.bill not in bill_ids:
             raise BackupError(f"Expense {e.id} points at a bill that is not in the backup.")
+        if e.space is not None and e.space not in space_ids:
+            raise BackupError(f"Expense {e.id} points at a space that is not in the backup.")
     cats = [b.category for b in p.budgets]
     if len(set(cats)) != len(cats):
         raise BackupError("The backup lists the same budget twice.")
@@ -453,12 +509,14 @@ def restore_backup(db: Session, user: models.User, parsed: BackupIn, files: dict
         db.flush()
         template_ids[t.id] = row.id
 
+    group_ids = _restore_spaces(db, user, parsed.spaces)
+
     bill_rows: dict[int, models.PendingBill] = {}
     for b in parsed.bills:
         row = models.PendingBill(
             user_id=uid, date=b.date, shop=b.shop, amount=b.amount, note=b.note, status=b.status,
             possible_duplicate=b.possible_duplicate, currency=b.currency, origin=b.origin,
-            origin_key=None if b.origin_key and b.origin_key.startswith("e|") else b.origin_key,
+            origin_key=None if b.origin_key and b.origin_key.startswith("e|") else _remap_legacy_key(b.origin_key, group_ids),
         )
         db.add(row)
         bill_rows[b.id] = row
@@ -471,7 +529,7 @@ def restore_backup(db: Session, user: models.User, parsed: BackupIn, files: dict
             row = models.Expense(
                 user_id=uid, date=e.date, category=e.category, subcategory=e.subcategory, description=e.description,
                 amount=e.amount, quantity=e.quantity, unit=e.unit, shop=e.shop, brand=e.brand, currency=e.currency,
-                price_per_unit=e.price_per_unit, group_id=None,
+                price_per_unit=e.price_per_unit, group_id=group_ids.get(e.space),
                 source_bill_id=bill_rows[e.bill].id if e.bill is not None else None,
                 bill_total_only=e.bill_total_only, recurring_template_id=template_ids.get(e.recurring),
                 covers_from=e.covers_from, covers_to=e.covers_to,
@@ -536,8 +594,42 @@ def restore_backup(db: Session, user: models.User, parsed: BackupIn, files: dict
         "expenses": len(parsed.expenses), "bills": len(parsed.bills),
         "receipts": sum(1 for b in parsed.bills if b.receipt is not None),
         "income": len(parsed.income), "budgets": len(parsed.budgets), "recurring": len(parsed.recurring),
-        "savings_goals": len(parsed.savings_goals),
+        "savings_goals": len(parsed.savings_goals), "spaces": len(parsed.spaces),
     }
+
+
+def _restore_spaces(db: Session, user: models.User, spaces: list[SpaceIn]) -> dict[int, int]:
+    """Recreate the spaces with ``user`` as the owner and only member. Returns old id -> new id."""
+    new_ids: dict[int, int] = {}
+    rows: dict[int, models.Group] = {}
+    for g in spaces:
+        row = models.Group(
+            owner_id=user.id, name=g.name, space_type=g.space_type, destination=g.destination,
+            start_date=g.start_date, end_date=g.end_date, budget=g.budget, currency=g.currency, status=g.status,
+        )
+        db.add(row)
+        db.flush()
+        rows[g.id] = row
+        new_ids[g.id] = row.id
+    for g in spaces:
+        if g.parent is not None:
+            rows[g.id].parent_group_id = new_ids[g.parent]
+        db.add(models.GroupMember(
+            group_id=new_ids[g.id], user_id=user.id, role="owner", local_name=g.local_name,
+            local_parent_group_id=new_ids[g.local_parent] if g.local_parent is not None else None,
+        ))
+    db.flush()
+    return new_ids
+
+
+def _remap_legacy_key(key: str | None, group_ids: dict[int, int]) -> str | None:
+    """``s|date|shop|currency|<space id>``: the space id changed with the restore."""
+    if not key or not key.startswith("s|"):
+        return key
+    head, _, last = key.rpartition("|")
+    if last.isdigit() and int(last) in group_ids:
+        return f"{head}|{group_ids[int(last)]}"
+    return key
 
 
 def _parts(rows, size=_CHUNK):

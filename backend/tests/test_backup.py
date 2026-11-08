@@ -205,13 +205,64 @@ def test_backup_and_restore_need_a_login(client):
     assert client.post("/api/backup/restore", files={"file": ("b.zip", b"x", "application/zip")}).status_code in (401, 403)
 
 
-def test_expenses_in_a_space_are_left_out_and_counted(client, make_user):
+def _space(client, h, name="Home", **kw):
+    r = client.post("/api/groups", json={"name": name, "space_type": "household", **kw}, headers=h)
+    assert r.status_code in (200, 201), r.text
+    return r.json()["id"]
+
+
+def test_spaces_come_back_with_your_own_entries_and_you_as_the_only_member(client, make_user):
     uid, h = make_user()
+    gid = _space(client, h, "Home")
     _add(client, h, amount="10", shop="Mine")
-    g = client.post("/api/groups", json={"name": "Home", "space_type": "household"}, headers=h)
-    assert g.status_code in (200, 201), g.text
-    _add(client, h, amount="50", shop="Shared", group_id=g.json()["id"])
-    z = zipfile.ZipFile(io.BytesIO(_download(client, h)))
-    data = json.loads(z.read("backup.json"))
-    assert [e["shop"] for e in data["expenses"]] == ["Mine"]
-    assert data["summary"]["left_out_space_expenses"] == 1
+    _add(client, h, amount="50", shop="Shared", group_id=gid)
+    other_uid, _other = make_user()
+    db = SessionLocal()
+    db.add(models.GroupMember(group_id=gid, user_id=other_uid, role="editor"))
+    db.add(models.Expense(user_id=other_uid, group_id=gid, date=dt.date(2026, 7, 1), category="Food", amount=99, currency="SEK", shop="Theirs", description=""))
+    db.commit()
+    db.close()
+
+    data = json.loads(zipfile.ZipFile(io.BytesIO(_download(client, h))).read("backup.json"))
+    assert [e["shop"] for e in data["expenses"]] == ["Mine", "Shared"]  # only the user's own entries
+    assert data["summary"]["spaces"] == 1 and data["summary"]["others_entries_not_included"] == 1
+
+    uid2, h2 = make_user()
+    r = _restore(client, h2, _download(client, h))
+    assert r.status_code == 200 and r.json()["spaces"] == 1
+    [space] = [g for g in client.get("/api/groups", headers=h2).json() if g["name"] == "Home"]
+    assert space["id"] != gid and space["role"] == "owner" and space["member_count"] == 1
+    mine = [e for e in _expenses(client, h2) if e["shop"] == "Shared"]
+    assert len(mine) == 1 and mine[0]["group_id"] == space["id"]
+    assert len(_all_bills(client, h2)) == 2 and _bills(client, h2)["needs_sync"] is False
+
+
+def test_a_trip_stays_filed_under_its_parent_space(client, make_user):
+    uid, h = make_user()
+    parent = _space(client, h, "Household")
+    db = SessionLocal()
+    trip = models.Group(owner_id=uid, name="Goa", space_type="trip", parent_group_id=parent, destination="Goa", currency="SEK", status="Planned")
+    db.add(trip)
+    db.flush()
+    db.add(models.GroupMember(group_id=trip.id, user_id=uid, role="owner"))
+    db.commit()
+    trip_id = trip.id
+    db.close()
+    uid2, h2 = make_user()
+    assert _restore(client, h2, _download(client, h)).status_code == 200
+    db = SessionLocal()
+    by_name = {g.name: g for g in db.query(models.Group).filter(models.Group.owner_id == uid2)}
+    assert by_name["Goa"].parent_group_id == by_name["Household"].id and by_name["Goa"].destination == "Goa"
+    assert by_name["Goa"].id != trip_id
+    db.close()
+
+
+def test_rejects_a_space_that_is_filed_under_itself_or_missing(client, make_user):
+    _, h = make_user()
+    loop = [{"id": 1, "name": "A", "parent": 2}, {"id": 2, "name": "B", "parent": 1}]
+    assert _restore(client, h, _zip({"backup.json": _backup_json(spaces=loop)})).status_code == 400
+    missing = [{"id": 1, "name": "A", "parent": 9}]
+    assert _restore(client, h, _zip({"backup.json": _backup_json(spaces=missing)})).status_code == 400
+    stray = {"id": 1, "date": "2026-07-01", "category": "Food", "amount": "5", "currency": "SEK", "space": 7}
+    assert _restore(client, h, _zip({"backup.json": _backup_json(expenses=[stray])})).status_code == 400
+    assert client.get("/api/groups", headers=h).json() == []

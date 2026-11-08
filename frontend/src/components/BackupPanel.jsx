@@ -10,6 +10,7 @@ function summary(r) {
   if (r.budgets) parts.push(plural(r.budgets, 'budget'))
   if (r.recurring) parts.push(`${r.recurring} recurring`)
   if (r.savings_goals) parts.push(plural(r.savings_goals, 'savings goal'))
+  if (r.spaces) parts.push(plural(r.spaces, 'space'))
   return parts.join(', ')
 }
 
@@ -51,7 +52,8 @@ export default function BackupPanel({ onError, onRestored = () => window.locatio
       <h2>Full backup</h2>
       <p className="muted-note">
         One file with everything in this account: expenses with the bills they belong to, receipts, budgets,
-        income, recurring items, savings goals and settings. Expense Spaces are not included. Keep it somewhere
+        income, recurring items, savings goals, settings and your Expense Spaces with your own entries in them. Other members and their
+        entries are not included: after a restore you are the only member of each space. Keep it somewhere
         safe; it is the way to move to another installation.
       </p>
       <div className="add-form">
