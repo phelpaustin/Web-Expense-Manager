@@ -3345,3 +3345,8 @@ label.link-btn input[type='file'] {
 }
 .auth-form .password-toggle:hover,
 .password-toggle:hover { filter: none; color: var(--text, inherit); background: rgba(128, 128, 128, 0.12); }
+
+/* Sign-in activity */
+.signin-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.signin-table th, .signin-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(128, 128, 128, 0.2); white-space: nowrap; }
+.signin-failed td { color: var(--danger, #b42318); font-weight: 600; }

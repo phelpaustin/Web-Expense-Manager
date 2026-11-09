@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, Float, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, String, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, String, UniqueConstraint, text
 from sqlalchemy.sql import expression
 
 from app.db.database import Base
@@ -265,6 +265,23 @@ class ImportProfile(Base):
     name = Column(String(80), nullable=False)
     signature = Column(String(64), nullable=False, index=True)
     mapping = Column(JSON, nullable=False)
+
+
+class SignInEvent(Base):
+    """One sign-in to an account, or one failed attempt with its password (see logic/sign_ins.py).
+
+    Only accounts that exist get events; attempts on unknown addresses are not stored (they would let
+    anyone fill the table and say nothing about the owner's account). Pruned to the newest rows.
+    """
+    __tablename__ = "sign_in_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    at = Column(DateTime(timezone=True), nullable=False, index=True)
+    method = Column(String(20), nullable=False)  # "password" | "google"
+    success = Column(Boolean, nullable=False)
+    ip = Column(String(64), nullable=False, default="")
+    user_agent = Column(String(300), nullable=False, default="")
 
 
 class DismissedDuplicate(Base):

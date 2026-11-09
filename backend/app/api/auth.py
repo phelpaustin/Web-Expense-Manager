@@ -2,6 +2,8 @@ import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from starlette.background import BackgroundTask
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from sqlalchemy import func, inspect, text
@@ -13,7 +15,8 @@ from app.core import receipt_storage
 from app.core.config import settings
 from app.core.email import send_email
 from app.core.emails import NormalizedEmail, normalize_email, user_by_email
-from app.core.rate_limit import google_limit, limiter, login_limit, register_limit, sensitive_limit
+from app.core.rate_limit import client_ip, google_limit, limiter, login_limit, register_limit, sensitive_limit
+from app.logic import sign_ins
 from app.core.security import (
     DUMMY_HASH,
     create_access_token,
@@ -182,16 +185,42 @@ def register(request: Request, payload: RegisterIn, background: BackgroundTasks,
 
 @router.post("/auth/login", response_model=TokenOut)
 @limiter.limit(login_limit)
-def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    background: BackgroundTasks,
+    form: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     user = user_by_email(db, form.username)
     if not user:
         verify_password(form.password, DUMMY_HASH)
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not verify_password(form.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
+        # Returned, not raised: an error raised from here would drop the queued history entry.
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Incorrect email or password"},
+            background=BackgroundTask(
+                sign_ins.record_sign_in, user.id, "password", False, client_ip(request), request.headers.get("user-agent", "")
+            ),
+        )
     if not user.email_verified:
         raise HTTPException(status_code=403, detail="Please verify your email before signing in")
+    _remember(request, background, user.id, "password", True)
     return TokenOut(access_token=create_access_token(str(user.id), user.session_version))
+
+
+def _remember(request: Request, background: BackgroundTasks, user_id: int, method: str, success: bool) -> None:
+    """Queue a sign-in history entry; it is written after the response, so it cannot change timing."""
+    background.add_task(
+        sign_ins.record_sign_in, user_id, method, success, client_ip(request), request.headers.get("user-agent", "")
+    )
+
+
+@router.get("/auth/sign-ins")
+def my_sign_ins(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """Recent sign-ins and failed password attempts on this account."""
+    return sign_ins.list_sign_ins(db, user.id)
 
 
 @router.get("/auth/me", response_model=UserOut)
@@ -220,7 +249,7 @@ def _verify_google_credential(credential: str) -> tuple[dict, str]:
 
 @router.post("/auth/google", response_model=TokenOut)
 @limiter.limit(google_limit)
-def google_login(request: Request, payload: GoogleIn, db: Session = Depends(get_db)):
+def google_login(request: Request, payload: GoogleIn, background: BackgroundTasks, db: Session = Depends(get_db)):
     info, email = _verify_google_credential(payload.credential)
 
     user = user_by_email(db, email)
@@ -253,6 +282,7 @@ def google_login(request: Request, payload: GoogleIn, db: Session = Depends(get_
         except Exception:
             db.rollback()
             raise
+    _remember(request, background, user.id, "google", True)
     return TokenOut(access_token=create_access_token(str(user.id), user.session_version))
 
 
@@ -490,6 +520,7 @@ def delete_account(
         for model in (
             models.SavingsGoal,
             models.DismissedDuplicate,
+            models.SignInEvent,
             models.Budget,
             models.Income,
             models.RecurringTemplate,

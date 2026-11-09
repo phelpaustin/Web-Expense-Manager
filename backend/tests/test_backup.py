@@ -5,12 +5,22 @@ import json
 import zipfile
 from decimal import Decimal
 
+import pytest
+
+from app.core.rate_limit import limiter
 from app.db import models
 from app.db.database import SessionLocal
 from tests.test_bill_sync import _add, _all_bills, _bill_of, _insert, _legacy_bill, _sync
 from tests.test_bills_workflow import PDF, TODAY, _bill, _bills, _expenses, _items, _spent
 
 D = Decimal
+
+
+@pytest.fixture(autouse=True)
+def _fresh_limits():
+    limiter.reset()  # many restores from one "visitor"
+    yield
+    limiter.reset()
 
 
 def _download(client, h):

@@ -1,7 +1,7 @@
 """Download a full backup of the account and restore one into an empty account."""
 import datetime as dt
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from app.api import bill_sync
 from app.api.bills import _store_receipt
 from app.api.deps import get_current_user
 from app.core.file_upload import read_upload_limited_sync
+from app.core.rate_limit import limiter
 from app.db import models
 from app.db.database import get_db
 from app.logic import backup
@@ -17,7 +18,8 @@ router = APIRouter()
 
 
 @router.get("/backup")
-def download_backup(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+@limiter.limit("30/hour")
+def download_backup(request: Request, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     """Everything this account owns in one zip: expenses with the bills they belong to, receipts,
     budgets, income, recurring items, savings goals, name rules and settings. Expense Spaces are not
     included."""
@@ -34,7 +36,9 @@ def download_backup(db: Session = Depends(get_db), user: models.User = Depends(g
 
 
 @router.post("/backup/restore")
+@limiter.limit("10/hour")
 def restore(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),

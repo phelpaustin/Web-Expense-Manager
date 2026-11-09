@@ -1,4 +1,5 @@
 import PasswordInput from '../components/PasswordInput.jsx'
+import SignInActivity from '../components/SignInActivity.jsx'
 import BackupPanel from '../components/BackupPanel.jsx'
 import CurrencySelect from '../components/CurrencySelect.jsx'
 import Switch from '../components/Switch.jsx'
@@ -186,6 +187,8 @@ export default function SettingsPage({
           </form>
         </section>
       )}
+
+      {tab === 'account' && <SignInActivity onError={onError} />}
 
       {tab === 'account' && (
         <section className="panel danger-zone">

@@ -778,6 +778,11 @@ export async function exportExpenses(format) {
   return downloadFile(`/api/expenses/export?format=${format}`, format === 'xlsx' ? 'expenses.xlsx' : 'expenses.csv', 'Export failed')
 }
 
+// Recent sign-ins and failed password attempts on this account.
+export function fetchSignIns() {
+  return request('/api/auth/sign-ins')
+}
+
 // A full backup of the account (one zip: expenses with their bills, receipts, budgets, income, ...).
 export function downloadBackup() {
   const day = new Date().toISOString().slice(0, 10)

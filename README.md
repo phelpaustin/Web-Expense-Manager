@@ -235,6 +235,10 @@ Export CSV or Excel under **Settings → App data**. The yearly/monthly report h
 
 Every password field (log in, choose or reset a password, change password, delete account) has a Show/Hide button; the password is hidden by default.
 
+### Sign-in activity
+
+Settings → Account → **Sign-in activity** lists the last sign-ins and failed password attempts on the account (when, password or Google, device, IP address) and warns about failed attempts since the last successful sign-in. History is kept for 180 days (at most 500 rows per account) and is removed with the account. Only accounts that exist get events; attempts on unknown addresses are not stored, and recording happens after the response so it cannot change login timing.
+
 ### Full backup
 
 **Settings → App data → Download full backup** saves one zip with everything the account owns: expenses together with the bills they belong to (a bill stays a container, so itemised bills keep their items and nothing is regrouped by date and shop), receipts, budgets, income, recurring items, savings goals, name rules, import profiles and settings. Your Expense Spaces come with it, together with your own entries in them: a restore recreates each space (name, type, trip details, filing under a parent space) with you as its only member, so other members have to be invited again and their own entries stay with them. **Restore a backup** loads such a file into an account that has no expenses, bills, budgets, income, recurring items or savings goals yet (otherwise it is refused, so histories are never mixed or overwritten): register a new account, then restore there. The file is checked before anything is written, and a file that fails any check changes nothing. This is the way to move to another installation (for example the Docker setup in `deploy/onprem`) when you do not want to copy the database.
