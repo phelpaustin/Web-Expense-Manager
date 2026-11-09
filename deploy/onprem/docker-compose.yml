@@ -8,10 +8,19 @@
 
 name: expense-manager
 
+# Container logs (including the website's access log) are rotated so they cannot fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: expense
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -29,10 +38,14 @@ services:
       context: ../..
       dockerfile: deploy/onprem/backend.Dockerfile
     restart: unless-stopped
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy
     env_file: .env
+    # The backend needs no special privileges.
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     environment:
       DATABASE_URL: postgresql://expense:${POSTGRES_PASSWORD}@db:5432/expense
     healthcheck:
@@ -49,15 +62,18 @@ services:
       args:
         VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: unless-stopped
+    logging: *logging
     depends_on:
       - backend
     ports:
-      - "${WEB_PORT:-8080}:80"
+      # WEB_BIND=127.0.0.1 lets only this machine (and a tunnel running on it) reach the site.
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8080}:80"
 
   # Replaces .github/workflows/alert-digest.yml: calls the digest endpoint every day at 07:00 UTC.
   digest:
     image: curlimages/curl:8.10.1
     restart: unless-stopped
+    logging: *logging
     depends_on:
       backend:
         condition: service_healthy
@@ -81,6 +97,7 @@ services:
   backup:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy

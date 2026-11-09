@@ -83,6 +83,34 @@ Set `CRON_SECRET` in `.env` (and working email settings). The `digest` container
 - **Outside the home network:** do not forward port 8080 to the internet. Use a VPN such as Tailscale (use the Tailscale address or name in `FRONTEND_URL`/`CORS_ORIGINS`), or a Cloudflare Tunnel pointing at `http://localhost:8080`, which also gives you HTTPS. With a tunnel, set `TRUSTED_PROXY_COUNT=2`.
 - **HTTPS:** plain HTTP is fine inside a home network or a VPN. Anything reachable from the internet needs HTTPS (a tunnel provides it).
 
+## Keeping it safe
+
+- **Put a login in front of the site** when it is reachable from the internet (Cloudflare Access with only your email allowed). The app has a login of its own, but it lets anyone register; Access keeps strangers from even seeing it.
+- **Let only the tunnel reach it.** With a Cloudflare Tunnel or Tailscale running on the same machine, set `WEB_BIND=127.0.0.1` in `.env` and run `docker compose up -d`. Other devices on your Wi-Fi can then no longer bypass the login by opening `http://<mac-mini>:8080`.
+- **Protect `.env`:** `chmod 600 deploy/onprem/.env`. It holds the database password, `SECRET_KEY` and email password. Never commit it or paste it anywhere. Changing `SECRET_KEY` signs everybody out.
+- **Cloudflare tunnel token:** it is a password for your tunnel. If it ever leaks, open the tunnel in Cloudflare, roll the token, and run the `cloudflared service install` command again with the new one.
+- **Disk encryption:** turn on FileVault (System Settings → Privacy & Security) so a stolen Mac mini reveals nothing. FileVault asks for a password after a power cut, so the site stays down until you unlock it; decide which matters more to you.
+- **Backups:** copy `deploy/onprem/backups` to another machine or cloud storage, and keep them encrypted if they leave your home (they contain every expense). Test a restore once.
+- **Updates:** every few weeks run `git pull`, then `docker compose build --pull` and `docker compose up -d`. This also picks up new versions of the PostgreSQL, Python and nginx base images. Keep macOS updated.
+- **Strong passwords:** a long, unique password for the app (12 characters or more is enforced) and for your Cloudflare account, with two-step verification turned on for Cloudflare.
+- The database is not published on any port: only the other containers can reach it.
+
+## Who is signing in and visiting
+
+Four places, from most to least specific:
+
+1. **In the app:** Settings → Account → *Sign-in activity* lists recent sign-ins and failed password attempts on your account (time, device, address), and warns when there were failures since your last sign-in. Kept 180 days.
+2. **Cloudflare Access log:** every attempt to get through the Access login, with the email, address, country and allowed or denied (Zero Trust dashboard → Logs → Access). This is where strangers show up.
+3. **Cloudflare analytics:** the domain's *Analytics* page shows requests, visitors, countries and blocked threats over time; *Security* shows what Cloudflare blocked.
+4. **The website's own access log**, one line per request with the real visitor address and country, the path without the query string, the status code and the browser:
+   ```bash
+   docker compose logs --since 24h web                     # everything in the last day
+   docker compose logs -f web                              # follow live
+   docker compose logs --no-log-prefix --since 24h web | awk '{print $2}' | sort | uniq -c | sort -rn | head   # busiest addresses
+   docker compose logs --no-log-prefix --since 24h web | grep '/api/auth/login" 401'                        # failed logins
+   ```
+   Logs are rotated (about 50 MB per service), so they go back a few days to weeks.
+
 ## Useful commands
 
 ```bash
