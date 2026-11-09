@@ -33,6 +33,13 @@ describe('SignInActivity', () => {
     expect(await screen.findByText('Nothing recorded yet.')).toBeTruthy()
   })
 
+  it.each([[{}], [[]], [null], [{ events: 'nope' }]])('shows nothing for an unexpected answer %j', async (answer) => {
+    client.fetchSignIns.mockResolvedValue(answer)
+    const { container } = render(<SignInActivity />)
+    await waitFor(() => expect(client.fetchSignIns).toHaveBeenCalled())
+    expect(container.innerHTML).toBe('')
+  })
+
   it('reports a failed load', async () => {
     client.fetchSignIns.mockRejectedValue(new Error('boom'))
     const onError = vi.fn()

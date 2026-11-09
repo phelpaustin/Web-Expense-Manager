@@ -25,8 +25,9 @@ export default function SignInActivity({ onError }) {
     }
   }, [])
 
-  if (!data) return null
-  const failures = data.failed_since_last_success
+  // Nothing to show until a well-formed answer arrives (an older server, a proxy error page, a fake in a test).
+  if (!data || !Array.isArray(data.events)) return null
+  const failures = Number(data.failed_since_last_success) || 0
 
   return (
     <section className="panel">
