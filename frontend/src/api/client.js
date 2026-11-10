@@ -422,6 +422,27 @@ export function deleteIncome(id) {
   return request(`/api/income/${id}`, { method: 'DELETE' })
 }
 
+// Repeating charges found in the expenses that are not recurring payments yet.
+export function fetchSubscriptions() {
+  return request('/api/subscriptions')
+}
+
+export function ignoreSubscription(name) {
+  return request('/api/subscriptions/ignore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function unignoreSubscription(name) {
+  return request('/api/subscriptions/unignore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
 export function fetchRecurring() {
   return request('/api/recurring')
 }

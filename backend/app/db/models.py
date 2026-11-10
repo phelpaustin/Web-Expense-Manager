@@ -267,6 +267,17 @@ class ImportProfile(Base):
     mapping = Column(JSON, nullable=False)
 
 
+class IgnoredSubscription(Base):
+    """A name the user said is not a subscription, so the subscription finder stops listing it."""
+    __tablename__ = "ignored_subscriptions"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_ignored_subscription_user_key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    key = Column(String(200), nullable=False)   # name_key of the shop (or description)
+    name = Column(String(200), nullable=False)  # as shown, to offer it back
+
+
 class SignInEvent(Base):
     """One sign-in to an account, or one failed attempt with its password (see logic/sign_ins.py).
 

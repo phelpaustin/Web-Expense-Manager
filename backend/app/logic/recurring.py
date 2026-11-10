@@ -48,6 +48,11 @@ def _date_at_period(anchor: date, frequency: str, period: int) -> date:
     return _add_months(anchor, amount * period)
 
 
+def following_date(last: date, frequency: str) -> date:
+    """The date one period after ``last`` (month-end aware for monthly, quarterly and yearly)."""
+    return _date_at_period(last, frequency, 1)
+
+
 def _first_period_after(anchor: date, last_applied: date, frequency: str) -> int:
     unit, amount = _frequency_parts(frequency)
     if unit == "days":

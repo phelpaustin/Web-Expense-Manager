@@ -187,6 +187,10 @@ def build_backup(db: Session, user: models.User) -> tuple[bytes, dict]:
             {"name": p.name, "signature": p.signature, "mapping": p.mapping}
             for p in db.query(models.ImportProfile).filter(models.ImportProfile.user_id == uid)
         ],
+        "ignored_subscriptions": [
+            {"key": x.key, "name": x.name}
+            for x in db.query(models.IgnoredSubscription).filter(models.IgnoredSubscription.user_id == uid)
+        ],
         "dismissed_duplicates": [
             {"key": x.key, "day": _d(x.day), "count": x.count}
             for x in db.query(models.DismissedDuplicate).filter(models.DismissedDuplicate.user_id == uid)
@@ -372,6 +376,11 @@ class DismissedIn(_Row):
     count: int = Field(ge=0, le=1_000_000)
 
 
+class IgnoredSubscriptionIn(_Row):
+    key: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
+
+
 class BackupIn(_Row):
     options: OptionsIn | None = None
     budgets: list[BudgetIn] = Field(default_factory=list)
@@ -384,6 +393,7 @@ class BackupIn(_Row):
     aliases: list[AliasIn] = Field(default_factory=list)
     import_profiles: list[ProfileIn] = Field(default_factory=list)
     dismissed_duplicates: list[DismissedIn] = Field(default_factory=list)
+    ignored_subscriptions: list[IgnoredSubscriptionIn] = Field(default_factory=list)
 
 
 def read_backup(raw: bytes) -> tuple[BackupIn, dict[str, bytes]]:
@@ -582,6 +592,12 @@ def restore_backup(db: Session, user: models.User, parsed: BackupIn, files: dict
             continue
         seen_profile.add(p.name)
         db.add(models.ImportProfile(user_id=uid, name=p.name, signature=p.signature, mapping=p.mapping))
+    seen_ignored = set()
+    for x in parsed.ignored_subscriptions:
+        if x.key in seen_ignored:
+            continue
+        seen_ignored.add(x.key)
+        db.add(models.IgnoredSubscription(user_id=uid, key=x.key, name=x.name))
     seen_dismissed = set()
     for x in parsed.dismissed_duplicates:
         if x.key in seen_dismissed:

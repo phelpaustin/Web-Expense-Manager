@@ -6,7 +6,7 @@ import { dueText, headline, perText, priceChangeText } from '../recurringCosts.j
 
 // "What do my subscriptions cost?": every recurring payment as a cost per month and per year, when
 // it is next due, and which ones have gone up in price.
-export default function RecurringCostsPanel({ refreshKey }) {
+export default function RecurringCostsPanel({ refreshKey, reloadKey = 0 }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const latest = useRef(0)
@@ -22,7 +22,7 @@ export default function RecurringCostsPanel({ refreshKey }) {
       .catch((err) => {
         if (request === latest.current) setError(err.message)
       })
-  }, [refreshKey])
+  }, [refreshKey, reloadKey])
 
   if (error && !data) {
     return (

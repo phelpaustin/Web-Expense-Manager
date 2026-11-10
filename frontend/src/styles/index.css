@@ -3350,3 +3350,11 @@ label.link-btn input[type='file'] {
 .signin-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .signin-table th, .signin-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid rgba(128, 128, 128, 0.2); white-space: nowrap; }
 .signin-failed td { color: var(--danger, #b42318); font-weight: 600; }
+
+/* Subscription finder */
+.subscriptions details { margin-top: 0.75rem; }
+.subscriptions summary { cursor: pointer; font-weight: 600; }
+.sub-list { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+.sub-list li { margin: 0.35rem 0; }
+.sub-actions { white-space: nowrap; }
+@media (max-width: 640px) { .sub-actions { white-space: normal; } }

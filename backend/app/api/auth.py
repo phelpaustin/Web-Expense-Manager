@@ -521,6 +521,7 @@ def delete_account(
             models.SavingsGoal,
             models.DismissedDuplicate,
             models.SignInEvent,
+            models.IgnoredSubscription,
             models.Budget,
             models.Income,
             models.RecurringTemplate,

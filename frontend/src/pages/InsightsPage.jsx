@@ -7,6 +7,7 @@ import CategoryChangePanel from '../components/CategoryChangePanel.jsx'
 import PeriodComparePanel from '../components/PeriodComparePanel.jsx'
 import MoversPanel from '../components/MoversPanel.jsx'
 import RecurringCostsPanel from '../components/RecurringCostsPanel.jsx'
+import SubscriptionsPanel from '../components/SubscriptionsPanel.jsx'
 import UnusualPanel from '../components/UnusualPanel.jsx'
 import PatternsPanel from '../components/PatternsPanel.jsx'
 import ReportPanel from '../components/ReportPanel.jsx'
@@ -44,6 +45,7 @@ export default function InsightsPage({
 }) {
   // The month the Overview panels talk about; null lets the server pick the last finished month.
   const [month, setMonth] = useState(null)
+  const [recurringTick, setRecurringTick] = useState(0) // bumped when a found subscription becomes a recurring payment
   const [detailMonth, setDetailMonth] = useState(null)
   const [tab, setTab] = useState(insightTabFrom(initialTab))
   // A sidebar link changes the address, which changes initialTab: follow it without remounting the page.
@@ -137,7 +139,9 @@ export default function InsightsPage({
             </section>
           )}
 
-          <RecurringCostsPanel refreshKey={trends} />
+          <RecurringCostsPanel refreshKey={trends} reloadKey={recurringTick} />
+
+          <SubscriptionsPanel refreshKey={trends} onTracked={() => setRecurringTick((n) => n + 1)} />
 
           <SpendingMixPanel
             key={`mix|${scopeKey}`}

@@ -31,6 +31,16 @@ class RecurringCreate(BaseModel):
     auto_post: bool = False
     # Currency of `amount` (and of the expenses it posts); None = the user's base currency.
     currency: str | None = None
+    # A payment already made on this day (found in the expenses): the schedule starts after it, so
+    # nothing is posted twice. None = never paid, due now.
+    last_applied: datetime.date | None = None
+
+    @field_validator("last_applied")
+    @classmethod
+    def _not_in_the_future(cls, v: datetime.date | None) -> datetime.date | None:
+        if v is not None and v > datetime.date.today():
+            raise ValueError("last_applied cannot be in the future")
+        return v
 
     @field_validator("frequency")
     @classmethod
@@ -170,6 +180,8 @@ def create_recurring(
 ):
     data = payload.model_dump()
     data["currency"] = data["currency"] or default_currency_for(db, user.id)
+    if data["last_applied"] is not None:
+        data["schedule_anchor"] = data["last_applied"]
     t = models.RecurringTemplate(user_id=user.id, **data)
     db.add(t)
     db.commit()
