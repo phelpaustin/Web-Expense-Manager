@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 
 from slowapi import Limiter
@@ -7,6 +8,38 @@ from app.core.config import settings
 
 log = logging.getLogger("rate_limit")
 _warned_unconfigured_proxy = False
+_warned_docker_address = False
+
+# Address ranges Docker uses internally: its bridge networks (172.16.0.0/12) and the VM that Docker
+# Desktop for Mac runs in (192.168.65.0/24).
+_DOCKER_NETWORKS = (ipaddress.ip_network("172.16.0.0/12"), ipaddress.ip_network("192.168.65.0/24"))
+
+
+def _note_docker_address(ip: str) -> None:
+    """Say once, in the log, when the visitor's address looks like one of Docker's own.
+
+    Docker on a Mac (Docker Desktop, some Colima setups) replaces every device's address with an
+    internal one before the request reaches the website container. Then all visitors share one rate
+    limit and the sign-in history shows the same address for everyone. Code cannot undo that, so the
+    warning points at the README. It is only a hint: a home network that really uses these ranges
+    triggers it too, and can ignore it.
+    """
+    global _warned_docker_address
+    if _warned_docker_address:
+        return
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return
+    if any(address in network for network in _DOCKER_NETWORKS):
+        _warned_docker_address = True
+        log.warning(
+            "A visitor address (%s) looks like one of Docker's internal addresses. If your devices are not "
+            "on that network, Docker is hiding their real addresses: all visitors then share one rate limit "
+            "and Sign-in activity shows the same address for everyone. See deploy/onprem/README.md, "
+            "'Seeing real visitor addresses'.",
+            ip,
+        )
 
 
 def client_ip(request: Request) -> str:
@@ -34,7 +67,9 @@ def client_ip(request: Request) -> str:
             )
         return peer
     full = chain + [peer]  # the last entry is the nearest proxy (the connection itself)
-    return full[-(count + 1)] if len(full) > count else full[0]
+    visitor = full[-(count + 1)] if len(full) > count else full[0]
+    _note_docker_address(visitor)
+    return visitor
 
 
 # Rate limiting keyed by client IP. Applied per-endpoint via @limiter.limit(...).

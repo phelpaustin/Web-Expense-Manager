@@ -117,3 +117,43 @@ def test_development_mode_needs_the_flag_and_sqlite(monkeypatch, app_env, databa
     monkeypatch.setattr(settings, "app_env", app_env)
     monkeypatch.setattr(settings, "database_url", database_url)
     assert settings.development_mode is expected
+
+
+# --- Docker on a Mac hides visitor addresses: say so once ----------------------------------------
+
+def _docker_warnings(caplog):
+    return [r for r in caplog.records if r.name == "rate_limit" and "Docker" in r.getMessage()]
+
+
+@pytest.mark.parametrize("visitor", ["192.168.65.1", "172.17.0.1", "172.18.0.1"])
+def test_docker_internal_visitor_address_logs_one_warning(monkeypatch, caplog, visitor):
+    import logging
+
+    monkeypatch.setattr(settings, "trusted_proxy_count", 1)
+    monkeypatch.setattr(rate_limit, "_warned_docker_address", False)
+    with caplog.at_level(logging.WARNING, logger="rate_limit"):
+        assert rate_limit.client_ip(_request("172.18.0.4", visitor)) == visitor  # the address is still used
+        rate_limit.client_ip(_request("172.18.0.4", visitor))  # a second request does not repeat it
+    assert len(_docker_warnings(caplog)) == 1
+
+
+@pytest.mark.parametrize("visitor", ["192.168.1.23", "10.0.0.7", "203.0.113.7"])
+def test_real_visitor_addresses_do_not_warn(monkeypatch, caplog, visitor):
+    import logging
+
+    monkeypatch.setattr(settings, "trusted_proxy_count", 1)
+    monkeypatch.setattr(rate_limit, "_warned_docker_address", False)
+    with caplog.at_level(logging.WARNING, logger="rate_limit"):
+        assert rate_limit.client_ip(_request("172.18.0.4", visitor)) == visitor
+    assert _docker_warnings(caplog) == []
+
+
+def test_no_docker_warning_when_no_proxy_is_trusted(monkeypatch, caplog):
+    import logging
+
+    # With TRUSTED_PROXY_COUNT=0 the "visitor" is the connection itself; that case has its own warning.
+    monkeypatch.setattr(settings, "trusted_proxy_count", 0)
+    monkeypatch.setattr(rate_limit, "_warned_docker_address", False)
+    with caplog.at_level(logging.WARNING, logger="rate_limit"):
+        assert rate_limit.client_ip(_request("172.18.0.4")) == "172.18.0.4"
+    assert _docker_warnings(caplog) == []

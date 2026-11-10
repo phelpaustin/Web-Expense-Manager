@@ -83,6 +83,21 @@ Set `CRON_SECRET` in `.env` (and working email settings). The `digest` container
 - **Outside the home network:** do not forward port 8080 to the internet. Use a VPN such as Tailscale (use the Tailscale address or name in `FRONTEND_URL`/`CORS_ORIGINS`), or a Cloudflare Tunnel pointing at `http://localhost:8080`, which also gives you HTTPS. With a tunnel, set `TRUSTED_PROXY_COUNT=2`.
 - **HTTPS:** plain HTTP is fine inside a home network or a VPN. Anything reachable from the internet needs HTTPS (a tunnel provides it).
 
+## Seeing real visitor addresses (Docker on a Mac)
+
+Docker on macOS (Docker Desktop, and some Colima setups) can replace the address of every device on your network with its own internal one before a request reaches the website container ([a long-standing Docker limitation](https://github.com/docker/roadmap/issues/157)). The app then treats all visitors as one: they share one sign-in rate limit (5 a minute, 60 an hour), and Settings → Account → *Sign-in activity* shows the same address for every sign-in, something like `192.168.65.1` or `172.x.x.1`. The backend logs a warning mentioning Docker the first time it sees such an address (`docker compose logs backend`).
+
+**Check:** open the site from a second device (a phone on your Wi-Fi), then run `docker compose logs --tail 5 web`. The second field of each line is the visitor. If it is the phone's address (for example `192.168.1.23`), there is nothing to do. If it is an internal address, pick one:
+
+- **Through a Cloudflare Tunnel** the real address arrives in a header, so it is already right: keep `TRUSTED_PROXY_COUNT=2` and check the same way.
+- **Straight over the LAN:** either accept it and make the shared sign-in limit roomier by adding `RATE_LIMIT_LOGIN=20/minute;300/hour` to `.env` (then `docker compose up -d`), or put a small proxy on the Mac itself, outside Docker, where real addresses are visible. For example with Caddy (`brew install caddy`), a `Caddyfile` containing
+  ```
+  :8081 {
+      reverse_proxy 127.0.0.1:8080
+  }
+  ```
+  and `caddy run`, together with `WEB_BIND=127.0.0.1`, `TRUSTED_PROXY_COUNT=2`, and `FRONTEND_URL` / `CORS_ORIGINS` set to `http://<mac address>:8081`. Then check again.
+
 ## Keeping it safe
 
 - **Put a login in front of the site** when it is reachable from the internet (Cloudflare Access with only your email allowed). The app has a login of its own, but it lets anyone register; Access keeps strangers from even seeing it.
