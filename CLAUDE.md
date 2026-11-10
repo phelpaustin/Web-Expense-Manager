@@ -8,7 +8,7 @@ Deploys: backend on Render (`render.yaml`), frontend on Vercel, Postgres on Supa
 - One backend test file: `python -m pytest -q tests/test_bill_sync.py`
 - Frontend tests: `cd frontend && npm test` (vitest + jsdom)
 - Frontend build: `cd frontend && npm run build`
-- Run locally: `cd backend && uvicorn main:app --reload` (port 8000); `cd frontend && npm run dev` (5173, proxies /api)
+- Run locally: `cd backend && uvicorn main:app --reload` (port 8000; needs `backend/.env` copied from `.env.example`, which sets `APP_ENV=development`); `cd frontend && npm run dev` (5173, proxies /api)
 
 ## Where things are
 - `backend/` – FastAPI app: `main.py`, `app/api` (routers), `app/logic` (pure business rules), `app/core`, `app/db`, `alembic/`, `tests/`. Details, map and backend conventions: `backend/CLAUDE.md`.

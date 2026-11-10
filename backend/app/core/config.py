@@ -1,7 +1,8 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The insecure fallback used for local dev. Production must override SECRET_KEY.
+# The insecure fallback, usable only in development mode (APP_ENV=development with SQLite).
+# Everywhere else the app refuses to start with it.
 DEFAULT_SECRET = "dev-secret-change-me-0123456789abcdef"
 
 MIN_SECRET_LENGTH = 32
@@ -72,10 +73,10 @@ class Settings(BaseSettings):
     # Google Sign-In (OAuth). Set to your Google OAuth client ID to enable it.
     google_client_id: str = ""
 
-    # Demo account. Locally it defaults on (see seed.py). In production it is
-    # only created when DEMO_PASSWORD is set — keep that value private.
-    demo_email: str = "demo@example.com"
-    demo_password: str = ""
+    # "production" (the default) always requires a strong SECRET_KEY. "development" lets the built-in
+    # dev secret be used, but ONLY with a SQLite DATABASE_URL (see development_mode). Never set it on
+    # a server: anyone who knows the dev secret can forge a login token.
+    app_env: str = "production"
 
     # Public URL of the frontend, used to build password-reset links.
     frontend_url: str = "http://localhost:5173"
@@ -107,8 +108,10 @@ class Settings(BaseSettings):
         return self.database_url.startswith("sqlite")
 
     @property
-    def is_production(self) -> bool:
-        return not self.is_sqlite
+    def development_mode(self) -> bool:
+        """True only when APP_ENV=development AND the database is SQLite. A Postgres deployment that
+        copies the flag by mistake still gets the strong-secret check."""
+        return self.app_env.strip().lower() == "development" and self.is_sqlite
 
 
 settings = Settings()

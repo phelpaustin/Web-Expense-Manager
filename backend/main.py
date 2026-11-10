@@ -13,7 +13,6 @@ from app.core.rate_limit import limiter
 from app.api import bill_sync, expenses, analytics, budgets, auth, income, recurring, bills, options, metrics, alerts, trips, groups, aliases, dashboard, statement_import, reports, savings_goals, backup, subscriptions
 from app.db.database import SessionLocal
 from app.db.migrate import run_migrations
-from app.db.seed import init_db
 
 
 def _backfill_bills() -> None:
@@ -37,16 +36,21 @@ def start_backfill() -> threading.Thread:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Never run in production with a weak, default or placeholder secret.
-    reason = insecure_secret_reason(settings.secret_key) if settings.is_production else None
-    if reason:
-        raise RuntimeError(
-            f"Refusing to start: SECRET_KEY is not safe for production ({reason}). "
-            "Set a strong SECRET_KEY (e.g. `openssl rand -hex 32`)."
+    # Never run with a weak, default or placeholder secret, whatever the database. The only
+    # exception is explicit development mode (APP_ENV=development with SQLite).
+    if settings.development_mode:
+        logging.getLogger(__name__).warning(
+            "APP_ENV=development: the built-in dev SECRET_KEY is accepted. Never expose this instance to a network."
         )
-    # Apply schema migrations, then seed sample data on an empty DB.
+    else:
+        reason = insecure_secret_reason(settings.secret_key)
+        if reason:
+            raise RuntimeError(
+                f"Refusing to start: SECRET_KEY is not safe for production ({reason}). "
+                "Set a strong SECRET_KEY (e.g. `openssl rand -hex 32`). For local development only, "
+                "set APP_ENV=development together with a SQLite DATABASE_URL."
+            )
     run_migrations()
-    init_db()
     start_backfill()
     yield
 

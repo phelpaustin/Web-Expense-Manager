@@ -63,3 +63,57 @@ def test_short_chain_falls_back_instead_of_failing(monkeypatch):
     monkeypatch.setattr(settings, "trusted_proxy_count", 3)
     assert rate_limit.client_ip(_request("10.0.0.1")) == "10.0.0.1"
     assert rate_limit.client_ip(_request("10.0.0.1", "203.0.113.7")) == "203.0.113.7"
+
+
+# --- the secret check no longer depends on the database type -------------------------------------
+
+def _start(monkeypatch, *, database_url, secret, app_env="production"):
+    import asyncio
+    import main
+
+    monkeypatch.setattr(settings, "database_url", database_url)
+    monkeypatch.setattr(settings, "secret_key", secret)
+    monkeypatch.setattr(settings, "app_env", app_env)
+    monkeypatch.setattr(main, "run_migrations", lambda: None)
+    monkeypatch.setattr(main, "start_backfill", lambda: None)
+
+    async def start():
+        async with main.lifespan(main.app):
+            pass
+
+    asyncio.run(start())
+
+
+@pytest.mark.parametrize("secret", [DEFAULT_SECRET, "change-me-generate-with-openssl-rand-hex-32", "short"])
+def test_sqlite_refuses_a_weak_secret_by_default(monkeypatch, secret):
+    with pytest.raises(RuntimeError, match="not safe for production"):
+        _start(monkeypatch, database_url="sqlite:///./x.db", secret=secret)
+
+
+def test_sqlite_accepts_a_strong_secret(monkeypatch):
+    _start(monkeypatch, database_url="sqlite:///./x.db", secret="a" * 40)
+
+
+def test_development_mode_allows_the_dev_secret_on_sqlite(monkeypatch):
+    _start(monkeypatch, database_url="sqlite:///./x.db", secret=DEFAULT_SECRET, app_env="development")
+
+
+def test_development_flag_is_ignored_on_postgres(monkeypatch):
+    with pytest.raises(RuntimeError, match="not safe for production"):
+        _start(monkeypatch, database_url="postgresql://u:p@localhost/db", secret=DEFAULT_SECRET, app_env="development")
+
+
+@pytest.mark.parametrize(
+    "app_env, database_url, expected",
+    [
+        ("production", "sqlite:///./x.db", False),
+        ("", "sqlite:///./x.db", False),
+        ("development", "sqlite:///./x.db", True),
+        (" Development ", "sqlite:///./x.db", True),
+        ("development", "postgresql://u:p@h/db", False),
+    ],
+)
+def test_development_mode_needs_the_flag_and_sqlite(monkeypatch, app_env, database_url, expected):
+    monkeypatch.setattr(settings, "app_env", app_env)
+    monkeypatch.setattr(settings, "database_url", database_url)
+    assert settings.development_mode is expected

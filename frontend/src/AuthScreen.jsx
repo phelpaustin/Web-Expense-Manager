@@ -194,10 +194,6 @@ export default function AuthScreen({ onAuthed, sessionNotice = null }) {
             {mode === 'register' ? 'Sign in' : mode === 'forgot' ? 'Back to sign in' : 'Sign up'}
           </button>
         </p>
-
-        {import.meta.env.DEV && mode === 'login' && (
-          <p className="auth-demo">Demo account: demo@example.com / demo1234</p>
-        )}
       </div>
     </div>
   )

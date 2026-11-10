@@ -44,12 +44,9 @@ cp .env.example .env
 uvicorn main:app --reload --port 8000
 ```
 
-SQLite is the default database. On startup, Alembic applies migrations. A fresh local database is seeded with sample expenses and the demo account:
+SQLite is the default database. On startup, Alembic applies migrations. The database starts empty: create your account on the sign-in screen. Without an email service configured, the verification link is printed in the backend console.
 
-- Email: `demo@example.com`
-- Password: `demo1234`
-
-The demo account is for local development. Production databases are not seeded with it unless `DEMO_PASSWORD` is explicitly configured.
+`.env.example` sets `APP_ENV=development`, which lets its placeholder `SECRET_KEY` work, and only with SQLite. Remove that line on any server and set a real key (see Deployment). There is no demo account and no sample data.
 
 The API health check is at <http://localhost:8000/api/health>; interactive API documentation is at <http://localhost:8000/docs>.
 
@@ -150,12 +147,13 @@ Configure these production values:
 | `RESEND_API_KEY`, `EMAIL_FROM` | Render | Email delivery through Resend; SMTP settings can be used instead |
 | `VITE_API_URL` | Vercel | Backend origin, such as `https://expense-backend.onrender.com` |
 
-Do not use the development `SECRET_KEY` value from `.env.example` in production. Generate a private key with `openssl rand -hex 32` if setting it manually. Set `FRONTEND_URL` without a trailing slash. Password sign-up requires working email delivery in production.
+Do not use the development `SECRET_KEY` value from `.env.example` in production, and do not set `APP_ENV=development` on a server: without it the app refuses to start with a placeholder or short `SECRET_KEY`, whatever the database. Generate a private key with `openssl rand -hex 32` if setting it manually. Set `FRONTEND_URL` without a trailing slash. Password sign-up requires working email delivery in production.
+
+Databases created by older versions may still contain the demo account `demo@example.com` (SQLite databases always did; others only if `DEMO_PASSWORD` was set). Remove it once with `python -m app.scripts.remove_demo_account` (a dry run that shows what would go), then `python -m app.scripts.remove_demo_account --delete`. On the Docker setup run it as `docker compose exec backend python -m app.scripts.remove_demo_account`.
 
 Optional settings:
 
 - `GOOGLE_CLIENT_ID` on Render and `VITE_GOOGLE_CLIENT_ID` on Vercel enable Google sign-in.
-- `DEMO_PASSWORD` creates a production demo account; leave it unset for normal deployments.
 - `CRON_SECRET` enables the protected `POST /api/alerts/send-digest` endpoint.
 
 To schedule the alert digest using the included GitHub Actions workflow, add repository secrets `ALERT_DIGEST_URL` (the full endpoint URL) and `CRON_SECRET` (matching the Render environment value). The workflow runs daily at 07:00 UTC and can also be started manually. The workflow waits for the sleeping free Render service and retries for a few minutes. GitHub stops scheduled workflows after 60 days with no commits to the repository; if digests stop, re-enable it under the Actions tab.

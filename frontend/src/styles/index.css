@@ -1744,12 +1744,6 @@ button {
   text-decoration: underline;
 }
 
-.auth-demo {
-  margin-top: 1.1rem;
-  color: var(--faint);
-  font-size: 0.78rem;
-}
-
 .auth-divider {
   display: flex;
   align-items: center;
