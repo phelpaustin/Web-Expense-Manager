@@ -125,6 +125,7 @@ Four places, from most to least specific:
    docker compose logs --no-log-prefix --since 24h web | grep '/api/auth/login" 401'                        # failed logins
    ```
    Logs are rotated (about 50 MB per service), so they go back a few days to weeks.
+   The address and country come from Cloudflare's headers only when the request arrives through your tunnel (from this machine or Docker's own networks). A device on your network that sends those headers itself is logged under its own address with country `-`, so nobody can plant a fake visitor in the log. If Docker on a Mac hides your devices' addresses, a device on your network looks like the tunnel too (see the section above), so keep `WEB_BIND=127.0.0.1` whenever you use a tunnel.
 
 ## Useful commands
 
