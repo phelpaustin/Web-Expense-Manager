@@ -21,6 +21,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     logging: *logging
+    # No privilege gain through setuid programs. (Capabilities are left alone: the postgres image's
+    # entrypoint needs several of them to prepare its data folder.)
+    security_opt: ["no-new-privileges:true"]
     environment:
       POSTGRES_USER: expense
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -65,6 +68,11 @@ services:
     logging: *logging
     depends_on:
       - backend
+    # nginx starts as root, binds port 80 and then runs its workers as the "nginx" user. It needs
+    # nothing else, so every other capability is dropped.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
     ports:
       # WEB_BIND=127.0.0.1 lets only this machine (and a tunnel running on it) reach the site.
       - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8080}:80"
@@ -77,6 +85,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     environment:
       CRON_SECRET: ${CRON_SECRET:-}
     entrypoint: ["/bin/sh", "-c"]
@@ -101,6 +111,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+    # Root by default. On Linux set BACKUP_USER to your own "uid:gid" (run `id -u` and `id -g`) so the
+    # dumps belong to you and can be read without sudo.
+    user: "${BACKUP_USER:-0:0}"
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
@@ -109,6 +123,11 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        # Dumps hold every user's data and password hashes: readable by the owner only. This also tightens
+        # dumps written by earlier versions.
+        umask 077
+        chmod 700 /backups 2>/dev/null || true
+        chmod 600 /backups/expense-*.sql.gz 2>/dev/null || true
         while true; do
           now=$$(date -u +%s)
           next=$$(( now - now % 86400 + 2 * 3600 ))

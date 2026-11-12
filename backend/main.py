@@ -8,7 +8,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.core.config import insecure_secret_reason, settings
+from app.core.config import insecure_secret_reason, settings, weak_db_password_reason
 from app.core.rate_limit import limiter
 from app.api import bill_sync, expenses, analytics, budgets, auth, income, recurring, bills, options, metrics, alerts, trips, groups, aliases, dashboard, statement_import, reports, savings_goals, backup, subscriptions
 from app.db.database import SessionLocal
@@ -50,6 +50,12 @@ async def lifespan(app: FastAPI):
                 "Set a strong SECRET_KEY (e.g. `openssl rand -hex 32`). For local development only, "
                 "set APP_ENV=development together with a SQLite DATABASE_URL."
             )
+    # A weak database password is only a warning: the database may be reachable only from this host.
+    db_reason = weak_db_password_reason(settings.database_url)
+    if db_reason:
+        logging.getLogger(__name__).warning(
+            "The database password is weak (%s). Use a long random one, e.g. `openssl rand -hex 24`.", db_reason
+        )
     run_migrations()
     start_backfill()
     yield

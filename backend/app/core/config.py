@@ -22,6 +22,29 @@ def insecure_secret_reason(secret: str) -> str | None:
     return None
 
 
+_PLACEHOLDER_DB_PASSWORDS = {"password", "changeme", "change-me", "postgres", "admin", "expense", "secret", "123456", "12345678"}
+
+
+def weak_db_password_reason(database_url: str) -> str | None:
+    """Why the password in a network database URL looks unsafe, or None. SQLite has no password."""
+    if database_url.startswith("sqlite"):
+        return None
+    try:
+        from sqlalchemy.engine import make_url
+
+        password = make_url(database_url).password
+    except Exception:  # noqa: BLE001 - an unparsable URL fails later with a clearer error
+        return None
+    if not password:
+        return "the database URL has no password"
+    value = password.strip().lower()
+    if value in _PLACEHOLDER_DB_PASSWORDS or value.startswith(("change", "your", "password")):
+        return "it looks like a placeholder"
+    if len(password) < 12:
+        return "it is shorter than 12 characters"
+    return None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

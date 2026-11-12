@@ -56,7 +56,7 @@ docker compose up -d --build
 
 ## Backups and restore
 
-The `backup` container writes `expense-YYYYMMDD-HHMM.sql.gz` to `BACKUP_DIR` (default `deploy/onprem/backups`) every night and deletes dumps older than `BACKUP_KEEP_DAYS`. **Copy that folder to another disk or machine** (Time Machine, a NAS, `rsync`); a backup on the same drive does not survive a drive failure.
+The `backup` container writes `expense-YYYYMMDD-HHMM.sql.gz` to `BACKUP_DIR` (default `deploy/onprem/backups`) every night and deletes dumps older than `BACKUP_KEEP_DAYS`. Dumps are readable by their owner only (the folder is mode 700, files 600), since they contain every user's data and password hashes. On Linux, set `BACKUP_USER` in `.env` (see `.env.example`; run `mkdir -p backups` first) so the dumps belong to you instead of root. **Copy that folder to another disk or machine** (Time Machine, a NAS, `rsync`); a backup on the same drive does not survive a drive failure.
 
 Restore into an empty database:
 
@@ -81,7 +81,8 @@ Set `CRON_SECRET` in `.env` (and working email settings). The `digest` container
 - **Fixed address:** give the Mac mini a DHCP reservation in your router, or a static IP, so `FRONTEND_URL` stays correct.
 - **Firewall:** allow incoming connections for Docker if macOS asks.
 - **Outside the home network:** do not forward port 8080 to the internet. Use a VPN such as Tailscale (use the Tailscale address or name in `FRONTEND_URL`/`CORS_ORIGINS`), or a Cloudflare Tunnel pointing at `http://localhost:8080`, which also gives you HTTPS. With a tunnel, set `TRUSTED_PROXY_COUNT=2`.
-- **HTTPS:** plain HTTP is fine inside a home network or a VPN. Anything reachable from the internet needs HTTPS (a tunnel provides it).
+- **HTTPS:** plain HTTP is fine inside a home network or a VPN. Anything reachable from the internet needs HTTPS (a tunnel provides it). Over HTTPS (a tunnel sends `X-Forwarded-Proto: https`) nginx adds an HSTS header, so browsers then refuse plain HTTP for that address; over plain HTTP no HSTS header is sent. Before using a name over HTTPS, be sure you want it HTTPS-only: browsers remember HSTS for a year.
+- **Digest endpoint:** `/api/alerts/send-digest` is blocked at nginx (it answers 404 from outside); the `digest` container calls the backend directly.
 
 ## Seeing real visitor addresses (Docker on a Mac)
 
