@@ -84,6 +84,12 @@ Set `CRON_SECRET` in `.env` (and working email settings). The `digest` container
 - **HTTPS:** plain HTTP is fine inside a home network or a VPN. Anything reachable from the internet needs HTTPS (a tunnel provides it). Over HTTPS (a tunnel sends `X-Forwarded-Proto: https`) nginx adds an HSTS header, so browsers then refuse plain HTTP for that address; over plain HTTP no HSTS header is sent. Before using a name over HTTPS, be sure you want it HTTPS-only: browsers remember HSTS for a year.
 - **Digest endpoint:** `/api/alerts/send-digest` is blocked at nginx (it answers 404 from outside); the `digest` container calls the backend directly.
 
+## Sign-up, and no email set up
+
+Anyone who can reach the site can create an account. For a private instance, set `ALLOW_REGISTRATION=false` in `.env` once everyone has theirs (existing accounts keep working; new password and Google sign-ups get a 403).
+
+If no email service is configured, verification and password-reset emails are not sent. Instead the backend writes the whole message, including its one-time link, to its log: `docker compose logs backend`. That is how you finish creating the first account without email, but it also means anyone who can read the container logs can read those links, so keep log access to yourself and set up SMTP or Resend when more people use the site.
+
 ## Seeing real visitor addresses (Docker on a Mac)
 
 Docker on macOS (Docker Desktop, and some Colima setups) can replace the address of every device on your network with its own internal one before a request reaches the website container ([a long-standing Docker limitation](https://github.com/docker/roadmap/issues/157)). The app then treats all visitors as one: they share one sign-in rate limit (5 a minute, 60 an hour), and Settings → Account → *Sign-in activity* shows the same address for every sign-in, something like `192.168.65.1` or `172.x.x.1`. The backend logs a warning mentioning Docker the first time it sees such an address (`docker compose logs backend`).

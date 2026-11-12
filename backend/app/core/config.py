@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     # a server: anyone who knows the dev secret can forge a login token.
     app_env: str = "production"
 
+    # Set to false to close sign-up: /auth/register and first-time Google sign-in answer 403, existing
+    # accounts keep working. Useful for a private, self-hosted instance once everyone has an account.
+    allow_registration: bool = True
+
     # Public URL of the frontend, used to build password-reset links.
     frontend_url: str = "http://localhost:5173"
 

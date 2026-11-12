@@ -138,6 +138,7 @@ def _already_registered_message(email: str) -> tuple[str, str, str]:
 
 
 # One answer for every address, so the form cannot be used to find out who has an account.
+REGISTRATION_CLOSED = "Sign-up is closed on this server."
 REGISTER_MESSAGE = "Check your email: if this address can be used, a verification link is on its way."
 
 
@@ -150,6 +151,8 @@ def register(request: Request, payload: RegisterIn, background: BackgroundTasks,
     verification link, an unverified one a fresh link, a verified one a "you already have an
     account" notice. Emails go out after the response so sending time is not observable either.
     """
+    if not settings.allow_registration:
+        raise HTTPException(status_code=403, detail=REGISTRATION_CLOSED)
     existing = user_by_email(db, payload.email)
     if existing is None:
         user = models.User(
@@ -253,6 +256,8 @@ def google_login(request: Request, payload: GoogleIn, background: BackgroundTask
     info, email = _verify_google_credential(payload.credential)
 
     user = user_by_email(db, email)
+    if user is None and not settings.allow_registration:
+        raise HTTPException(status_code=403, detail=REGISTRATION_CLOSED)
     if user is None:
         user = models.User(
             email=email,
