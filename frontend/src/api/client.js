@@ -418,6 +418,14 @@ export function createIncome(entry) {
   })
 }
 
+export function updateIncome(id, entry) {
+  return request(`/api/income/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry),
+  })
+}
+
 export function deleteIncome(id) {
   return request(`/api/income/${id}`, { method: 'DELETE' })
 }

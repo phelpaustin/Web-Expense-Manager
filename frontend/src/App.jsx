@@ -187,6 +187,9 @@ export default function App() {
               incomeForm={income.incomeForm}
               setIncomeForm={income.setIncomeForm}
               savingIncome={income.savingIncome}
+              editingIncomeId={income.editingIncomeId}
+              onEditIncome={income.startEditIncome}
+              onCancelEditIncome={income.cancelEditIncome}
               onAddIncome={income.handleAddIncome}
               onDeleteIncome={income.handleDeleteIncome}
               currencies={data.options.currencies}

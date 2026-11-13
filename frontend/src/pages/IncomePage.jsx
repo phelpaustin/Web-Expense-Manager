@@ -7,11 +7,16 @@ export default function IncomePage({
   incomeForm,
   setIncomeForm,
   savingIncome,
+  editingIncomeId = null,
+  onEditIncome,
+  onCancelEditIncome,
   onAddIncome,
   onDeleteIncome,
   currencies = [],
   baseCurrency,
 }) {
+  const editing = editingIncomeId !== null
+
   return (
     <>
       <h1 className="page-title">💵 Income</h1>
@@ -34,7 +39,7 @@ export default function IncomePage({
       )}
 
       <section className="panel">
-        <h2>➕ Add income</h2>
+        <h2>{editing ? '✏️ Edit income' : '➕ Add income'}</h2>
         <form className="add-form" onSubmit={onAddIncome}>
           <input
             type="date"
@@ -75,8 +80,13 @@ export default function IncomePage({
             defaultCurrency={baseCurrency}
           />
           <button type="submit" disabled={savingIncome}>
-            {savingIncome ? 'Saving…' : 'Add'}
+            {savingIncome ? 'Saving…' : editing ? 'Save' : 'Add'}
           </button>
+          {editing && (
+            <button type="button" className="ghost-btn" onClick={onCancelEditIncome}>
+              Cancel
+            </button>
+          )}
         </form>
 
         {income.length > 0 && (
@@ -92,12 +102,23 @@ export default function IncomePage({
             </thead>
             <tbody>
               {income.map((i) => (
-                <tr key={i.id}>
+                <tr key={i.id} className={i.id === editingIncomeId ? 'editing' : undefined}>
                   <td>{i.date}</td>
                   <td>{i.source}</td>
                   <td>{i.note}</td>
                   <td className="right">{money(i.amount, i.currency)}</td>
                   <td className="right">
+                    <button
+                      className="icon-btn"
+                      onClick={() => {
+                        onEditIncome(i)
+                        window.scrollTo?.({ top: 0, behavior: 'smooth' })
+                      }}
+                      title="Edit"
+                      aria-label={`Edit income ${i.source}`}
+                    >
+                      ✎
+                    </button>{' '}
                     <button className="delete-btn" onClick={() => onDeleteIncome(i.id)} title="Delete" aria-label={`Delete income ${i.source}`}>
                       ✕
                     </button>
